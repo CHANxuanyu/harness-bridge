@@ -1,10 +1,10 @@
 # Handoff
 
-## Current state (2026-10-06, after first P1 coordination slice)
+## Current state (2026-10-06, P1 local coordination complete)
 
 - **Canonical plan:** `docs/PROJECT_PLAN.md` consolidates the product, session relationships,
   contracts, V1 scope defaults, P0–P7 milestones and V01–V14 acceptance. P0 is complete;
-  P1 is in progress with its first runtime slice implemented; P2–P7 are pending. Advisor is
+  P1 local coordination is implemented and offline-validated; P2–P7 are pending. Advisor is
   explicitly an existing agent session; Bridge does not create its own planning model. `PRODUCT_FORM.md` is now a short summary, and the
   original cloud execution plan is clearly historical, not renewed authorization.
 - Key plan choices: dependencies are fixed before child execution-task/worktree materialization;
@@ -18,14 +18,20 @@
   aggregate attempt/repair/serial-slot guards. Every old mutation entrypoint checks linked
   ownership, including inside the transaction. Reads/emergency cancel remain available;
   accepted attempts can finish after takeover. No model calls or automatic scheduling.
-- **Migration:** schema revision 1→2, additive tables only, WAL-aware backup before migration,
+- **P1 completion:** `planning.py` adds immutable child plans, batch idempotency, same-goal DAG
+  checks and explicit independent-root materialization. Goal controls pause/resume dispatch or
+  request permanent cancel/fail; goal terminal states require all children terminal and every
+  attempt exit confirmed. Emergency cancel remains possible without an Advisor. A cancelled
+  preparation keeps any resulting workspace attributed to its cancelled task.
+- **Migration:** schema revision 1/2→3, additive tables only, WAL-aware backup before migration,
   atomic rollback and concurrent-upgrade tests. No actual live/user state directory was opened
   for migration in this implementation round. Keep backups/artifacts/worktrees for recovery.
-- **Checks:** `scripts/check.sh` passed **223 tests**, ruff/format and mypy clean on macOS;
-  29 new coordination/migration cases. Refer to `docs/COORDINATION.md` for current input/CLI
-  contract and honest limits. P1 is not fully done: goal control, independent unmaterialized
-  child plans and installed-host discovery still need work. P2 dependencies/environment and
-  P3 workers are not implemented by these guards.
+- **Checks:** latest `scripts/check.sh` passed **249 tests**, ruff/format and mypy clean on
+  macOS (85.27 seconds). 26 new planning/control/migration cases since the previous 223-test
+  milestone; affected 55-case checks also passed. Current contracts: `docs/COORDINATION.md`
+  and `docs/PLANNING.md`. P1 local core is complete. Dependent tasks deliberately report
+  `WAITING_BASELINE` after approval until P2 preserves/composes exact baselines. Environment,
+  P3 workers, P4 delivery and P6 installed-host discovery remain unfinished.
 
 - **Latest user clarification:** target developers who already use several coding-agent
   subscriptions, such as ZCode/GLM, Claude Code and Codex. This is not a Codex-only product.
@@ -63,7 +69,8 @@
   (do not change visibility; no license added yet). Working branch
   `local/glm-macos-validation` (contains cloud head `fcbd21a`); remote queried at takeover:
   **pushed through `470f5b0`** at that check. Repair/evidence `94f7c4d`, product/plugin
-  `7efd2bf`, product clarification `bab602a`, plan `24ee6ad` and the new P1 milestone are
+  `7efd2bf`, product clarification `bab602a`, plan `24ee6ad`, first P1 slice `83f0793` and
+  the new P1 completion milestone are
   local, not auto-pushed. Remote was not re-queried during this offline implementation round;
   visibility remains public by instruction.
 - **Live-gate hygiene:** the global default state dir was never live-enabled; the T3/T4 test
@@ -115,11 +122,11 @@
 
 ## Next bounded work
 
-1. Continue P1/P2 from `docs/PROJECT_PLAN.md`: finish goal control and unmaterialized child
-   planning, then fixed dependency baselines and environment readiness. Reuse current bindings,
-   guards and state migration; do not rebuild them or rerun old smoke tests. Current guard
-   contract is `docs/COORDINATION.md`. A complete 223-test offline regression was run for this
-   shared-core change; it does not renew authorization for live calls.
+1. Continue P2 from `docs/PROJECT_PLAN.md`: preserve approved snapshots as reproducible
+   dependency baselines, compose multiple dependency results, then materialize successors and
+   prepare environments/context. Reuse `planning.py` and existing ownership/stop/budget guards.
+   A complete 249-test offline regression passed for this shared-core change; no live budget
+   is renewed. Do not rerun past smokes or replan the product merely for handoff.
 2. Interruption / timeout behaviour with a live executor (SIGTERM to the runner, wall
    timeout) — offline tests exist; live behaviour does not.
 3. T5 evaluation per `docs/EVALUATION_PLAN.md` — the only place where "cheaper/better than

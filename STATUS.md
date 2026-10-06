@@ -1,12 +1,12 @@
 # Status
 
-_Last updated 2026-10-06 (P1 first coordination slice; 223 offline tests passed)._
+_Last updated 2026-10-06 (P1 local coordination complete; 249 offline tests passed)._
 
 ## Current state
 
 - **Planning milestone P0 complete:** `docs/PROJECT_PLAN.md` is the canonical product and
   engineering plan. Advisor is the user's existing agent session; Executor is a bound child
-  agent session. P1 is in progress; its first runtime slice is now implemented. P2–P7 remain
+  agent session. P1 local coordination is implemented and offline-validated. P2–P7 remain
   future implementation/acceptance, not complete. Scope defaults,
   dependency materialization, budget/ownership checks, worker lifecycle, integration and
   local-branch delivery are specified with V01–V14 acceptance criteria.
@@ -14,8 +14,12 @@ _Last updated 2026-10-06 (P1 first coordination slice; 223 offline tests passed)
   Advisor binding/epoch takeover, shared guards on old task mutation paths, goal attempt/repair
   ceilings and one execution slot across a project's goals. Revision 1→2 migration backs up
   committed WAL data and rolls back failed upgrades. See `docs/COORDINATION.md`.
-  Goal control/terminal semantics, unmaterialized child plans and host discovery wiring are
-  not complete. No managed worker, concurrent executors or integrated delivery is implied.
+- **P1 completion slice:** goal pause/resume/cancel/fail controls, confirmed-stop projections,
+  immutable child plans and DAG validation, explicit idempotent root materialization. Accepted
+  workspace preparation racing with cancel retains ownership without reviving the task.
+  Schema revision 3 upgrades v1/v2 atomically with a pre-upgrade backup. See `docs/PLANNING.md`.
+  Dependent children remain unmaterialized until P2 supplies approved fixed baselines;
+  environment readiness, host discovery wiring, workers and integrated delivery are pending.
 - **Experimental prototype (V0.1, milestones M0–M4).** The live path has now been exercised
   for real in bounded initial smokes and one controlled repair/resume task on 2026-10-06.
 - **Verified so far**
@@ -75,7 +79,9 @@ _Last updated 2026-10-06 (P1 first coordination slice; 223 offline tests passed)
 | CLI: doctor, create, run, status, list, artifacts, verify, review, recover, cancel, demo | done |
 | Goal/project registration, child ownership, Advisor takeover and old-entrypoint fencing | implemented first P1 slice; offline checks pass |
 | Goal attempt/repair ceilings; one project execution slot; unknown exit holds reservation | implemented initial guards; P3 worker/concurrency/time accounting pending |
-| SQLite revision 1→2 upgrade + WAL-consistent backup/rollback | implemented; five migration tests pass |
+| Goal controls and confirmed-stop terminal projections | implemented; offline active fake-process cancellation and unknown-exit checks pass |
+| Immutable child plans / DAG validation / explicit independent-root materialization | implemented; dependency snapshot baselines remain P2 |
+| SQLite revision 1/2→3 upgrade + WAL-consistent backup/rollback | implemented; eight migration tests pass |
 | Offline demos `success`, `bug-then-repair` | pass |
 | Manual offline CI workflow (`workflow_dispatch`) | written, never run |
 | Codex / ZCode plugin source package, shared supervisor Skill, host catalogs | alpha; static/copy/CLI-contract checks pass; Codex catalog discovery pass; installed activation and ZCode loading NOT_RUN |
@@ -112,6 +118,12 @@ _Last updated 2026-10-06 (P1 first coordination slice; 223 offline tests passed)
   mutation paths; it includes existing CLI demos, not new live smokes. No model/network/auth
   calls; test isolation/sentinel guards remain in force. No real user state directory migrated.
 
+- **P1 completion slice (macOS, 2026-10-06):** affected baseline 29 passed before edits;
+  plan/control/migration/coordination checks 55 passed; final `scripts/check.sh` → **249 passed /
+  0 skipped / 0 failed**, 85.27 seconds. Ruff/format clean (81 files), strict mypy clean
+  (25 source files). 26 new cases: 23 planning/control and 3 migration. Includes real fake
+  subprocess cancellation; no live harness, network/auth calls or user-state migration.
+
 ## Findings worth knowing
 
 - `--max-turns`: official docs declare it; `--help` of CLI 2.1.291 does not list it; on this
@@ -138,10 +150,11 @@ _Last updated 2026-10-06 (P1 first coordination slice; 223 offline tests passed)
 
 ## Next
 
-Continue the remaining P1/P2 boundary in `docs/PROJECT_PLAN.md`: complete goal control and
-unmaterialized child-plan contracts, then dependency pinning/delayed execution-task creation and
-explicit environment readiness. Reuse the implemented epoch guards and migration path;
-`docs/COORDINATION.md` is the actual CLI contract. P3–P7 retain their dependency order.
+Continue P2 in `docs/PROJECT_PLAN.md`: preserve approved dependency snapshots, compose fixed
+baselines and explicitly prepare environments/context before successor execution. Independent
+root materialization and DAG validation are implemented; do not duplicate them or bypass
+`WAITING_BASELINE` with the original goal SHA. Contracts: `docs/COORDINATION.md` and
+`docs/PLANNING.md`. P3–P7 retain their dependency order.
 `docs/PRODUCT_FORM.md` is an overview only. The plan is documentation, not execution evidence.
 
 Real interruption/timeout validation and T5 evaluation (`docs/EVALUATION_PLAN.md`) still

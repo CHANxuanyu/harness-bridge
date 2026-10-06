@@ -1,7 +1,7 @@
-# Goal and Advisor coordination — P1 first implementation
+# Goal and Advisor coordination — P1 local core
 
-Implemented 2026-10-06 on the existing foreground runtime. This is an experimental P1
-vertical slice, not the complete V1 product. No additional model or scheduler was introduced.
+Implemented 2026-10-06 on the existing foreground runtime. P1 local coordination now includes
+goal controls and unmaterialized child plans; see [PLANNING.md](PLANNING.md). This is not the complete V1 product. No additional model or scheduler was introduced.
 The implementation is `coordination.py`, used by the CLI and the existing `Bridge` service.
 
 ## What works
@@ -119,38 +119,41 @@ Goal status is a transactional projection of child facts, not a persisted delive
 
 | Child facts | Goal view |
 |---|---|
-| No child | `DRAFT` |
+| No child plan or task | `DRAFT` |
 | Any awaiting review, blocked, interrupted, failed or cancelled child | `NEEDS_ATTENTION` |
 | Otherwise, including all children approved | `ACTIVE` |
+| Cancel/fail requested, stop pending | `NEEDS_ATTENTION` |
+| Cancel/fail requested, all tasks terminal and attempt exits confirmed | `CANCELLED` / `FAILED` |
 
 `delivery` explicitly remains `not_implemented`. Child `SUCCEEDED` does not mean integrated
-goal success. Goal-level pause/cancel/terminal decisions and the remaining planned states are
-not exposed yet; integrated approval and delivery gates belong to P4. Recent goal events
+goal success. Goal controls and confirmed-stop terminal states are now available; the complete state table
+and child-plan views are in [PLANNING.md](PLANNING.md). Integrated approval/delivery gates belong to P4. Recent goal events
 include sequence, epoch and associated task IDs; the view is limited to 50 events. Incremental
 cursor/wait APIs are not implemented. Existing task events/manifests retain detailed evidence.
 
 ## Storage upgrade
 
-SQLite schema revision 1 upgrades additively to 2. Before DDL, while holding the writer lock,
-SQLite's backup API saves committed data including WAL to `backups/pre-v2-<id>.sqlite3`
+SQLite schema revisions 1 and 2 now upgrade additively to 3. Before DDL, while holding the writer lock,
+SQLite's backup API saves committed data including WAL to `backups/pre-v3-<id>.sqlite3`
 with mode 0600. New tables and revision change commit atomically. Backup failure aborts the
-upgrade; a migration exception rolls it back. Unsupported revisions fail closed. Reopening v2
+upgrade; a migration exception rolls it back. Unsupported revisions fail closed. Reopening v3
 does not recreate tables or another backup. TaskSpec/ReviewDecision remain schema 1.0.
 
 For rollback, stop all bridge processes and preserve the entire state directory first. Restore
-the v1 backup to a separate recovery directory as `bridge.sqlite3` and use the matching older
+the pre-upgrade backup to a separate recovery directory as `bridge.sqlite3` and use the matching older
 runtime. Inspect records before choosing a replacement state root. A database backup does not
 copy external worktrees/artifacts/config; retain their original paths and files. Do not overwrite
 a live database or mix a restored database with another database's WAL/SHM sidecars. Changes made
 after the backup are not present in it.
 
-## Remaining P1/P2 boundary
+## P1/P2 boundary
 
-Current child association happens when a ready independent TaskSpec is created. There is no
-separate unmaterialized child plan, dependency DAG, environment preparation, automatic lookup
-from a repo into the correct installed state root, or complete goal control state machine yet.
-These remain tracked in the canonical plan; no placeholder CLI claims those features work.
-P1 is therefore in progress, with this tested foundation available for its next vertical slice.
+P1 local coordination now includes goal controls, immutable child plans and validated dependency
+DAGs. Independent roots can be explicitly materialized; dependency execution waits for P2's
+preserved approved baselines. Environment preparation, installed-host discovery, background
+workers and integrated delivery remain later milestones. See [PLANNING.md](PLANNING.md).
+No placeholder CLI claims those features work.
 
-Offline evidence is in `tests/integration/test_coordination.py` and
+Offline evidence is in `tests/integration/test_coordination.py`,
+`tests/integration/test_goal_planning.py` and
 `tests/unit/test_migrations.py`; results are recorded in `VALIDATION_MATRIX.md`.

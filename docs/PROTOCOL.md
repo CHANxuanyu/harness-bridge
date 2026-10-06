@@ -4,6 +4,7 @@ All external input is validated; unknown fields are rejected; `schema_version` m
 
 GoalSpec/TakeoverRequest and goal ownership flags are documented in
 [COORDINATION.md](COORDINATION.md). They do not add fields to TaskSpec or ReviewDecision.
+[PLANNING.md](PLANNING.md) covers PlanBatch/GoalControl and explicit child materialization.
 For goal-linked tasks, mutating task commands require `--advisor-binding` and
 `--advisor-epoch`; omitted or stale claims fail closed. Reads and emergency cancel are exempt.
 

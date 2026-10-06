@@ -104,3 +104,16 @@ Each entry: decision — reason. Newest last.
 33. **Storage revision 2:** additive coordination tables; take a SQLite backup including WAL
     under the writer lock before migrating, commit schema/version atomically, refuse unknown
     revisions and preserve historical standalone tasks without inventing goal events.
+
+34. **Immutable child plans (P1 completion):** separate TaskDefinition from repository/base,
+    validate a same-goal DAG atomically and materialize only explicitly requested independent
+    roots. Dependencies wait for preserved approved baselines; never substitute original HEAD.
+35. **Goal controls:** pause only new reservations; cancel/fail permanently prevent new work
+    and request owned-process cancellation. Terminal goal projections require all tasks terminal
+    and all attempt exits confirmed. Emergency cancel does not require the active Advisor.
+36. **Materialization recovery:** task creation, goal ownership and child association commit
+    together under a stable key; preparation is recoverable without another task. A concurrent
+    goal cancellation keeps the task cancelled and records any successfully prepared workspace.
+37. **Schema revision 3:** chain additive migrations from v1/v2 in one transaction, with one
+    WAL-aware pre-upgrade snapshot and owner-only backup creation; late failures roll back every
+    migration stage. TaskSpec/ReviewDecision wire contracts and canonical digests stay 1.0.

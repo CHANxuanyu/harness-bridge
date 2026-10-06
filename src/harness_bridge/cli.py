@@ -72,6 +72,20 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--file", required=True, help="TakeoverRequest JSON")
     p.add_argument("--idempotency-key", required=True)
 
+    p = goal_sub.add_parser("control", parents=[common])
+    p.add_argument("goal_id")
+    p.add_argument("--file", required=True, help="GoalControl JSON: pause/resume/cancel/fail")
+    p.add_argument("--idempotency-key", required=True)
+    p = goal_sub.add_parser("plan", parents=[common])
+    p.add_argument("goal_id")
+    p.add_argument("--file", required=True, help="immutable child plan batch JSON")
+    p.add_argument("--idempotency-key", required=True)
+    p = sub.add_parser("child", parents=[common], help="inspect or materialize a planned child")
+    child_sub = p.add_subparsers(dest="child_command", required=True)
+    for operation in ("status", "materialize"):
+        p = child_sub.add_parser(operation, parents=[common])
+        p.add_argument("child_id")
+
     p = sub.add_parser("run", parents=[common], help="run one executor attempt (foreground)")
     p.add_argument("task_id")
     p.add_argument("--mode", choices=["mock", "live"], default="mock")
@@ -187,7 +201,23 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
     try:
         if cmd == "projects":
             return bridge.coordination.projects()
+        if cmd == "child":
+            if args.child_command == "materialize":
+                return bridge.materialize(args.child_id)
+            return bridge.plans.status(args.child_id)
         if cmd == "goal":
+            if args.goal_command == "plan":
+                return bridge.plans.submit(
+                    args.goal_id, _read_json_file(args.file), args.idempotency_key, claim
+                )
+            if args.goal_command == "control":
+                receipt = bridge.coordination.control(
+                    args.goal_id, _read_json_file(args.file), args.idempotency_key, claim
+                )
+                return {
+                    "request_receipt": receipt,
+                    "goal": bridge.coordination.status(args.goal_id),
+                }
             if args.goal_command == "create":
                 return bridge.coordination.create(_read_json_file(args.file), args.idempotency_key)
             if args.goal_command == "takeover":

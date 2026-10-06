@@ -42,3 +42,44 @@ CREATE TABLE goal_events (
 );
 CREATE INDEX goal_events_by_goal ON goal_events(goal_id, seq);
 """
+
+PLANNING_SCHEMA = """
+CREATE TABLE goal_controls (
+    goal_id TEXT PRIMARY KEY REFERENCES goals(goal_id),
+    paused INTEGER NOT NULL DEFAULT 0 CHECK(paused IN (0,1)),
+    termination TEXT CHECK(termination IN ('cancel','fail')),
+    reason TEXT NOT NULL
+);
+CREATE TABLE goal_control_requests (
+    goal_id TEXT NOT NULL REFERENCES goals(goal_id),
+    idempotency_key TEXT NOT NULL,
+    request_digest TEXT NOT NULL,
+    receipt_json TEXT NOT NULL,
+    PRIMARY KEY(goal_id,idempotency_key)
+);
+CREATE TABLE child_plans (
+    child_id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL REFERENCES goals(goal_id),
+    child_key TEXT NOT NULL,
+    spec_json TEXT NOT NULL,
+    spec_digest TEXT NOT NULL,
+    task_id TEXT UNIQUE REFERENCES tasks(task_id),
+    created_at TEXT NOT NULL,
+    UNIQUE(goal_id,child_key)
+);
+CREATE TABLE child_dependencies (
+    child_id TEXT NOT NULL REFERENCES child_plans(child_id),
+    dependency_id TEXT NOT NULL REFERENCES child_plans(child_id),
+    PRIMARY KEY(child_id,dependency_id),
+    CHECK(child_id <> dependency_id)
+);
+CREATE TABLE plan_batches (
+    goal_id TEXT NOT NULL REFERENCES goals(goal_id),
+    idempotency_key TEXT NOT NULL,
+    request_digest TEXT NOT NULL,
+    receipt_json TEXT NOT NULL,
+    PRIMARY KEY(goal_id,idempotency_key)
+);
+"""
+
+MIGRATIONS = {2: COORDINATION_SCHEMA, 3: PLANNING_SCHEMA}

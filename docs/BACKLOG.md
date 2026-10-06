@@ -16,13 +16,14 @@ Evidence: `docs/VALIDATION_MATRIX.md`, `docs/LIVE_REPAIR_RESULT.md`, `docs/PLUGI
 
 ## Product work, in dependency order
 
-1. **P1 — Goal / session coordination (in progress).** First slice implemented: state-root
-   project registration, goal/child links, Advisor takeover fencing, initial aggregate counters,
-   one project slot and backed-up schema migration. Finish goal control/terminal semantics and
-   the unmaterialized child-plan contract before dependency execution; complete host discovery
-   wiring in P6. Current contract: `docs/COORDINATION.md`.
-2. **P2 — Execution context.** Dependency plans and delayed materialization of frozen execution
-   specs, independent workspaces, explicit environment preparation, attributable feedback.
+1. **P1 — Goal/session coordination (local core complete).** Goal/child ownership, current
+   Advisor fencing, control/confirmed-stop states, immutable child plans/DAGs, root task
+   materialization, project registration within explicit state and backed-up migration.
+   Installed-host discovery wiring remains P6; references: `COORDINATION.md`, `PLANNING.md`.
+2. **P2 — Execution context (next).** Preserve exact approved dependency snapshots, form fixed
+   dependency baselines, then materialize successors and prepare their environments/context.
+   DAG validation and root materialization already exist; `WAITING_BASELINE` must not be
+   bypassed by substituting the original goal SHA or creating a standalone task.
 3. **P3 — Managed worker and aggregate limits.** Bounded concurrent attempts, goal budgets,
    reservations held for unknown exits, incremental events, cancel/recover and host teardown.
    Validate the actual macOS worker lifecycle before claiming detached operation.

@@ -84,7 +84,8 @@ or runtime tests were repeated. V01–V14 are planned acceptance criteria, not n
 
 ## P1 first coordination slice — 2026-10-06
 
-`docs/COORDINATION.md` describes the implemented subset; P1 remains in progress.
+`docs/COORDINATION.md` described this first subset; at that milestone P1 remained in progress.
+The completion slice below supersedes its remaining-control/plan limitations.
 
 | Scope | Evidence | Result | Limit |
 |---|---|---|---|
@@ -101,3 +102,20 @@ New checks: 24 coordination cases and 5 migration cases (29 total). The full sui
 full-suite evidence since the historical 192-test report, justified by shared-core code changes.
 Do not generalize these rows to P1 completion, all V01–V14 criteria, background survival,
 two simultaneous executors, integrated goal acceptance, Codex execution or installed plugins.
+
+
+## P1 local coordination completion — 2026-10-06
+
+| Scope | Evidence | Result | Boundary |
+|---|---|---|---|
+| Goal pause/resume and late dispatch | paused attempts consume no slot/budget; running fake continues on pause; stale pause replay does not reapply; pause injected during invocation preparation is checked transactionally | PASS, offline | Foreground runner, single slot |
+| Goal cancel/fail | cancel unstarted plans/tasks; block new work and terminal-intent reversal; stop an active fake process group; unknown exit remains NEEDS_ATTENTION even after task failure resolution | PASS, offline | No new real harness or orphan-release evidence |
+| Immutable plans and DAGs | 23-case planning/control suite includes batch replay/conflict, duplicate/self/cyclic/missing/foreign dependencies, stale Advisor rejection, child status and CLI paths | PASS, offline | No amendment/delete API |
+| Explicit root materialization | no workspace at planning time; concurrent materializers produce one task/workspace; interrupted preparation reuses task; cancel/preparation race preserves ownership | PASS, offline | Independent roots only; dependent children wait for P2 fixed approved baselines |
+| Migration to revision 3 | 8 migration cases total; new 1→3/2→3 late-failure rollback and v2 goal/binding/real-task preservation checks; backups verified as old revision | PASS, offline | Isolated fixtures, no real user state migrated |
+| Shared-core regression | `scripts/check.sh`: **249 passed**, 85.27s; ruff/format 81 files, strict mypy 25 source files | PASS, macOS | Fake/stub executor processes, no new model calls |
+
+This round added 26 cases (23 planning/control, 3 migration); affected 55-case checks also
+passed. P1's local coordination acceptance is complete. P2–P7, including dependency execution,
+environment preparation, managed concurrency, integrated delivery and installed-host discovery,
+remain incomplete. Goal success/delivery cannot be inferred from these results.

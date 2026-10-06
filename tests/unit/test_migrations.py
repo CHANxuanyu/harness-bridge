@@ -10,8 +10,10 @@ from threading import Barrier
 import pytest
 
 from harness_bridge.errors import BridgeError
-from harness_bridge.migrations import COORDINATION_SCHEMA
-from harness_bridge.store import _SCHEMA, Store
+from harness_bridge.migrations import COORDINATION_SCHEMA, PLANNING_SCHEMA
+from harness_bridge.store import _SCHEMA, SCHEMA_REVISION, Store
+from tests.conftest import Fixture
+from tests.integration.test_coordination import setup_goal
 
 
 def legacy(path: Path, revision: str = "1") -> sqlite3.Connection:
@@ -73,7 +75,7 @@ def test_interrupted_migration_rolls_back_and_can_retry(
     assert old.execute("SELECT event_id FROM events").fetchone()[0] == "historic-event"
     monkeypatch.setattr(Store, "_apply_schema", staticmethod(original))
     Store(path).close()
-    assert old.execute("SELECT value FROM meta").fetchone()[0] == "2"
+    assert old.execute("SELECT value FROM meta").fetchone()[0] == str(SCHEMA_REVISION)
     old.close()
 
 
@@ -101,7 +103,7 @@ def test_concurrent_upgrade_creates_one_snapshot(tmp_path: Path) -> None:
     with ThreadPoolExecutor(2) as pool:
         list(pool.map(open_store, [1, 2]))
     assert len(list((tmp_path / "backups").glob("*.sqlite3"))) == 1
-    assert old.execute("SELECT value FROM meta").fetchone()[0] == "2"
+    assert old.execute("SELECT value FROM meta").fetchone()[0] == str(SCHEMA_REVISION)
     old.close()
 
 
@@ -114,3 +116,61 @@ def test_backup_failure_aborts_upgrade(tmp_path: Path, monkeypatch: pytest.Monke
     assert old.execute("SELECT value FROM meta").fetchone()[0] == "1"
     assert old.execute("SELECT name FROM sqlite_master WHERE name='goals'").fetchone() is None
     old.close()
+
+
+@pytest.mark.parametrize("revision", ["1", "2"])
+def test_failure_at_last_migration_rolls_back_all_stages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, revision: str
+) -> None:
+    path = tmp_path / "state.sqlite3"
+    old = legacy(path, revision)
+    if revision == "2":
+        old.executescript(COORDINATION_SCHEMA)
+    before = list(old.iterdump())
+    original = Store._apply_schema
+
+    def fail(cur: sqlite3.Cursor, schema: str) -> None:
+        original(cur, schema)
+        if schema == PLANNING_SCHEMA:
+            raise RuntimeError("interrupted after new tables, before version commit")
+
+    monkeypatch.setattr(Store, "_apply_schema", staticmethod(fail))
+    with pytest.raises(RuntimeError):
+        Store(path)
+    assert list(old.iterdump()) == before
+    old.close()
+
+
+def test_upgrade_v2_preserves_goal_binding_and_real_task(fx: Fixture) -> None:
+    b, g = setup_goal(fx)
+    task = b.create(fx.spec(), "task", goal_id=g["goal_id"])["task_id"]
+    before_task = b.store.get_task(task)
+    before_goal = b.coordination.status(g["goal_id"])
+    path = b.store.db_path
+    b.close()
+    # Reconstruct the actual v2 schema while retaining its project/goal/task rows.
+    old = sqlite3.connect(path, isolation_level=None)
+    for table in (
+        "plan_batches",
+        "child_dependencies",
+        "child_plans",
+        "goal_control_requests",
+        "goal_controls",
+    ):
+        old.execute(f"DROP TABLE {table}")
+    old.execute("UPDATE meta SET value='2' WHERE key='schema_revision'")
+    b = fx.bridge()
+    assert b.store.get_task(task) == before_task
+    after = b.coordination.status(g["goal_id"])
+    assert after == before_goal
+    backup_path = next((fx.state_dir / "backups").glob("pre-v3-*.sqlite3"))
+    backup = sqlite3.connect(backup_path)
+    assert backup.execute("SELECT value FROM meta").fetchone()[0] == "2"
+    assert backup.execute("SELECT task_id FROM goal_tasks").fetchone()[0] == task
+    assert (
+        backup.execute("SELECT binding_id FROM goals").fetchone()[0]
+        == g["advisor_claim"]["binding_id"]
+    )
+    backup.close()
+    old.close()
+    b.close()

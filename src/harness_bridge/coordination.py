@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from harness_bridge import __version__
 from harness_bridge.errors import BridgeError
 from harness_bridge.models import RepoSpec, canonical_json, sha256_digest
+from harness_bridge.state import EXECUTING, TERMINAL, TaskState
 from harness_bridge.store import Store, new_id
 from harness_bridge.workspace import inspect_source_repo
 
@@ -60,6 +61,18 @@ class TakeoverRequest(Contract):
     advisor: AdvisorSession
     expected_epoch: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=2000)
+
+
+class GoalControl(Contract):
+    action: Literal["pause", "resume", "cancel", "fail"]
+    reason: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def reason_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("reason must not be blank")
+        return value
 
 
 C = TypeVar("C", bound=Contract)
@@ -230,7 +243,12 @@ class Coordinator:
             return {**receipt, "replayed": False}
 
     def guard_goal(
-        self, cur: sqlite3.Cursor, goal_id: str, claim: AdvisorClaim | None
+        self,
+        cur: sqlite3.Cursor,
+        goal_id: str,
+        claim: AdvisorClaim | None,
+        *,
+        allow_stopping: bool = False,
     ) -> sqlite3.Row:
         goal = self._goal(cur, goal_id)
         if claim is None:
@@ -241,7 +259,97 @@ class Coordinator:
             raise BridgeError(
                 "STALE_ADVISOR", "Advisor binding is stale or belongs to another goal"
             )
+        if not allow_stopping and self.controls(cur, goal_id)["termination"]:
+            raise BridgeError("STATE_CONFLICT", "goal termination has been requested")
         return goal
+
+    @staticmethod
+    def controls(cur: sqlite3.Cursor, goal_id: str) -> dict[str, Any]:
+        row = cur.execute("SELECT * FROM goal_controls WHERE goal_id=?", (goal_id,)).fetchone()
+        return dict(row) if row else {"paused": 0, "termination": None, "reason": None}
+
+    def control(
+        self, goal_id: str, data: Any, key: str, claim: AdvisorClaim | None
+    ) -> dict[str, Any]:
+        check_key(key)
+        request = parse_contract(GoalControl, data)
+        digest = sha256_digest(request.model_dump(mode="json"))
+        with self.store.transaction() as cur:
+            # Emergency goal cancellation must remain available after Advisor loss.
+            goal = (
+                self._goal(cur, goal_id)
+                if request.action == "cancel"
+                else self.guard_goal(cur, goal_id, claim, allow_stopping=True)
+            )
+            replay = cur.execute(
+                "SELECT * FROM goal_control_requests WHERE goal_id=? AND idempotency_key=?",
+                (goal_id, key),
+            ).fetchone()
+            if replay:
+                if replay["request_digest"] != digest:
+                    raise BridgeError(
+                        "IDEMPOTENCY_CONFLICT", "key already used for another control request"
+                    )
+                return {**json.loads(replay["receipt_json"]), "replayed": True}
+            before = self.controls(cur, goal_id)
+            if before["termination"]:
+                raise BridgeError(
+                    "STATE_CONFLICT", "goal termination cannot be reversed or replaced"
+                )
+            termination = request.action if request.action in ("cancel", "fail") else None
+            paused = request.action != "resume"
+            cur.execute(
+                "INSERT INTO goal_controls VALUES (?,?,?,?) ON CONFLICT(goal_id) DO UPDATE SET "
+                "paused=excluded.paused, termination=excluded.termination, reason=excluded.reason",
+                (goal_id, int(paused), termination, request.reason),
+            )
+            if termination:
+                for row in cur.execute(
+                    "SELECT task_id FROM goal_tasks WHERE goal_id=?", (goal_id,)
+                ).fetchall():
+                    task = self.store.get_task(row["task_id"], cur=cur)
+                    if task.state in TERMINAL:
+                        continue
+                    self.store.update_task(cur, task.task_id, cancel_requested=1)
+                    unknown = task.state == TaskState.INTERRUPTED and not (
+                        task.state_details or {}
+                    ).get("outcome_known")
+                    if task.state in EXECUTING or unknown:
+                        self.store.add_event(
+                            cur, task.task_id, "cancel_requested", {"goal_id": goal_id}
+                        )
+                    else:
+                        self.store.transition(
+                            cur,
+                            task.task_id,
+                            task.state,
+                            TaskState.CANCELLED,
+                            reason="goal_termination_requested",
+                            payload={"goal_id": goal_id},
+                        )
+            receipt = {
+                "goal_id": goal_id,
+                "action": request.action,
+                "paused": paused,
+                "termination_requested": termination,
+                "advisor_epoch": goal["advisor_epoch"],
+            }
+            cur.execute(
+                "INSERT INTO goal_control_requests VALUES (?,?,?,?)",
+                (goal_id, key, digest, canonical_json(receipt)),
+            )
+            self.event(
+                cur,
+                goal_id,
+                goal["advisor_epoch"],
+                "goal_control_requested",
+                {
+                    **receipt,
+                    "reason": request.reason,
+                    "actor": "local_emergency" if request.action == "cancel" else "active_advisor",
+                },
+            )
+            return {**receipt, "replayed": False}
 
     @staticmethod
     def task_goal(cur: sqlite3.Cursor, task_id: str) -> str | None:
@@ -249,10 +357,17 @@ class Coordinator:
         return str(row["goal_id"]) if row else None
 
     def guard_task(
-        self, cur: sqlite3.Cursor, task_id: str, claim: AdvisorClaim | None
+        self,
+        cur: sqlite3.Cursor,
+        task_id: str,
+        claim: AdvisorClaim | None,
+        *,
+        allow_stopping: bool = False,
     ) -> sqlite3.Row | None:
         goal_id = self.task_goal(cur, task_id)
-        return self.guard_goal(cur, goal_id, claim) if goal_id else None
+        return (
+            self.guard_goal(cur, goal_id, claim, allow_stopping=allow_stopping) if goal_id else None
+        )
 
     def link_task(
         self,
@@ -294,6 +409,8 @@ class Coordinator:
         goal = self.guard_task(cur, task_id, claim)
         if goal is None:
             return
+        if self.controls(cur, goal["goal_id"])["paused"]:
+            raise BridgeError("STATE_CONFLICT", "goal dispatch is paused", task_id=task_id)
         spec: GoalSpec = parse_contract(GoalSpec, json.loads(goal["spec_json"]))
         budget = self._budget(cur, goal["goal_id"])
         if budget["attempts"] >= spec.max_attempts or (
@@ -328,6 +445,8 @@ class Coordinator:
         )
 
     def status(self, goal_id: str) -> dict[str, Any]:
+        from harness_bridge.planning import ChildPlans
+
         with self.store.transaction() as cur:
             goal = self._goal(cur, goal_id)
             spec = json.loads(goal["spec_json"])
@@ -344,6 +463,35 @@ class Coordinator:
                 c["state"] in ("AWAITING_REVIEW", "BLOCKED", "INTERRUPTED", "FAILED", "CANCELLED")
                 for c in children
             )
+            controls = self.controls(cur, goal_id)
+            plans = ChildPlans(self).list_in_transaction(cur, goal_id)
+            attention = attention or any(p["state"] == "WAITING_BASELINE" for p in plans)
+            state = (
+                "DRAFT"
+                if not children and not plans
+                else "NEEDS_ATTENTION"
+                if attention
+                else "ACTIVE"
+            )
+            pending_stop = []
+            if controls["termination"]:
+                pending_stop = [
+                    r[0]
+                    for r in cur.execute(
+                        "SELECT DISTINCT t.task_id FROM tasks t JOIN goal_tasks gt USING(task_id) "
+                        "LEFT JOIN attempts a USING(task_id) WHERE gt.goal_id=? AND "
+                        "(t.state NOT IN ('SUCCEEDED','FAILED','CANCELLED') OR "
+                        "(a.attempt_id IS NOT NULL AND COALESCE(a.exit_confirmed,0)<>1))",
+                        (goal_id,),
+                    )
+                ]
+                state = (
+                    "NEEDS_ATTENTION"
+                    if pending_stop
+                    else "CANCELLED"
+                    if controls["termination"] == "cancel"
+                    else "FAILED"
+                )
             events = [
                 {**dict(r), "payload": json.loads(r["payload"])}
                 for r in cur.execute(
@@ -357,7 +505,10 @@ class Coordinator:
                 "goal_id": goal_id,
                 "project_id": goal["project_id"],
                 "objective": spec["objective"],
-                "state": "DRAFT" if not children else "NEEDS_ATTENTION" if attention else "ACTIVE",
+                "state": state,
+                "dispatch_paused": bool(controls["paused"]),
+                "termination_requested": controls["termination"],
+                "pending_stop_tasks": pending_stop,
                 "delivery": "not_implemented",
                 "base_sha": goal["base_sha"],
                 "repo_path": goal["repo_path"],
@@ -369,6 +520,7 @@ class Coordinator:
                     "max_repairs": spec["max_repairs"],
                 },
                 "children": children,
+                "plans": plans,
                 "recent_events": list(reversed(events)),
             }
 

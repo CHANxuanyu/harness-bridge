@@ -18,10 +18,10 @@ from pathlib import Path
 from typing import Any
 
 from harness_bridge.errors import BridgeError
-from harness_bridge.migrations import COORDINATION_SCHEMA
+from harness_bridge.migrations import MIGRATIONS
 from harness_bridge.state import TaskState, check_transition
 
-SCHEMA_REVISION = 2
+SCHEMA_REVISION = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -320,7 +320,8 @@ class Store:
             }
             if not tables:
                 self._apply_schema(cur, _SCHEMA)
-                self._apply_schema(cur, COORDINATION_SCHEMA)
+                for schema in MIGRATIONS.values():
+                    self._apply_schema(cur, schema)
                 cur.execute(
                     "INSERT INTO meta(key, value) VALUES ('schema_revision', ?)",
                     (str(SCHEMA_REVISION),),
@@ -332,18 +333,19 @@ class Store:
                 else None
             )
             revision = row["value"] if row else "unknown"
-            if revision not in ("1", str(SCHEMA_REVISION)):
+            if revision not in {str(n) for n in range(1, SCHEMA_REVISION + 1)}:
                 raise BridgeError(
                     "INTEGRITY_ERROR",
                     f"state database schema revision {revision} is not supported "
                     f"(expected {SCHEMA_REVISION})",
                 )
-            if revision == "1":
+            if int(revision) < SCHEMA_REVISION:
                 # Separate read connection can snapshot committed WAL data while this
                 # connection holds the migration writer lock; no other writer can race us.
                 backup_dir = self.db_path.parent / "backups"
-                backup_dir.mkdir(exist_ok=True)
-                backup_path = backup_dir / f"pre-v2-{uuid.uuid4().hex}.sqlite3"
+                backup_dir.mkdir(mode=0o700, exist_ok=True)
+                backup_path = backup_dir / f"pre-v{SCHEMA_REVISION}-{uuid.uuid4().hex}.sqlite3"
+                backup_path.touch(mode=0o600, exist_ok=False)
                 source = sqlite3.connect(str(self.db_path))
                 try:
                     destination = sqlite3.connect(str(backup_path))
@@ -354,7 +356,8 @@ class Store:
                 finally:
                     source.close()
                 backup_path.chmod(0o600)
-                self._apply_schema(cur, COORDINATION_SCHEMA)
+                for target in range(int(revision) + 1, SCHEMA_REVISION + 1):
+                    self._apply_schema(cur, MIGRATIONS[target])
                 cur.execute(
                     "UPDATE meta SET value=? WHERE key='schema_revision'", (str(SCHEMA_REVISION),)
                 )

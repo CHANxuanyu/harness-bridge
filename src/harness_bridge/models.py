@@ -159,10 +159,10 @@ class ExecutorSpec(_Strict):
         return self
 
 
-class TaskSpec(_Strict):
-    schema_version: Literal["1.0"]
+class TaskDefinition(_Strict):
+    """Task requirements without a repository/base; shared by plans and execution specs."""
+
     goal: str = Field(min_length=1, max_length=20000)
-    repo: RepoSpec
     requirements: list[str] = Field(default_factory=list, max_length=200)
     allowed_paths: list[str] = Field(min_length=1, max_length=200)
     forbidden_paths: list[str] = Field(default_factory=lambda: list(DEFAULT_FORBIDDEN_PATHS))
@@ -178,13 +178,18 @@ class TaskSpec(_Strict):
         return v
 
     @model_validator(mode="after")
-    def _verification_rules(self) -> TaskSpec:
+    def _verification_rules(self) -> TaskDefinition:
         ids = [c.id for c in self.verification]
         if len(ids) != len(set(ids)):
             raise ValueError("verification ids must be unique")
         if not any(c.required for c in self.verification):
             raise ValueError("at least one verification command must be required")
         return self
+
+
+class TaskSpec(TaskDefinition):
+    schema_version: Literal["1.0"]
+    repo: RepoSpec
 
 
 class Finding(_Strict):

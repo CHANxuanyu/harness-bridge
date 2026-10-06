@@ -52,6 +52,7 @@ from harness_bridge.models import (
     parse_task_spec,
     sha256_digest,
 )
+from harness_bridge.planning import ChildPlans
 from harness_bridge.policy import (
     PathPolicy,
     Violation,
@@ -115,6 +116,7 @@ class Bridge:
         self.config: BridgeConfig = load_config(self.state_dir)
         self.store = Store(self.state_dir / "bridge.sqlite3")
         self.coordination = Coordinator(self.store)
+        self.plans = ChildPlans(self.coordination)
         self.advisor_claim = advisor_claim
         self.python = python_executable or sys.executable
         self.stop_flag = stop_flag or StopFlag()
@@ -123,9 +125,13 @@ class Bridge:
         self.store.close()
 
     @contextmanager
-    def _advisor_transaction(self, task_id: str) -> Iterator[sqlite3.Cursor]:
+    def _advisor_transaction(
+        self, task_id: str, *, allow_stopping: bool = False
+    ) -> Iterator[sqlite3.Cursor]:
         with self.store.transaction() as cur:
-            goal = self.coordination.guard_task(cur, task_id, self.advisor_claim)
+            goal = self.coordination.guard_task(
+                cur, task_id, self.advisor_claim, allow_stopping=allow_stopping
+            )
             yield cur
             if goal is not None:
                 self.coordination.event(
@@ -136,9 +142,11 @@ class Bridge:
                     {"task_id": task_id},
                 )
 
-    def _check_advisor(self, task_id: str) -> None:
+    def _check_advisor(self, task_id: str, *, allow_stopping: bool = False) -> None:
         with self.store.transaction() as cur:
-            self.coordination.guard_task(cur, task_id, self.advisor_claim)
+            self.coordination.guard_task(
+                cur, task_id, self.advisor_claim, allow_stopping=allow_stopping
+            )
 
     # --- paths -------------------------------------------------------------------------------
 
@@ -176,7 +184,12 @@ class Bridge:
     # --- create --------------------------------------------------------------------------
 
     def create(
-        self, spec_data: Any, idempotency_key: str, *, goal_id: str | None = None
+        self,
+        spec_data: Any,
+        idempotency_key: str,
+        *,
+        goal_id: str | None = None,
+        _child_id: str | None = None,
     ) -> dict[str, Any]:
         if not idempotency_key or len(idempotency_key) > 200 or not idempotency_key.isprintable():
             raise BridgeError("INVALID_INPUT", "idempotency key must be 1-200 printable characters")
@@ -188,7 +201,7 @@ class Bridge:
         request_digest = sha256_digest(normalized)
         existing = self.store.find_task_by_key(idempotency_key)
         if existing is not None:
-            return self._create_replay(existing, request_digest, goal_id)
+            return self._create_replay(existing, request_digest, goal_id, _child_id)
 
         src = inspect_source_repo(spec.repo.path, spec.repo.base_ref)
         task_id = new_id("tsk")
@@ -213,6 +226,10 @@ class Bridge:
                     self.coordination.link_task(
                         cur, goal_id, self.advisor_claim, values, spec.executor.kind
                     )
+                if _child_id is not None:
+                    if self.plans.get(cur, _child_id)["goal_id"] != goal_id:
+                        raise BridgeError("INVALID_INPUT", "child plan belongs to another goal")
+                    self.plans.attach(cur, _child_id, self.advisor_claim, task_id, normalized)
                 self.store.add_event(
                     cur,
                     task_id,
@@ -224,15 +241,26 @@ class Bridge:
             raced = self.store.find_task_by_key(idempotency_key)
             if raced is None:
                 raise
-            return self._create_replay(raced, request_digest, goal_id)
+            return self._create_replay(raced, request_digest, goal_id, _child_id)
         self._prepare_workspace(task_id)
         return self._task_receipt(self.store.get_task(task_id), created=True)
 
     def _create_replay(
-        self, existing: TaskRecord, request_digest: str, goal_id: str | None
+        self,
+        existing: TaskRecord,
+        request_digest: str,
+        goal_id: str | None,
+        child_id: str | None = None,
     ) -> dict[str, Any]:
         with self.store.transaction() as cur:
             self.coordination.guard_task(cur, existing.task_id, self.advisor_claim)
+            if (
+                child_id is not None
+                and self.plans.get(cur, child_id)["task_id"] != existing.task_id
+            ):
+                raise BridgeError(
+                    "IDEMPOTENCY_CONFLICT", "existing task does not belong to this child plan"
+                )
             if self.coordination.task_goal(cur, existing.task_id) != goal_id:
                 raise BridgeError(
                     "IDEMPOTENCY_CONFLICT", "existing task belongs to a different goal"
@@ -245,6 +273,14 @@ class Bridge:
             )
         return self._task_receipt(existing, created=False)
 
+    def materialize(self, child_id: str) -> dict[str, Any]:
+        with self.store.transaction() as cur:
+            data = self.plans.materialization_spec(cur, child_id, self.advisor_claim)
+            row = self.plans.get(cur, child_id)
+            goal_id = row["goal_id"]
+        receipt = self.create(data, f"materialize:{child_id}", goal_id=goal_id, _child_id=child_id)
+        return {**receipt, "child_id": child_id}
+
     def _prepare_workspace(self, task_id: str) -> None:
         task = self.store.get_task(task_id)
         worktree = self.worktrees_dir / task_id
@@ -253,6 +289,11 @@ class Bridge:
             create_worktree(task.repo_path, worktree, branch, task.base_sha)
         except BridgeError as exc:
             with self.store.transaction() as cur:
+                if self.store.get_task(task_id, cur=cur).state == S.CANCELLED:
+                    self.store.add_event(
+                        cur, task_id, "workspace_error_after_cancel", {"message": exc.message}
+                    )
+                    return
                 self.store.transition(
                     cur,
                     task_id,
@@ -263,6 +304,17 @@ class Bridge:
                 )
             raise BridgeError("WORKSPACE_ERROR", exc.message, task_id=task_id) from None
         with self.store.transaction() as cur:
+            if self.store.get_task(task_id, cur=cur).state == S.CANCELLED:
+                self.store.update_task(
+                    cur, task_id, worktree_path=str(worktree), task_branch=branch
+                )
+                self.store.add_event(
+                    cur,
+                    task_id,
+                    "workspace_ready_after_cancel",
+                    {"worktree": str(worktree), "branch": branch},
+                )
+                return
             self.store.transition(
                 cur,
                 task_id,
@@ -712,7 +764,7 @@ class Bridge:
         Never re-dispatches an executor by itself. ``resolve='retry'|'fail'`` records an explicit
         human decision for BLOCKED / INTERRUPTED tasks.
         """
-        self._check_advisor(task_id)
+        self._check_advisor(task_id, allow_stopping=True)
         task = self.store.get_task(task_id)
         spec = self._spec(task)
         attempt = (
@@ -721,6 +773,21 @@ class Bridge:
         details = task.state_details or {}
         report: dict[str, Any] = {"task_id": task_id, "state_before": task.state.value}
         actions: list[str] = []
+        with self.store.transaction() as cur:
+            goal = self.coordination.guard_task(
+                cur, task_id, self.advisor_claim, allow_stopping=True
+            )
+            stopping = goal is not None and bool(
+                self.coordination.controls(cur, goal["goal_id"])["termination"]
+            )
+        if stopping and resolve == "retry":
+            raise BridgeError("STATE_CONFLICT", "cannot retry after goal termination is requested")
+        if stopping and resolve is None and task.state not in (S.STARTING, S.RUNNING):
+            return {
+                **report,
+                "state_after": task.state.value,
+                "actions": ["goal is stopping; no workspace or verification work resumed"],
+            }
 
         if resolve is not None:
             if resolve not in ("retry", "fail"):
@@ -757,7 +824,7 @@ class Bridge:
                 if resolve == "fail"
                 else ("attempt_budget_exhausted" if exhausted else "resolved_retry")
             )
-            with self._advisor_transaction(task_id) as cur:
+            with self._advisor_transaction(task_id, allow_stopping=resolve == "fail") as cur:
                 self.store.transition(
                     cur,
                     task_id,
@@ -795,7 +862,7 @@ class Bridge:
                 pg = attempt.pgid if attempt else None
                 group = None if pg is None else _group_alive(pg)
                 phase = "launch" if task.state == S.STARTING else "executor"
-                with self._advisor_transaction(task_id) as cur:
+                with self._advisor_transaction(task_id, allow_stopping=True) as cur:
                     self.store.transition(
                         cur,
                         task_id,
