@@ -235,3 +235,7 @@ Each entry: decision — reason. Newest last.
 76. **P5 native contracts:** a discriminated Codex executor contract has its own sandbox/model options; legacy fake/Claude normalized JSON remains unchanged and schema revision stays 10.
 77. **P5 evidence ceiling:** Codex exec JSONL turn completion does not prove internal model-step limits, actual model, subscription or effective permissions; live dispatch is refused before reservation in both service and adapter, with no override or invented limit flag.
 78. **P5 common lifecycle:** Codex stubs reuse managed worktrees/workers/checks/review/budgets; exact canonical UUID resume requires the same task/repo/worktree/executor/requested model. Unknown/lost/ambiguous stream evidence never promotes success or rebinds a mismatched session.
+
+79. **P6 shared connection:** plugins consume trusted runtime/state path records outside their caches; explicit locators precede defaults, with no credentials, implicit state merging or model authorization in connection metadata.
+80. **P6 model-free compatibility:** bundled standard-library probes use temporary home/state for help/version/offline doctor; they never open the selected database. Native isolated installation, desktop discovery and real agent behavior are separate evidence levels.
+81. **P6 Advisor workflow:** the existing host session operates goals, epochs, child workspaces, durable jobs, review and exact local delivery; installation neither starts an agent turn nor renews a live allowance. Background gate closure waits for confirmed completion/non-start.

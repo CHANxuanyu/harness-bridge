@@ -40,8 +40,10 @@ Evidence: `docs/VALIDATION_MATRIX.md`, `docs/LIVE_REPAIR_RESULT.md`, `docs/PLUGI
    worker stub repair now exist (`CODEX_EXECUTOR.md`). Live is unavailable until internal turn
    enforcement, subscription/config provenance and native recovery gaps have evidence; any
    real validation also requires new bounded authorization. ZCode executor remains exploratory.
-6. **P6 — Advisor host entrypoints.** Install/activate Codex and ZCode packages, stable project
-   discovery, task operations and session continuation. Loading a plugin is not full behavior.
+6. **P6 — Advisor host entrypoints (partial).** Alpha.2 connection/full workflow and 24 offline
+   package/CLI checks pass; native Codex installed/enabled in an isolated profile; actual ZCode
+   installed/Skill enabled with matching cache and connection checks. Actual Codex desktop discovery
+   and host behavior/lifecycle remain (`P6_ENTRYPOINT_RESULT.md`). Loading is not full behavior.
 7. **P7 — Live product acceptance / distribution.** One Advisor session and two executor harnesses,
    integrated delivery, live limits/interruption evidence, clean setup/update/uninstall,
    license and explicit publication scope. Keep unknown capabilities visibly unknown.

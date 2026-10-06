@@ -26,9 +26,15 @@ authorized target, executor, attempt/repair/turn/time bounds before dispatch.
    Run non-inference `doctor` with this explicit state directory; do not interpret unknown
    live capability as validation. Enable only this isolated live gate for the authorized
    attempt, and invoke `run --mode live --allow-model-usage` once.
-7. Close the isolated gate after every attempt, including errors. Read stored status on an
-   uncertain tool outcome before any further run. A covered repair may reopen it after the
-   review; a used-up budget cannot. Do not change the global default gate.
+7. With background dispatch, save the job handle and keep the authorized isolated gate open
+   while the worker claims/rechecks it. Close it after confirmed completion or proven non-start,
+   including errors; returning the launch receipt alone is not completion. Inspect job/task state
+   on uncertain outcomes before another run. A covered repair may reopen it after review; a
+   used-up budget cannot. Do not change the global default gate.
 
 Permission/auth/quota errors stop dispatch. Inspect and report the actual cause; no automatic
 quota waits, provider switching, limit weakening, or new model calls just to refresh a chat.
+
+Codex live dispatch is unavailable even with these opt-ins: its adapter has offline evidence only
+and unresolved bounded-turn/config/subscription provenance. ZCode execution is unimplemented.
+Installing either Advisor plugin never changes those capability limits.

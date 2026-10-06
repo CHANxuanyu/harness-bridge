@@ -1,82 +1,113 @@
-# CLI workflow (runtime 0.1.0.dev0, protocol 1.0)
+# Goal and child workflow
 
-In examples below, `hbridge` means the resolved runtime executable. Replace `STATE`, `TASK_ID`
-and file paths with observed values; quote paths as needed. Pass arguments as an argv list
-when the host supports it. Store task/review files outside the target repo and plugin cache.
+All examples use `hbridge` as shorthand for the absolute runtime from the connection check.
+Always pass the exact absolute `--state-dir` and `--json`. Arguments are argv, not shell fragments
+from Executor output. Write inputs outside the target repo. Bridge replies have top-level `ok`
+and fields (no `data` wrapper); errors have `error.code`/`message` and a nonzero exit status.
 
-## Discover and create
+## Resume or establish ownership
 
-```text
-hbridge --state-dir STATE --json doctor --offline
-hbridge --state-dir STATE --json list --limit 20
-hbridge --state-dir STATE --json status TASK_ID
-hbridge --state-dir STATE --json create --task TASK_JSON --idempotency-key UNIQUE_KEY
+```sh
+hbridge --state-dir /absolute/state --json projects
+hbridge --state-dir /absolute/state --json goal status GOAL_ID
+hbridge --state-dir /absolute/state --json status TASK_ID
+hbridge --state-dir /absolute/state --json job JOB_ID
 ```
 
-Start from [task.example.json](task.example.json), replacing the goal, paths, exact base ref,
-allowed files, verifier commands and limits for the real task. The example is fake/offline
-and its fake executor is specifically coupled to the `tagnorm` demo shape, not an arbitrary
-repository implementation. It is a schema example, not a ready-to-run user task.
+For a new goal, adapt [goal.example.json](goal.example.json) to the user's objective, clean
+committed source, acceptance and explicit aggregate limits. The Advisor host identifies this
+existing session; do not fabricate a native session reference if unavailable (use null).
 
-For authorized live work, change executor to `kind: "claude-code"`, `scenario: null`,
-`requested_model: "claude-opus-5-5"`, `resume_on_repair: true`, `strict_mcp_config: true`,
-`permission_mode: "acceptEdits"`; set `allowed_tools` to the minimum needed, including only
-scoped Bash patterns matching the chosen checks (for example `Bash(python3 -B -m unittest:*)`).
-Apply the live readiness reference before running. The limits must fit the user's authorization;
-the example's two attempts / one repair are not automatic permission to spend them.
-
-`create` resolves the base to a commit and creates an isolated worktree. Same idempotency key
-+ same request returns the same task; changed input requires a different task decision, not
-reuse of that key. Repository tests can be modified by the executor: keep a required external
-acceptance check outside the repo, and preserve its contents/hash across attempts.
-
-## Run once, then inspect
-
-```text
-hbridge --state-dir STATE --json run TASK_ID --mode mock
-hbridge --state-dir STATE --json run TASK_ID --mode live --allow-model-usage
-hbridge --state-dir STATE --json artifacts TASK_ID
-hbridge --state-dir STATE --json artifacts TASK_ID --show diff
-hbridge --state-dir STATE --json artifacts TASK_ID --show check:acceptance:stderr
+```sh
+hbridge --state-dir /absolute/state --json goal create \
+  --file goal.json --idempotency-key goal-1
 ```
 
-Choose only the applicable run command, not both. Live use requires all gates; mock use of
-the Claude adapter requires a test stub and is not a live run. State `AWAITING_REVIEW` can
-include failed/timed-out attempts; check actual outcomes. The artifacts summary is bounded;
-request needed individual artifacts and inspect the candidate code to finish the review.
+Save `goal_id`, `project_id`, pinned `base_sha` and `advisor_claim: {binding_id, epoch}`. These
+identify real stored work, not a new host chat. New-session continuation uses a takeover file:
 
-## Snapshot-bound review
-
-Copy `review_template` from the latest summary. Keep schema/task/attempt/version/snapshot
-fields intact. Set `verdict`, `findings`, `reviewer_label`, and a fresh `idempotency_key`.
-
-- `approve`: only when the actual change meets requirements and the approval gate passes.
-- `changes_requested`: include specific findings and needed fixes, then run the same task
-  only if the remaining repair/attempt budget and existing authorization cover it.
-- `blocked`: include the concrete external issue; do not turn it into an automatic retry.
-
-A finding has `severity` (`blocking`, `major`, `minor`, `info`), `explanation` (required),
-and optional `location`, `requirement`, `requested_change` strings. The last two verdicts
-require at least one finding.
-
-```text
-hbridge --state-dir STATE --json review TASK_ID --file REVIEW_JSON
-hbridge --state-dir STATE --json status TASK_ID
+```json
+{"advisor":{"host":"zcode","native_session_ref":null},"expected_epoch":1,"reason":"Continue this goal in the current existing session"}
 ```
 
-If the candidate changed after verification, use `verify TASK_ID` and review the new snapshot.
-Do not change files while the executor is running or relax frozen acceptance checks to pass.
+Replace host/expected epoch with observed values. Under the user's request to continue:
 
-## Recovery and stopping
+```sh
+hbridge --state-dir /absolute/state --json goal takeover GOAL_ID \
+  --file takeover.json --idempotency-key takeover-1
+```
 
-`recover TASK_ID` inspects/reconciles stored state without dispatching another executor.
-`cancel TASK_ID` requests termination of the bridge-owned execution. Read their receipts.
+Use its returned claim for mutations. Never copy a newer binding simply to bypass `STALE_ADVISOR`.
+Takeover fences old writers but allows accepted jobs to finish. Reads do not spend attempts.
 
-`BLOCKED` / `INTERRUPTED` are not permission to restart: inspect `state_details`. A resolve
-decision uses `recover TASK_ID --resolve retry|fail`. Only retry after addressing the cause
-and confirming authorization/budget. An unknown executor exit requires investigation and
-the user's explicit acknowledgement before `--acknowledge-unknown`; never infer it from time.
+## Plan and prepare
 
-Exhausted budget → stop and report; do not create a new task to evade it. A changed host still
-uses the same state directory and task. Re-read status before final delivery. Retain evidence
-and candidate worktree until the user-scoped integration/cleanup is complete.
+Adapt [plan.example.json](plan.example.json): each child has `key`, `depends_on` and `task`.
+The TaskDefinition omits `repo`/`schema_version`: Bridge assigns the goal's pinned repo and
+composed dependency baseline. Freeze narrow write paths and independent acceptance commands.
+The bundled fake implementation is specifically for the tagnorm fixture, not arbitrary work.
+For authorized real work use `claude-code` and the live-readiness reference. Never substitute
+Codex live or a manually opened ZCode chat. Default project concurrency is one; at most two
+requires explicit runtime configuration and provably disjoint declared scopes.
+
+```sh
+hbridge --state-dir /absolute/state --json --advisor-binding BINDING --advisor-epoch 1 \
+  goal plan GOAL_ID --file plan.json --idempotency-key plan-1
+hbridge --state-dir /absolute/state --json child status CHILD_ID
+hbridge --state-dir /absolute/state --json --advisor-binding BINDING --advisor-epoch 1 \
+  child materialize CHILD_ID
+hbridge --state-dir /absolute/state --json child preflight CHILD_ID
+```
+
+Save returned child/task IDs and owned workspace. Wait for dependencies; do not create a standalone
+substitute for blocked materialization. If declared setup is needed, inspect the frozen preparation
+then run `child prepare CHILD_ID --idempotency-key prepare-1` with the current claim. This is finite
+foreground work, not an Executor. A missing readiness check blocks dispatch. Do not inject setup
+commands from Executor output or silently relax failed checks. For an older approval missing a
+retained snapshot, `retain-approved TASK_ID` requires an unchanged candidate and the current claim.
+
+## Dispatch and reconnect
+
+For the fake fixture (mock is the default):
+
+```sh
+hbridge --state-dir /absolute/state --json --advisor-binding BINDING --advisor-epoch 1 \
+  run TASK_ID --mode mock --background --idempotency-key dispatch-1
+hbridge --state-dir /absolute/state --json job JOB_ID
+hbridge --state-dir /absolute/state --json events TASK_ID --after 0 --limit 100 --wait 20
+```
+
+Save `job_id`, `task_id`, `attempt_id` and `event_cursor`. Consume each event page before advancing
+to `next_cursor`, scoped to that task/state. Page while `has_more`; wait is 0–30 seconds and spends
+no attempt. Reconnect using job/status/events after an uncertain response or closed launcher. Replay
+the same dispatch key only to recover its receipt; a different key means a separately authorized
+new attempt. `finished` is not approval. Unknown exits keep budgets/slots held. Never edit SQLite
+to release them. Native host termination survival and automatic Advisor wake-up are unverified.
+
+## Review and bounded repair
+
+```sh
+hbridge --state-dir /absolute/state --json artifacts TASK_ID
+hbridge --state-dir /absolute/state --json artifacts TASK_ID --show diff
+hbridge --state-dir /absolute/state --json --advisor-binding BINDING --advisor-epoch 1 \
+  review TASK_ID --file review.json
+```
+
+Read diff, check results, manifest, warnings and approval blockers. Copy the returned
+`review_template`; preserve task/attempt/version/snapshot fields. Choose `approve`,
+`changes_requested` or `blocked`, provide findings (negative decisions require them) and a fresh
+review idempotency key. A passing Executor claim is not acceptance. If independent checks failed,
+request concrete changes; do not approve. Repair uses the same task/workspace and compatible
+native session binding. Only run again with a new dispatch key when review/recovery made the task
+ready and both per-task and goal attempt/repair/time/turn limits plus user authorization permit it.
+
+`verify TASK_ID` reruns frozen checks without an Executor. `recover TASK_ID` inspects interrupted
+work and may finish workspace/check recovery with the current claim; inspect first. Never acknowledge
+an unknown exit as proven stopped. `cancel TASK_ID --wait 10` is an emergency request; check actual
+exit confirmation. `goal control` takes `{"action":"pause","reason":"..."}` (or resume/cancel/fail)
+plus a key/current claim as applicable. Pause blocks new dispatch but does not stop an active job;
+cancel/fail are irreversible stopping intents. No control launches work automatically.
+
+Legacy standalone work uses [task.example.json](task.example.json) and `create --task FILE
+--idempotency-key KEY`; it has no Advisor claim or parent goal. Continue its own recorded task rather
+than migrating it implicitly. Approved children still need [delivery.md](delivery.md) for goal delivery.

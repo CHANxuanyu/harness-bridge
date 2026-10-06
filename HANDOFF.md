@@ -1,6 +1,18 @@
 # Handoff
 
-## Current state (2026-10-06, P5 Codex offline adapter)
+## Current state (2026-10-06, P6 Advisor entrypoint slice)
+
+- **P6 partial:** shared plugin alpha.2 now documents the full goal/child/job/review/delivery path
+  and resolves a shared local runtime/state connection. Its checker uses temporary state/home,
+  34 help surfaces and offline diagnostics; it never opens the selected database or calls a model.
+  New copied-package/CLI integration suite: **24 passed**, 19.96s, lint/format/mypy clean.
+  Codex CLI 0.160.0 installed/enabled the plugin in the takeover chat's isolated profile; its 13
+  cached files match source and checker passed. No active Codex profile/auth was changed.
+  With explicit user confirmation, ZCode added the local source and installed alpha.2. Its Settings
+  Skill detail reports enabled; all 13 cached files match and the same connection check passes.
+  Leave the installed plugin intact. Actual Codex desktop discovery and host behavior remain;
+  do not start an agent turn merely to prove discovery. See `docs/P6_ENTRYPOINT_RESULT.md`.
+  The prior P5 full suite remains historical; no broad repeat, model call, state migration or push.
 
 - **P5 Codex offline adapter:** native options, strict JSONL completion/refusal handling and
   exact UUID repair resume now reuse shared worktrees/workers/checks/reviews/budgets. Live dispatch
@@ -206,13 +218,13 @@
   Treat plugins as entrypoints to that relationship. Parent/child coordination, dependency
   baselines and integration remain product priorities; goal/child links and initial aggregate
   attempt/repair guards, fixed dependency plans and local integrated delivery are now code.
-- **New local plugin alpha:** `plugins/harness-bridge/` has portable, Codex and ZCode
+- **Historical plugin alpha.1 (superseded by P6 above):** `plugins/harness-bridge/` has portable, Codex and ZCode
   manifests plus one self-contained supervisor Skill. Codex catalog lives under
   `.agents/plugins/marketplace.json`; ZCode catalog is root `marketplace.json`.
   Package/copy/CLI-contract checks and Codex catalog discovery passed. Temporary catalog
   registration was removed; no plugin installed or real model called. Installed activation,
-  ZCode loading, automatic task discovery, worker persistence and delivery remain unverified
-  or unimplemented as detailed in `docs/PLUGIN_ALPHA_RESULT.md` and product definition.
+  ZCode loading, discovery, worker persistence and delivery were not verified/implemented at that
+  milestone (`docs/PLUGIN_ALPHA_RESULT.md`). Current evidence is in `docs/P6_ENTRYPOINT_RESULT.md`.
 
 - **Both bounded real smoke levels passed on this Mac:** T3 (GLM operator → bridge →
   Claude Code) and T4 single-run (local Codex session, supervisor model `gpt-6-astra` per
@@ -287,9 +299,10 @@
 
 ## Next bounded work
 
-1. P4 local core and P5 Codex offline adapter are implemented. Next bounded work is
-   model-free investigation of a supported Codex turn ceiling/config provenance, and P6 Advisor
-   entrypoint wiring against goals/children/workers (`docs/CODEX_EXECUTOR.md`). Live Codex is
+1. P4 local core and P5 Codex offline adapter are implemented. P6 alpha.2 wiring and isolated
+   native Codex installation and actual ZCode installation/Skill discovery now pass. Next is
+   actual Codex desktop catalog discovery, host lifecycle acceptance, and model-free investigation
+   of a supported Codex turn ceiling/config provenance (`docs/CODEX_EXECUTOR.md`). Live Codex is
    unavailable until capability gaps are resolved; new bounded authorization is also required.
    P4 references: `INTEGRATION_REPAIRS.md` and `CLEANUP.md` complete the
    existing candidate/check/review/delivery chain. Preserve all required inputs and original total

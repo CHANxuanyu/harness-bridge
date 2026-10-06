@@ -48,11 +48,13 @@ sessions bound to child tasks. The [project plan](docs/PROJECT_PLAN.md) is the c
 scope, session/workspace contract, implementation sequence and acceptance checklist. It
 distinguishes existing V0.1 code from proposed coordination and delivery capabilities.
 
-A [local plugin alpha](plugins/harness-bridge/README.md) now packages one shared supervisor
-Skill with Codex and ZCode manifests. It requires a separately installed runtime. Package
-checks and Codex marketplace discovery passed; installed-host activation and ZCode loading
-have not been verified. The plugin package itself does **not** add executor adapters or background
-execution support by itself, or a delivery/merge command. See [plugin validation](docs/PLUGIN_ALPHA_RESULT.md).
+A [local Advisor plugin alpha.2](plugins/harness-bridge/README.md) packages one shared Skill
+for Codex/ZCode, covering goals, children, background jobs, review/repair and local delivery.
+It connects to the separate runtime via trusted runtime/state paths and includes a model-free
+compatibility checker. Package/CLI workflow checks and native Codex installation in an isolated
+profile passed. Actual ZCode installation and enabled Skill discovery also pass; actual Codex
+desktop discovery and host behavior/lifecycle acceptance remain pending.
+See [P6 entrypoint validation](docs/P6_ENTRYPOINT_RESULT.md) for the evidence boundary.
 
 The [goal coordination reference](docs/COORDINATION.md) documents the implemented
 `goal create/status/takeover`, `projects` and `create --goal` commands. Linked tasks require

@@ -1,8 +1,19 @@
 # Status
 
-_Last updated 2026-10-06 (P5 offline adapter; 642 full + 68 final affected checks passed)._
+_Last updated 2026-10-06 (P6 entrypoint slice; 24 new affected checks passed)._
 
 ## Current state
+
+- **P6 Advisor entrypoint slice:** plugin alpha.2 now covers shared connection discovery,
+  goals/children/Advisor takeover, background observation, repair, integration and local delivery.
+  A bundled model-free checker validates 34 command surfaces in temporary state without opening
+  the selected store. Cached examples exercise failure/takeover/repair/delivery through fresh CLI
+  processes: **24 new checks passed**, 19.96s; lint/format (125 files) and mypy (37 source files) clean.
+  Codex CLI installed/enabled alpha.2 in an isolated profile; 13 cached files match source and its
+  connection check passed. After explicit UI installation authorization, ZCode installed alpha.2
+  and reports its Skill enabled; its 13 cached files and the same connection check also pass.
+  Actual Codex desktop Skill discovery and host behavior/lifecycle acceptance remain pending.
+  P6 remains partial. See `docs/P6_ENTRYPOINT_RESULT.md`. No model call, user-state migration or push.
 
 - **P5 Codex offline adapter:** native options, strict JSONL completion/refusal handling and
   exact UUID repair resume now reuse shared worktrees/workers/checks/reviews/budgets. Live dispatch
@@ -215,7 +226,7 @@ _Last updated 2026-10-06 (P5 offline adapter; 642 full + 68 final affected check
 | Exact local branch delivery / durable intent / atomic proof / current goal readiness | implemented; no automatic checkout, push, merge or cleanup |
 | Offline demos `success`, `bug-then-repair` | pass |
 | Manual offline CI workflow (`workflow_dispatch`) | written, never run |
-| Codex / ZCode plugin source package, shared supervisor Skill, host catalogs | alpha; static/copy/CLI-contract checks pass; Codex catalog discovery pass; installed activation and ZCode loading NOT_RUN |
+| Codex / ZCode plugin package, shared Advisor Skill, host catalogs | alpha.2; 24 package/CLI checks pass; isolated Codex install/cache pass; actual ZCode install/Skill enabled/cache pass; actual Codex desktop and host behavior remain |
 
 ## Tests actually executed (chronological, by environment)
 
@@ -236,7 +247,7 @@ _Last updated 2026-10-06 (P5 offline adapter; 642 full + 68 final affected check
   tests/integration/test_claude_stub_flow.py::test_doctor_reports_flag_evidence_not_unsupported`
   → 12 passed; ruff, format and mypy clean. Two new regression cases are included.
   The earlier 192-test full suite was not repeated; no claim of a new 194-test full-suite run.
-- **Plugin alpha checks (no model):** skill-creator validator passed; copied package has
+- **Historical plugin alpha.1 checks (no model; superseded by P6 above):** skill-creator validator passed; copied package has
   internally resolving references and matching manifests/catalogs; bundled task validates
   against the runtime model; 16 documented command forms parse without dispatch. Codex
   0.160.0 recognized the temporarily registered catalog and version; source removed after

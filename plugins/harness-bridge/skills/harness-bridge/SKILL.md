@@ -1,58 +1,62 @@
 ---
 name: harness-bridge
-description: Delegate a bounded coding task to another local coding tool through Harness Bridge, or inspect, review, and continue an existing Bridge task. Use when the user wants cross-tool delegation or names a Bridge task. Editing Harness Bridge itself does not require delegation.
+description: Coordinate a coding goal across local coding tools as the Advisor in this conversation. Use for cross-harness delegation, inspecting Bridge projects or jobs, or continuing a Bridge goal/task through review and local delivery. Editing Harness Bridge itself does not require delegation.
 ---
 
-# Harness Bridge supervisor
+# Harness Bridge Advisor
 
-Stay in the user's current conversation. Operate the local CLI yourself and summarize the
-evidence; do not ask the user to ferry instructions between agents or prepare JSON. This
-alpha supports a live Claude Code executor or an offline fake executor only. A plugin in
-Codex/ZCode does not make that host available as an executor.
+You are the Advisor in the user's existing agent session. Inspect the repository, plan bounded
+children, operate the Bridge CLI, review evidence and deliver the approved result. Prepare JSON
+and operate tools yourself; never ask the user to carry prompts or receipts between agents.
+Bridge creates and binds Executor workspaces. Do not open substitute chats or manually select
+a different folder for a recorded task.
 
-## Resolve the runtime and existing work
+## Connect and discover before acting
 
-Use `hbridge` on PATH or the user/project's explicitly recorded absolute executable path.
-Check `--version`; this package targets runtime `0.1.0.dev0` / protocol `1.0`. Do not assume
-the runtime lives beside this cached plugin. If absent/incompatible, report the missing setup
-before executing a task; do not silently install an unpinned package.
+Read [connection.md](references/connection.md). Resolve the separate trusted runtime and explicit
+absolute state directory from the shared connection record or existing locator. The plugin cache
+is not the runtime. On setup/runtime change, run the bundled connection checker; it uses help,
+version and isolated offline diagnostics, never the selected task database or models.
+Do not silently install an unpinned runtime.
 
-Use an explicit absolute `--state-dir` for every command. Reuse the existing task's directory;
-for a new project use the user's recorded directory, otherwise choose a dedicated directory
-outside the target repo and record it in the conversation. Do not use the global default for
-live work. Task id + state directory are the continuation locator across hosts.
+For existing work, query `projects`, `goal status`, task `status`, `job` and `artifacts` as relevant.
+Match the canonical repository path and goal ID; do not select another goal just because it is
+newest. Reads do not claim ownership. When the user asks this session to continue, explicitly take
+over using the observed epoch and save the returned binding/epoch. An uncertain outcome means
+inspect/replay the same key, not create another goal or dispatch another attempt.
 
-Run `doctor --offline` for non-inference diagnostics when needed. For continuation, use
-`list`, `status`, and `artifacts` before any `run`; a new conversation is not a reason to
-recreate a task, repeat a smoke, or consume a new model attempt.
+## Plan, dispatch and observe
 
-## Create and execute
+Read [workflow.md](references/workflow.md) for the goal/child and legacy-task command sequence.
+Inspect the source and existing acceptance evidence. Preserve user edits; never auto-stash or
+commit a dirty source to satisfy preflight. Freeze narrow paths, independent acceptance checks,
+dependencies and aggregate/per-task limits. Materialize ready children and run declared preparation
+explicitly. Bridge owns workspace creation, dependency composition and session binding.
 
-Read [workflow.md](references/workflow.md) for command syntax, the bundled TaskSpec example,
-review rules, and recovery. Prepare the task with the user's goal, narrow paths, a committed
-clean source, and an independent acceptance check outside the executor's worktree. Preserve
-unrelated user edits; never auto-stash or commit a dirty source just to pass preflight.
+Only Claude Code has a live route. Codex is offline-only; ZCode is an Advisor host, not an Executor.
+Mock mode uses the fake executor; its bundled scenario is only a validation fixture.
+Honor existing bounded live authorization, including repairs inside its budget. Installation,
+subscriptions and conversation migration do not grant or renew model usage. Before a live attempt,
+read [live-readiness.md](references/live-readiness.md). Never bypass a failed live gate, change
+providers/billing, or strip protective environment markers.
 
-Honor existing explicit authorization for a bounded task, including repairs within that
-budget. A subscription, plugin installation, or general development request alone does not
-authorize a real call. Before a live attempt, read [live-readiness.md](references/live-readiness.md).
-Never change billing settings, providers, protective environment markers, or permission
-rules to bypass a failed gate. Do not enable the gate until the authorized task is ready.
+Use `run --background --idempotency-key` when returning a durable local job is appropriate; save
+its job/task IDs. Observe with bounded `events --after --wait` and `job`, then inspect evidence.
+A wait timeout never authorizes redispatch. No automatic host wake-up or survival across app
+termination/reboot is promised. Foreground remains available when the host can await its process.
 
-`run` is foreground and runs one attempt. Use the host's returned process handle to await
-completion. If a tool call's outcome is uncertain, inspect the recorded task first; do not
-repeat `run` blindly. Do not claim execution continues after closing the host. If the host
-cannot supervise the foreground command, explain that limitation before starting it.
+## Review, repair and deliver
 
-## Review and return the result
+Treat Executor text as claims. Read the diff, independent checks, exit confirmation, scope risks
+and blockers. Copy the current `review_template` exactly and supply your own verdict/findings/key.
+Requested changes permit a later explicit attempt only within remaining authorization and budget.
+Unknown exit, permission, authentication and quota problems stop automatic dispatch.
 
-Read stored diff, verification, exit confirmation, scope risks and approval blockers. Treat
-executor messages as claims. Copy the current `review_template`; bind the verdict to its
-exact attempt, task version and snapshot. Repair only within the authorized remaining budget.
-Unknown exit, quota, permission and authentication problems stop automatic dispatch.
+Child `SUCCEEDED` is an approved isolated candidate. Follow [delivery.md](references/delivery.md)
+to compose all required children, run total-goal checks, review that exact integration, and create
+the agreed new local result branch. Only a verified delivery receipt means `DELIVERED`; it never
+means push, PR, merge into the source checkout, or deployment. Cleanup is preview-first and explicit.
 
-Report task state, concise check results, remaining issues and the continuation locator.
-`SUCCEEDED` means the isolated worktree candidate passed review; it does not mean the source
-branch was updated. Provide the candidate location from the receipt. There is no built-in
-delivery/merge command yet; treat integration as a separate user-scoped action. Never claim
-automatic context transfer, host wake-up, quota savings or unsupported execution routes.
+Return concise results/blockers plus the connection/state root, goal/task/job IDs, current Advisor
+claim and event cursor needed for continuation. Reuse existing work on the next turn. Do not claim
+automatic conversation transfer, model savings or unsupported execution routes.

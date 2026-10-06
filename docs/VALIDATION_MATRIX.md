@@ -5,6 +5,19 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+**P6 entrypoint slice (macOS, 2026-10-06):** plugin alpha.2 adds shared connection resolution and
+the goal/child/worker/review/integration/delivery workflow. Baseline focused checks: **24 passed**,
+11.19s. New affected suite: **24 passed**, 19.96s; lint/format clean (125 files), strict mypy clean
+(37 runtime files). Its first run had 22 pass/2 test-assumption failures, corrected before the final
+run. Copied resources and separate CLI processes prove an offline fake failure/takeover/repair/
+delivery sequence with one task/two attempts and unchanged source. Native Codex CLI 0.160.0 installed
+and enabled alpha.2 in isolated HOME/CODEX_HOME; all 13 cached files match and the cache's 34-command
+connection check passes without opening selected state. Skill validator passes. After explicit user
+confirmation, actual ZCode installation and Skill enabled discovery also pass; its 13 cached files
+and same connection check pass. Actual Codex desktop discovery and real host behavior are NOT_RUN.
+No new model calls or active user-state
+migration; no new full-suite claim. See [P6_ENTRYPOINT_RESULT.md](P6_ENTRYPOINT_RESULT.md).
+
 All results below were produced on: Linux 6.18 x86_64 container, Python 3.11.17, git 2.43.0,
 SQLite 3.45.1 (Claude Code Cloud session, 2026-10-06), code revision `aeea786` (184 tests),
 re-run on the final docs-only head and from a clone of the exported bundle. macOS results are

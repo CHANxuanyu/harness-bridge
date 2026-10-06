@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "objective": "Implement and review the requested repository change",
+  "repo": {"path": "/absolute/path/to/repo", "base_ref": "HEAD"},
+  "advisor": {"host": "codex", "native_session_ref": null},
+  "constraints": ["Keep each executor in its assigned workspace"],
+  "acceptance": ["The integrated candidate must pass the agreed acceptance checks"],
+  "max_attempts": 3,
+  "max_repairs": 1,
+  "max_executor_wall_seconds": 2700,
+  "max_executor_turns": 60,
+  "allowed_executors": ["fake"]
+}
