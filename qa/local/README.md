@@ -1,68 +1,45 @@
-# qa/local — materials for the first real Claude CLI run (T3)
+# qa/local — disposable live-validation materials
 
-**Evidence level of everything in this directory: prepared materials only.**
-No model was invoked while preparing them, and no `claude`/`codex` inference
-has ever been run through the bridge. These files do not extend the test
-suite; `scripts/check.sh` does not run them.
-
-## What is here
+These files prepare fixtures; **running the generator invokes no model**. Actual authorized
+T3/T4 initial smokes and controlled repair/resume have now passed on this Mac. Their evidence
+is in `docs/LOCAL_SMOKE_HANDOFF.md`, `docs/T4_SMOKE_RESULT.md` and
+`docs/LIVE_REPAIR_RESULT.md`; do not confuse fixture preparation with executing those tests.
 
 | File | Purpose |
 |---|---|
-| `make_fixture.py` | Creates a disposable single-function fixture repo (`slugkit.slugify`), an **external** acceptance script (stored outside the repo), and a validated TaskSpec for the claude-code executor. |
-| `task-live-smoke.example.json` | Read-only example of the generated TaskSpec (placeholder paths). Regenerate; do not hand-edit. |
+| `make_fixture.py` | Generates a disposable `slugkit.slugify` repository, external acceptance script and validated initial-smoke TaskSpec. |
+| `task-live-smoke.example.json` | Example only; regenerate actual absolute paths. |
 
-The task targets a one-shot fixture project only — never Harness Bridge itself.
-The external acceptance check (`trust: external-acceptance`) lives outside the
-fixture repo, so the executor cannot pass by editing repository tests. Its
-cases are independent of the repo tests and cover separators, edge hyphens,
-empty results and non-ASCII input.
+The external acceptance script lives outside the candidate repository. Its required checks
+cannot be satisfied simply by modifying repository tests. Never target Harness Bridge itself
+with these smoke tasks or reuse an earlier task's completed implementation as a fresh fixture.
 
-## Commands (when and only when the T3 checklist is confirmed)
+## Isolated command pattern
+
+Complete `docs/LOCAL_HANDOFF.md` §2 and obtain the bounded per-run authorization first.
+Use a fresh root and an explicit isolated state directory for every hbridge command:
 
 ```bash
-# from the bridge repository checkout
-uv run --frozen python qa/local/make_fixture.py /tmp/hb-live-smoke
-
-uv run --frozen hbridge --json create \
-  --task /tmp/hb-live-smoke/task-live-smoke.json --idempotency-key live-smoke-1
-
-uv run --frozen hbridge --json run <TASK_ID> --mode live --allow-model-usage
-
-uv run --frozen hbridge --json artifacts <TASK_ID>
+uv run --frozen python qa/local/make_fixture.py <FRESH_ROOT>/fixture
+uv run --frozen hbridge --state-dir <FRESH_ROOT>/state --json doctor
+uv run --frozen hbridge --state-dir <FRESH_ROOT>/state --json create \
+  --task <FRESH_ROOT>/fixture/task-live-smoke.json --idempotency-key <UNIQUE_KEY>
+# Only with the isolated config opt-in and explicit model-use authorization:
+uv run --frozen hbridge --state-dir <FRESH_ROOT>/state --json run <TASK_ID> \
+  --mode live --allow-model-usage
+uv run --frozen hbridge --state-dir <FRESH_ROOT>/state --json artifacts <TASK_ID>
 ```
 
-Preset limits (already in the generated TaskSpec): `max_attempts = 1`,
-`max_repair_cycles = 0`, `max_turns_per_attempt = 10`,
-`wall_timeout_seconds = 600`. Executor: `claude-code`, model
-`claude-opus-5-5`. Bash auto-approval is scoped to exactly the repo-tests
-command (`Bash(python3 -B -m unittest:*)`).
+The generator's preset is **one initial attempt, zero repairs**, 10 turns and 600 seconds.
+It does not enable live or execute a model. For an expressly authorized controlled repair,
+prepare a separate TaskSpec before create with 2 attempts / 1 repair and the staged requirements
+recorded in `docs/LIVE_REPAIR_RESULT.md`; do not amend a task or weaken checks mid-run.
 
-## Conditions still to confirm before any real call
+Executor remains Claude Code / `claude-opus-5-5`; permitted Bash is scoped to
+`Bash(python3 -B -m unittest:*)`. The bridge runs external acceptance independently.
+CLI 2.1.291 and its `--max-turns` acceptance were verified on 2026-10-06; reuse that evidence
+only for the unchanged installation, as described in the current preflight.
 
-All of `docs/LOCAL_HANDOFF.md` §2, in particular:
-
-1. `claude` CLI installed and logged in via the official subscription flow by
-   the user. Status at preparation time (2026-10-06, this machine): **not
-   installed** — `claude --version` could not even be attempted.
-2. No `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_BASE_URL` /
-   Bedrock / Vertex / Foundry variables in that shell (`hbridge doctor --json`
-   lists names only). Extra-usage / auto top-up status checked in the account
-   UI; if unknown, do not claim "no extra cost".
-3. Hooks, MCP servers and permissions that `claude -p` will load reviewed
-   (`~/.claude/settings.json`, project `.claude/`, managed settings).
-4. `--max-turns` flag evidence: still **unknown / pending local confirmation**
-   (docs declare it; local `--help` of 2.1.291 did not list it; no local run).
-   Confirm per `docs/LOCAL_HANDOFF.md` §2 step 4, then opt in per flag in the
-   state-dir `config.toml` (`allow_unlisted_flags = ["--max-turns"]`).
-5. `[live] enabled = true` and `hooks_and_permissions_reviewed = true` in the
-   state-dir `config.toml` — the live gate stays closed without them, by
-   design.
-
-## Never
-
-- `--bare`, `--dangerously-skip-permissions`, unrestricted Bash permissions.
-- Store tokens, credentials, real session logs or run databases in this
-  repository. Everything here must stay public-repo-safe.
-- Treat a mock-mode run as live evidence, or reuse a generated fixture for a
-  second live run without regenerating it.
+After every attempt, close the isolated live gate. Review actual diff, verified snapshot,
+model/session, exit status and independent checks before approving. Never publish raw logs,
+credentials, databases or worktrees here; never add permission-bypass flags or broaden shell access.

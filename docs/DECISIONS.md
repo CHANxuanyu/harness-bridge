@@ -64,3 +64,10 @@ Each entry: decision — reason. Newest last.
     `max_repair_cycles = 0`, `max_turns_per_attempt = 10`, `wall_timeout_seconds = 600`, and a
     scoped `Bash(python3 -B -m unittest:*)` matching the repo-tests argv — never a task against
     Harness Bridge itself.
+
+22. **Controlled repair evidence (2026-10-06):** freeze a two-phase TaskSpec (diagnosis only, then
+    review-directed repair) against a seeded defect; keep verifiers unchanged; prove matching
+    session and conversation recall. Label this a controlled workflow, not a spontaneous failure.
+23. **Doctor evidence scope:** report historical project validation separately from installed-host
+    live readiness. A non-inference doctor never upgrades live readiness to supported based on
+    past smoke success elsewhere; Linux/macOS process support cites offline validation.

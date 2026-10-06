@@ -6,9 +6,10 @@
 > integration tests with a *simulated* executor: real subprocess, real git, real verifier,
 > real SQLite). Two bounded **real** smoke runs went through the bridge on 2026-10-06 and
 > passed: T3 (operator → bridge → Claude Code) and a T4 single-run (Codex session → bridge →
-> Claude Code → review → SUCCEEDED). Live repair/`--resume`, interruption recovery and the
-> comparative evaluation (T5) are **not** verified; see `docs/VALIDATION_MATRIX.md`,
-> `docs/LOCAL_SMOKE_HANDOFF.md` and `docs/T4_SMOKE_RESULT.md`.
+> Claude Code → review → SUCCEEDED). A later controlled **repair/`--resume` passed**,
+> preserving the session and conversation context through failed verification → review →
+> repair → approve. Live interruption/timeout and comparative evaluation (T5) remain
+> **unverified**; see `docs/VALIDATION_MATRIX.md` and `docs/LIVE_REPAIR_RESULT.md`.
 
 Harness Bridge turns "delegate a coding task to another agent harness, collect evidence,
 request repairs, recover from interruptions" into a recorded, testable local protocol. It is a
@@ -57,7 +58,7 @@ Other commands: `verify`, `recover [--resolve retry|fail]`, `cancel`, `list`. Fu
 [`docs/PROTOCOL.md`](docs/PROTOCOL.md); supervisor playbook in
 [`examples/supervisor-instructions.md`](examples/supervisor-instructions.md).
 
-## Live Claude Code mode (not yet verified)
+## Live Claude Code mode (bounded smoke and repair verified)
 
 `hbridge run TASK_ID --mode live --allow-model-usage` dispatches `claude -p --output-format
 stream-json --verbose --model claude-opus-5-5 --max-turns N ...` only when **all** of these

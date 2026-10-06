@@ -113,19 +113,25 @@ def run_doctor(state_dir: Path, *, offline: bool) -> dict[str, Any]:
         {
             "name": "claude_code_live_dispatch",
             "status": "unknown",
-            "evidence": "NOT_RUN: no real Claude Code run has been performed through the bridge",
+            "evidence": "Project records bounded live smokes and a controlled repair/resume "
+            "in docs/VALIDATION_MATRIX.md; doctor does not validate live dispatch "
+            "on the current configuration",
         },
         {
             "name": "codex_supervisor_loop",
             "status": "unknown",
-            "evidence": "NOT_RUN: real Codex/Astra -> bridge -> Claude loop never executed",
+            "evidence": "Project records local Codex -> bridge -> Claude initial and repair "
+            "loops in docs/VALIDATION_MATRIX.md; doctor does not run a supervisor loop",
         },
         {
             "name": "process_group_management",
-            "status": "supported" if sys.platform.startswith("linux") else "unknown",
-            "evidence": "tested on Linux in cloud CI-like container"
-            if sys.platform.startswith("linux")
-            else "not yet verified on this platform",
+            "status": "supported"
+            if sys.platform.startswith("linux") or sys.platform == "darwin"
+            else "unknown",
+            "evidence": "Offline process-group and recovery tests recorded on Linux and macOS "
+            "(docs/VALIDATION_MATRIX.md); doctor does not run signal or timeout tests"
+            if sys.platform.startswith("linux") or sys.platform == "darwin"
+            else "no recorded process-group validation for this platform",
         },
     ]
     claude_check = (

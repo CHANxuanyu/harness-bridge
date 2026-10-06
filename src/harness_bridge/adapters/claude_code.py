@@ -1,9 +1,9 @@
 """Claude Code CLI adapter (``claude -p --output-format stream-json``).
 
-Status: implemented and contract-tested **offline only** against synthetic / docs-derived
-fixtures and a stub executable. No real Claude Code run has been performed through this
-adapter; authentication, exact stream schema, ``--max-turns`` support and resume behaviour of
-the installed CLI must be verified locally (see docs/LOCAL_HANDOFF.md).
+Status: offline contract tests plus bounded local live initial-run and controlled repair/resume
+evidence (docs/VALIDATION_MATRIX.md). Historical smoke results do not certify a different local
+installation, turn-limit enforcement, or live interruption/timeout behaviour. Each live run still
+requires the local preflight and explicit authorization (docs/LOCAL_HANDOFF.md).
 
 Design rules:
 * ``build_invocation`` is pure: no process, no network, no file access.
@@ -114,7 +114,9 @@ class ClaudeCodeAdapter:
         return {
             "kind": self.kind,
             "modes": ["live (gated)", "mock with --stub-binary (contract tests)"],
-            "evidence": "offline contract tests on synthetic/docs-derived fixtures; live NOT_RUN",
+            "evidence": "offline contract tests and captured-live-redacted samples; bounded "
+            "initial and repair/resume run records in docs/VALIDATION_MATRIX.md, "
+            "not a certification of the current local configuration",
             "flags_used": self.flags_used(resume=True),
         }
 

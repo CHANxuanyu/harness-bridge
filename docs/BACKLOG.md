@@ -3,12 +3,11 @@
 Completed in 2026-10-06 rounds (kept for reference, do not redo): captured-redacted live
 stream fixtures (`tests/fixtures/claude_stream_live/`), local `--max-turns` acceptance
 evidence, macOS verification (process groups, `ps` fallbacks, SQLite locking, worktrees),
-T3/T4 bounded live smokes — see `docs/VALIDATION_MATRIX.md`.
+T3/T4 bounded live smokes and one controlled live repair/resume (same session and context,
+2 attempts / 1 repair) — see `docs/VALIDATION_MATRIX.md` and `docs/LIVE_REPAIR_RESULT.md`.
 
 Open:
 
-- Live repair / `--resume` verification (one controlled repair; session-id preservation) —
-  needs explicit user authorization.
 - Live interruption / timeout behaviour with a real executor (offline tests exist; live
   behaviour unverified) — needs explicit user authorization.
 - Evaluation harness implementing `docs/EVALUATION_PLAN.md` (T5) — the only place where

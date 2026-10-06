@@ -1,9 +1,10 @@
 """Offline parser regression against captured-live-redacted stream samples.
 
 Evidence: field-level redactions of the executor stream logs that the bridge
-captured during the two authorized live smokes of 2026-10-06 (T3 and T4; see
+captured during authorized initial smokes and controlled repair on 2026-10-06 (see
 tests/fixtures/claude_stream_live/PROVENANCE.json and the run records in
-docs/LOCAL_SMOKE_HANDOFF.md and docs/T4_SMOKE_RESULT.md). These tests show the
+docs/LOCAL_SMOKE_HANDOFF.md, docs/T4_SMOKE_RESULT.md and docs/LIVE_REPAIR_RESULT.md).
+These tests show the
 real captured stream shape parses and classifies exactly as the live runs were
 recorded. They do NOT re-run any model and do not prove turn-limit enforcement,
 resume behaviour, or anything about other tasks or CLI versions.
@@ -12,6 +13,7 @@ resume behaviour, or anything about other tasks or CLI versions.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -81,17 +83,17 @@ def packet() -> TaskPacket:
     )
 
 
-def classify(name: str):  # type: ignore[no-untyped-def]
+def classify(name: str, resume_session_id: str | None = None):  # type: ignore[no-untyped-def]
     a = adapter()
     a.build_invocation(
-        packet(),
+        replace(packet(), attempt_seq=2, attempt_kind="repair") if resume_session_id else packet(),
         InvocationContext(
             worktree="/tmp/hbridge-live-sample-nonexistent",
             mode="live",
             python_executable="/usr/bin/python3",
             base_env={"PATH": "/usr/bin", "HOME": "/home/u"},
             executor_binary="/opt/claude/bin/claude",
-            resume_session_id=None,
+            resume_session_id=resume_session_id,
         ),
     )
     events = [a.parse_event(line.encode()) for line in (LIVE / name).read_text().splitlines()]
@@ -164,6 +166,7 @@ def test_live_samples_leak_no_private_data() -> None:
         "chan",
         "79b022b7",
         "8d42c8f1",  # real session prefixes
+        "8c06e49a",  # controlled repair session prefix
         "tsk_5a3e",
         "tsk_d83b",
         "hbridge-t3-live",
@@ -180,3 +183,32 @@ def test_live_samples_leak_no_private_data() -> None:
         text = path.read_text()
         for marker in forbidden:
             assert marker not in text, f"{path.name} contains {marker!r}"
+
+
+def test_captured_repair_pair_confirms_requested_resume() -> None:
+    """Offline replay of two real streams; independent verification lives in the run record."""
+    _, _, initial = classify("t4_repair_initial_redacted.jsonl")
+    assert initial.outcome is AttemptOutcome.SUCCEEDED
+    assert initial.session_id == "00000000-0000-4000-8000-000000000003"
+    _, _, resumed = classify("t4_repair_resumed_redacted.jsonl", initial.session_id)
+    assert resumed.outcome is AttemptOutcome.SUCCEEDED
+    assert resumed.session_id == initial.session_id
+    assert resumed.observed_model == MODEL
+    assert resumed.executor_reported["model_pin"] == "satisfied"
+    assert initial.executor_reported["num_turns"] == 6
+    assert resumed.executor_reported["num_turns"] == 4
+    assert resumed.executor_reported["permission_denials"] == 0
+    assert resumed.protocol["malformed_lines"] == 0
+    assert resumed.protocol["result_seen"]
+    assert resumed.usage["subscription_remaining"] is None
+
+
+def test_captured_repair_cannot_confirm_a_different_session() -> None:
+    """A successful captured result must not satisfy another task's requested session."""
+    other_session = SAMPLES["t4_live_smoke_redacted.jsonl"]["session"]
+    _, _, result = classify("t4_repair_resumed_redacted.jsonl", other_session)
+    assert result.outcome is AttemptOutcome.BLOCKED
+    assert result.blocked is not None
+    assert result.blocked["category"] == "resume_failed"
+    assert result.blocked["requested_session_id"] == other_session
+    assert result.blocked["observed_session_id"] == "00000000-0000-4000-8000-000000000003"

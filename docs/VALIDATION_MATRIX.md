@@ -18,7 +18,8 @@ via uv, git 2.50.1, SQLite 3.53.1/3.51.0, revision `fcbd21a` — no source chang
 targeted `pytest tests/unit/test_runner.py tests/integration/test_recovery.py -v` run
 (28 passed) — the process-group tests ran the `ps` fallbacks, since macOS has no `/proc`.
 Live rows: T3 was executed on 2026-10-06 (see the T3 row and `docs/LOCAL_SMOKE_HANDOFF.md`);
-T4 initial smoke passed later the same day (`docs/T4_SMOKE_RESULT.md`); T5 remains
+T4 initial smoke and later controlled repair/resume passed the same day
+(`docs/T4_SMOKE_RESULT.md`, `docs/LIVE_REPAIR_RESULT.md`); T5 remains
 NOT_RUN. No macOS result below is copied from Linux.
 
 | ID | Feature | Status | Evidence | Test / command | Result | Remaining uncertainty |
@@ -58,4 +59,10 @@ NOT_RUN. No macOS result below is copied from Linux.
 | — | CLI rejects an argument at run time → stop, no retry without it | implemented | T1/T2 (stub) | `test_cli_rejecting_a_flag_stops_the_attempt`, `test_cli_rejection_of_max_turns_stops_and_is_never_retried_without_it` | PASS | real CLI error text unverified (commander-style assumed) |
 | T3 | Real Claude CLI single-harness run (initial smoke) | passed (initial smoke only) | T3 (live) | 2026-10-06, macOS: one CLI flag-acceptance probe + one bridge-run task (one-shot slugify fixture, isolated state dir; 1 attempt / 0 repair cycles / 10-turn cap, 7 used; 600 s wall, 19.7 s) with CLI 2.1.291, requested=observed model claude-opus-5-5; bridge verification passed incl. external acceptance (script hash unchanged before/after); approve → SUCCEEDED, state re-read by a fresh process | **PASS (macOS, live, single run)** | resume/repair not exercised; one run only; `--max-turns` acceptance ≠ enforcement proof; usage executor-reported, subscription remaining unknown |
 | T4 | Real Codex/Astra → Claude loop | passed (initial smoke only) | T4 (live) | 2026-10-06, current local Codex gpt-6-astra (turn-context evidence) → bridge 096238e → Claude CLI 2.1.291 / claude-opus-5-5; one fresh task, one run/spawn/attempt, 0 repair, 8/10 turns, 23.249 s; 7 repo tests + 9 external cases pass; acceptance hash unchanged; diff reviewed, snapshot-bound approve, fresh CLI confirms SUCCEEDED; gate closed; docs/T4_SMOKE_RESULT.md | **T4 single-run smoke PASS** | repair/resume not verified; subscription remaining unknown; initial read-only --help omitted state-dir (all later commands explicit); no external human execution |
+| T4-R | Controlled real repair / session resume | passed (one bounded task) | T4 live | 2026-10-06, bridge `470f5b0`, local Codex/Astra → Claude 2.1.291 / Opus 5.5; diagnosis-only initial against seeded defect → failed verification → changes_requested → matching `--resume` → 10 repo tests + 9 external cases pass → approve → SUCCEEDED; 2 attempts / 1 repair; session and unrepeated mnemonic preserved; external acceptance unchanged; `docs/LIVE_REPAIR_RESULT.md` | **PASS** | deliberate staged scenario, not spontaneous model failure; one task; no live interruption/timeout or turn-limit enforcement evidence |
 | T5 | Comparative evaluation | not run | — | — | **NOT_RUN** | format only (`docs/EVALUATION_PLAN.md`) |
+
+The initial-smoke rows above retain their historical scope: neither initial smoke exercised
+repair. T4-R supplies the later live repair evidence. Current affected checks: 12 offline
+parser/doctor tests passed (including 2 new repair-stream regressions), with lint/format/types
+clean; the previous full 192-test run was not repeated.

@@ -1,116 +1,88 @@
-# Local handoff
+# Local operation and continuation
 
-Three separate things — none of them happens automatically:
-1. **continue developing** the bridge (offline; no model usage needed);
-2. **first real Claude CLI test** (T3; needs your explicit authorization of a small model use);
-3. **first real Codex/Astra → Claude loop** (T4; after T3).
+Current evidence and next work are in `STATUS.md`, `HANDOFF.md` and
+`docs/VALIDATION_MATRIX.md`. This runbook supersedes the cloud-era private-repository,
+bundle-only delivery and mandatory first-run reproduction instructions.
 
-## Where the code is
-> **Local update (2026-10-06):** the repository stays **public** by the user's explicit choice
-> (do not change visibility), and the branch **is pushed** —
-> `origin/claude/new-repo-plan-dn1eac` == `fcbd21a232759f7b3f2dd2ad22acef69e646fe6d`. The
-> private/bundle instructions below are historical; a plain
-> `gh repo clone CHANxuanyu/harness-bridge` now works. The offline suite and both demos were
-> reproduced on macOS at that SHA (see `docs/LOCAL_SMOKE_HANDOFF.md`); T3 fixture materials
-> are ready under `qa/local/`.
+## 1. Continue from the actual local state
 
-- Repository: `CHANxuanyu/harness-bridge` — still **public** at cloud close-out and the branch
-  was **not pushed** (the cloud session had no tool to change visibility). Make it private
-  yourself (GitHub → Settings → General → Danger Zone → Change visibility), then push the branch
-  from the bundle:
-  ```bash
-  git clone -b claude/new-repo-plan-dn1eac harness-bridge.bundle harness-bridge
-  cd harness-bridge && git remote set-url origin https://github.com/CHANxuanyu/harness-bridge.git
-  git push -u origin claude/new-repo-plan-dn1eac
-  ```
-- Branch: `claude/new-repo-plan-dn1eac`
-- Last code revision: `aeea786`; the branch head adds docs only and was itself re-verified
-  (offline suite + both demos, also from a clone of the exported bundle).
+- Repository stays **public**, by the user's explicit choice. Do not change visibility.
+- Working branch: `local/glm-macos-validation`. Remote was directly confirmed at `470f5b0`
+  on 2026-10-06; later local work is not automatically pushed. Inspect Git before acting.
+- Read `AGENTS.md`, `STATUS.md`, `HANDOFF.md` and the latest result record. Preserve existing
+  changes. Session migration is not a reason to redesign, rerun finished tests/demos, launch
+  another model, or have the user carry instructions between agents.
+- Baseline evidence: full offline checks on Linux/macOS, captured-live parser regressions,
+  T3/T4 initial smokes and one controlled repair/resume. Reuse these records; run checks
+  relevant to new changes or unresolved failures.
+- Prefer CLI and direct local file operations. Use available computer-use tools only when
+  UI interaction is needed. A GUI permission issue does not prevent CLI work.
 
-## 1. Reproduce the offline results locally
-```bash
-gh repo clone CHANxuanyu/harness-bridge      # or: git clone harness-bridge.bundle harness-bridge
-cd harness-bridge
-git switch claude/new-repo-plan-dn1eac
-uv sync --frozen                             # uv fetches Python 3.11 if it is missing
-uv run ruff check .
-uv run mypy src/harness_bridge
-uv run pytest -m "not live"                  # expected: 184 passed
-uv run hbridge doctor --offline --json
-uv run hbridge demo --scenario success
-uv run hbridge demo --scenario bug-then-repair
-```
+## 2. Preflight for an explicitly authorized live run
 
-### macOS differences to verify (cloud only ran Linux)
-- process groups / `killpg`, TERM→KILL escalation and zombie handling (no `/proc`; the code
-  falls back to `ps -A -o pid=,pgid=,stat=` and `ps -o lstart=`): run
-  `uv run pytest tests/unit/test_runner.py tests/integration/test_recovery.py -v`;
-- worktree creation under `~/.local/state/harness-bridge/worktrees`, path case sensitivity
-  (default APFS is case-insensitive; forbidden globs already match case-insensitively);
-- SQLite WAL locking with two concurrent `hbridge run` processes (`test_r05_*`);
-- install from a clean shell (`uv sync --frozen`).
-Record results in `docs/VALIDATION_MATRIX.md` with platform/version; do not copy Linux PASS.
+Each real run needs explicit local user authorization with bounded attempts/repair/turns/time.
+An existing subscription or a general request to continue development does not auto-enable live.
+The agent can perform the authorized local actions directly; a separate user terminal is not
+required when this session's tools support them.
 
-## 2. First real Claude CLI run (T3) — only after you explicitly authorize it
-Do this in a **small disposable fixture repo** (e.g. `uv run hbridge demo --scenario success
---workdir /tmp/hb-fixture` creates one at `/tmp/hb-fixture/fixture-repo`; its task spec in
-`/tmp/hb-fixture/task.json` can be copied and changed to the claude-code executor).
+1. Confirm the intended installed `claude` path/version and non-inference `claude auth status`.
+   Record only logged-in state, auth method, provider and subscription type. Never copy/read
+   OAuth tokens or print account identifiers. Login itself belongs to the user if needed.
+2. Check the bridge-recognized API/provider, cloud and nested-session environment **names**.
+   Never unset protective markers or replace provider settings just to pass the gate.
+3. Review applicable user/project/managed settings, hooks, MCP and permissions. Keep strict
+   MCP config and scoped tools. Do not change extra usage or auto top-up. If their existing
+   status is unknown, report unknown rather than claiming no cost.
+4. Reuse the existing T3 `--max-turns` parse-acceptance evidence only when installation and
+   binary are unchanged (CLI 2.1.291; binary hash in `docs/LIVE_REPAIR_RESULT.md`). Its help
+   does not list the flag. A changed installation needs fresh evidence; no silent paid probe.
+   Parse acceptance does not prove enforcement. `--resume` is listed by this CLI's help.
+5. Generate a fresh disposable fixture outside this public repo with `qa/local/make_fixture.py`.
+   Use a new isolated state directory for **every** operational command via `--state-dir`.
+   Never live-enable the global default directory.
+6. In that isolated `config.toml`, keep `enabled = false` during preparation. The exact
+   confirmed flag allowlist is `allow_unlisted_flags = ["--max-turns"]`; set
+   `hooks_and_permissions_reviewed = true` only after the preceding review.
+   Run `hbridge --state-dir STATE --json doctor` (no inference). Its live capability status
+   stays unknown: doctor cannot certify live execution on the current configuration.
+7. Pin the TaskSpec to `claude-code` / `claude-opus-5-5`, scoped tools and agreed limits.
+   Confirm baseline verification detects the seeded/stub failure and freeze the external
+   acceptance script hash. Only then enable this isolated gate for the authorized dispatch.
+8. Create and run through the bridge, preserving receipts. `run` takes both `--mode live`
+   and `--allow-model-usage`. Record a start marker before dispatch; do not retry an unknown
+   tool outcome. Inspect stored task/attempt state first.
+9. After each executor attempt, close the isolated live gate. Inspect exit confirmation,
+   model/session, verification, actual diff, scope and acceptance integrity. Use the current
+   artifacts review template for a snapshot-bound decision. Never substitute executor claims
+   for independent verification. Re-read status in a fresh CLI process.
 
-Checklist, all by you in your own terminal:
-1. `claude --version`; log in with the official subscription flow yourself (the bridge never
-   logs in, reads tokens or copies credentials).
-2. In that shell, make sure no `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
-   `ANTHROPIC_BASE_URL`, Bedrock/Vertex/Foundry variables are set
-   (`uv run hbridge doctor --json` lists their *names*). Check extra-usage / auto top-up in
-   your account UI. If unknown, do not claim "no extra cost".
-3. Review hooks, MCP servers and permissions that `claude -p` will load: `~/.claude/settings.json`,
-   the fixture's `.claude/` (if any), managed settings. The adapter adds `--strict-mcp-config`
-   by default and never adds `--bare` (which would ignore subscription login).
-4. `--max-turns` evidence so far: the official CLI reference documents it and says `--help` does
-   not list every flag; local `--help` (2.1.291) does not list it; no local run has confirmed it.
-   Status: unknown / pending confirmation on your machine. A possibly non-inference parse check
-   (itself unverified): `claude -p --max-turns 1 --output-format stream-json --verbose < /dev/null`
-   — "unknown option" means this installation rejects it (do not allow it; the bridge would stop
-   the attempt anyway and never retries without the limit); a "no input/prompt" error suggests it
-   parses. Only after you see that, confirm it per flag in `config.toml` (below).
-5. Create `~/.local/state/harness-bridge/config.toml` (or under your `--state-dir`):
-   ```toml
-   [live]
-   enabled = true
-   hooks_and_permissions_reviewed = true
-   allow_unlisted_flags = ["--max-turns"]   # exact names only, after step 4 confirmed it
-   ```
-6. TaskSpec for the first run: `"executor": {"kind": "claude-code", "requested_model":
-   "claude-opus-5-5", "allowed_tools": ["Read", "Edit", "Write", "Glob", "Grep",
-   "Bash(python3 -B -m unittest:*)"]}`, `"limits": {"max_attempts": 1, "max_repair_cycles": 0,
-   "wall_timeout_seconds": 600, "max_turns_per_attempt": 10}`.
-7. Run:
-   ```bash
-   uv run hbridge --json create --task task-live.json --idempotency-key live-smoke-1
-   uv run hbridge --json run TASK_ID --mode live --allow-model-usage
-   uv run hbridge --json artifacts TASK_ID
-   ```
-   Check: `observed_model` / `model_pin`, `session_id`, `executor_reported.api_key_source`
-   (should not indicate an API key), usage fields, exit/permission behaviour.
-8. Save `artifacts/<task>/<attempt>/executor.stdout.log` (already redacted) as a
-   `captured-live` fixture under `tests/fixtures/claude_stream_live/` with CLI version and date
-   in a new provenance file. Do not overwrite the synthetic set. Then update the parser if the
-   real schema differs and raise the matrix row to T3 only with that evidence.
-9. Separately, test one controlled repair with `--resume` (max_attempts 2) and record whether
-   the session id is preserved.
+No `--bare`, `--dangerously-skip-permissions`, unrestricted Bash, automatic quota waits,
+provider switches or unbounded retries. A permission/usage/auth/unknown-exit problem is a stop
+condition for the affected dispatch, not an invitation to weaken protection.
 
-Never: `--dangerously-skip-permissions`, disabling nested-session protection, unrestricted Bash,
-long multi-retry runs, or waiting for quota resets automatically.
+## 3. Controlled repair/resume (already verified once)
 
-## 3. First Codex/Astra → bridge → Claude loop (T4)
-Paste `examples/supervisor-instructions.md` into the Codex session. Astra writes the TaskSpec,
-calls `hbridge`, reads `artifacts`, submits reviews. The bridge does not call OpenAI. If Codex's
-sandbox cannot start the local `claude` or cannot wait for a foreground `run`, run the same
-`hbridge` command yourself in another terminal and record it as **manual handoff** (not proof of
-an automatic Codex launch chain). Mark T4 only after one normal and one repair task, with model,
-CLI and configuration sources recorded.
+The completed run is recorded in `docs/LIVE_REPAIR_RESULT.md`. Do not repeat it for handoff.
+For a separately authorized follow-up, the observed procedure was:
 
-## Continuing development
-Read `AGENTS.md`, `STATUS.md`, `HANDOFF.md`, `docs/VALIDATION_MATRIX.md`; run
-`scripts/check.sh`; take the next bounded work package from `HANDOFF.md`. Cloud-session upload
-permission does not extend to future remote operations — push per your local decision.
+- Seed a missing-edge-trim defect in the fresh fixture source **before task creation**.
+- Freeze one TaskSpec with 2 attempts / 1 repair, 10 turns / 600 seconds per attempt and
+  `resume_on_repair = true`. Requirements explicitly stage initial diagnosis-only, then
+  review-directed repair; required verifiers remain unchanged throughout.
+- Initial diagnosis makes no edits; verification fails and approval stays blocked.
+- Submit `changes_requested` with the real failure and required regressions.
+- The second run must have kind repair, explicit `--resume` with the first observed session,
+  matching output session and task/repo/worktree binding. Do not silently accept a new session.
+- Inspect the repaired diff, preserved existing tests, independent verification and acceptance
+  hash, then approve the exact verified snapshot. Confirm final state and attempt counts.
+
+This is a deliberately staged workflow, not evidence that the model naturally failed a task.
+Real interruption/recovery, timeout/turn-limit enforcement and T5 remain separate unverified work.
+
+## 4. Retain and publish evidence carefully
+
+Keep raw streams, DBs, candidate worktrees and review files outside the public repository.
+Only field-level redacted samples and bounded result summaries belong in Git. Preserve event
+order/counts and consistent fictional ids; never publish conversation/thinking/tool-input content.
+Update status, handoff and validation matrix with what actually ran; commit one logical milestone.
+Push only within the user's current authorization; never change visibility.

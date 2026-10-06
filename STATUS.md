@@ -1,11 +1,11 @@
 # Status
 
-_Last updated 2026-10-06 (offline evidence consolidation after the T4 smoke)._
+_Last updated 2026-10-06 (controlled live repair/resume and evidence diagnostics)._
 
 ## Current state
 
 - **Experimental prototype (V0.1, milestones M0–M4).** The live path has now been exercised
-  for real, in two bounded smoke runs on 2026-10-06 — this is no longer "offline only".
+  for real in bounded initial smokes and one controlled repair/resume task on 2026-10-06.
 - **Verified so far**
   - T0–T2 offline suite (184 tests) and both demos: green on Linux (cloud) and macOS (local).
   - T3 live single-harness initial smoke: **PASS** — exactly 2 real invocations (one
@@ -16,11 +16,16 @@ _Last updated 2026-10-06 (offline evidence consolidation after the T4 smoke)._
     evidenced by local turn-context metadata) performed create → run → artifacts → diff
     review → snapshot-bound approve → SUCCEEDED through the bridge, one initial attempt,
     zero repairs (`docs/T4_SMOKE_RESULT.md`).
-  - Redacted stream logs from both runs are now offline parser regression samples
+  - Controlled live repair/resume: **PASS** — two real attempts (diagnosis-only initial
+    against a seeded bug, then one repair), failed verification → changes_requested →
+    matching `--resume` → passed verification → approve → SUCCEEDED. Session id and an
+    unrepeated conversation mnemonic preserved; 10 repo tests + 9 external cases passed
+    (`docs/LIVE_REPAIR_RESULT.md`).
+  - Redacted stream logs from all three tasks are now offline parser regression samples
     (`tests/fixtures/claude_stream_live/`, provenance recorded; no model was invoked to
     build them).
 - **Not verified (do not assume)**
-  - live repair / `--resume`, real interruption recovery, live timeout enforcement,
+  - real interruption recovery, live timeout/turn-limit enforcement,
     multi-task or long-task stability;
   - T5 comparative evaluation — in particular **whether delegating through the bridge is
     cheaper or better than using Opus directly is NOT established** by these smokes;
@@ -41,7 +46,7 @@ _Last updated 2026-10-06 (offline evidence consolidation after the T4 smoke)._
 | Runner: own process group, concurrent drain, bounded capture, timeout, cancel, signals, confirmed-exit | done, tested (Linux, macOS) |
 | Fake executor (11 scenarios) + adapter | done, tested |
 | Independent verifier, snapshot fingerprint, manifest, scope/secret checks, redaction, approval gate | done, tested |
-| Repair loop with attempt/repair budgets | done, tested offline |
+| Repair loop with attempt/repair budgets | done; offline tests + one controlled live repair/resume PASS |
 | recover / cancel / verify; crash windows fail closed; no auto re-dispatch | done, tested (real crash injection + signals; Linux, macOS) |
 | Claude Code adapter: command builder, stream parser, classification, resume binding, live gate + per-flag evidence preflight, run-time argument-rejection stop | done, offline contract + live smoke evidence (T3/T4) |
 | Captured-live-redacted stream fixtures + parser regression tests (from the T3/T4 logs) | done |
@@ -58,8 +63,16 @@ _Last updated 2026-10-06 (offline evidence consolidation after the T4 smoke)._
   `test_runner.py` + `test_recovery.py -v` → 28 passed; doctor and both demos pass.
 - **Live smokes, same day:** T3 (2 real calls) and T4 (1 real executor attempt) as recorded
   in `docs/LOCAL_SMOKE_HANDOFF.md` and `docs/T4_SMOKE_RESULT.md`.
-- **Offline consolidation (this round):** 8 new parser regression tests on the redacted live
-  samples pass; full `scripts/check.sh` re-run clean at the commit that adds them.
+- **Offline consolidation at `470f5b0`:** 8 new parser regression tests; full check was
+  reported clean (192 tests), corroborated at takeover by 192 cached nodeids and no cached failures.
+- **Controlled repair/resume, this round at `470f5b0`:** exactly 2 real executor attempts,
+  one repair; final independent verification and approval passed. No new smoke/probe/demo.
+- **Affected offline checks after this round’s additions:** `scripts/check.sh
+  tests/contracts/test_claude_adapter_live.py
+  tests/integration/test_cli.py::test_doctor_offline_is_non_inference
+  tests/integration/test_claude_stub_flow.py::test_doctor_reports_flag_evidence_not_unsupported`
+  → 12 passed; ruff, format and mypy clean. Two new regression cases are included.
+  The earlier 192-test full suite was not repeated; no claim of a new 194-test full-suite run.
 
 ## Findings worth knowing
 
@@ -68,7 +81,7 @@ _Last updated 2026-10-06 (offline evidence consolidation after the T4 smoke)._
   parse-level evidence, **not** proof that the turn limit is enforced in every scenario. The
   live preflight consumed per-flag confirmation from the isolated test state dir only; a
   run-time CLI rejection still stops the attempt, never a retry without the flag.
-- The two Bash permission denials in each live run show the scoped tool allowance
+- The two Bash permission denials in each initial smoke show the scoped tool allowance
   intercepting out-of-scope commands. Permission rules are one layer — **not** OS-level
   sandbox isolation, and not executor failures.
 - Process-group tests need the explicit "steady state" handshake (see HANDOFF known issues).
@@ -88,7 +101,7 @@ _Last updated 2026-10-06 (offline evidence consolidation after the T4 smoke)._
 ## Next
 
 Each of these needs explicit user authorization before any real call:
-1. live repair / `--resume` verification (one controlled repair);
-2. interruption / timeout behaviour with a live executor;
-3. T5 evaluation per `docs/EVALUATION_PLAN.md`.
+1. interruption / timeout behaviour with a live executor;
+2. T5 evaluation per `docs/EVALUATION_PLAN.md`.
+Controlled repair/resume is complete for one bounded task; do not rerun it merely to hand off.
 Engineering backlog (no model needed): `docs/BACKLOG.md`.
