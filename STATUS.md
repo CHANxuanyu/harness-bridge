@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-10-06 (multi-subscription product definition and local plugin alpha)._
+_Last updated 2026-10-06 (Advisor / Executor product clarification; runtime unchanged)._
 
 ## Current state
 
@@ -39,6 +39,11 @@ _Last updated 2026-10-06 (multi-subscription product definition and local plugin
   local runtime, shared task evidence, host-specific plugin entrypoints. The user confirmed
   this audience (ZCode/GLM + Claude Code + Codex). Final use and delivery boundaries are in
   `docs/PRODUCT_FORM.md`; the runtime still has only a Claude Code live executor.
+- **User clarification:** the primary relationship is one Advisor (main agent) directing one
+  or more Executors (cross-harness subagents). The Advisor inspects/plans/reviews/integrates;
+  Bridge prepares workspaces and runs/records tasks. `supervisor` is the existing name for
+  Advisor. Parent goals, child dependencies, aggregate budgets and multi-executor integration
+  remain unimplemented; several flat tasks are not proof of this product behavior.
 
 ## Implemented
 
@@ -110,9 +115,9 @@ _Last updated 2026-10-06 (multi-subscription product definition and local plugin
 
 ## Next
 
-Product work now follows `docs/PRODUCT_FORM.md`: installed-host entrypoint/continuation
-acceptance, delivery of approved changes back to a project, lifecycle robustness, then a
-second execution adapter and distributable installation. Plugin activation/offline setup
+Product work now follows `docs/PRODUCT_FORM.md`: parent/child delegation contracts, isolated
+executor contexts, dependencies and aggregate budgets; approved-result integration/delivery;
+then host entrypoint/lifecycle acceptance, a second execution adapter and installation. Offline
 checks do not need another model call. Do not claim the prototype is the final product.
 
 Real interruption/timeout validation and T5 evaluation (`docs/EVALUATION_PLAN.md`) still

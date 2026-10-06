@@ -6,6 +6,11 @@
   subscriptions, such as ZCode/GLM, Claude Code and Codex. This is not a Codex-only product.
   `docs/PRODUCT_FORM.md` defines the intended experience: one independent local runtime,
   multiple host entrypoints, shared evidence, explicit delivery back to the project.
+- **Subsequent explicit product correction:** one Advisor + one or more Executors, equivalent
+  to a main agent with cross-harness subagents. Advisor inspects the repo and dispatches/reviews;
+  Bridge creates per-child workspaces and launches the executor with the assigned cwd.
+  Treat plugins as entrypoints to that relationship. Parent/child coordination, dependency
+  baselines, aggregate budgets and integration are now the next product priority; not yet code.
 - **New local plugin alpha:** `plugins/harness-bridge/` has portable, Codex and ZCode
   manifests plus one self-contained supervisor Skill. Codex catalog lives under
   `.agents/plugins/marketplace.json`; ZCode catalog is root `marketplace.json`.
@@ -82,9 +87,10 @@
 
 ## Next bounded work
 
-1. Follow the product acceptance order in `docs/PRODUCT_FORM.md`: install/activate the two
-   host entrypoints offline; verify persistent runtime/state discovery; implement delivery
-   of the exact approved snapshot, then close lifecycle and second-executor gaps.
+1. Follow `docs/PRODUCT_FORM.md`: specify/implement Advisor-owned parent/child task coordination,
+   execution contexts, dependencies and aggregate budgets around the existing per-task core.
+   Add reviewed-result integration/delivery, then complete host/lifecycle and second-executor
+   acceptance. Do not equate plugin loading or several flat tasks with multi-executor support.
 2. Interruption / timeout behaviour with a live executor (SIGTERM to the runner, wall
    timeout) — offline tests exist; live behaviour does not.
 3. T5 evaluation per `docs/EVALUATION_PLAN.md` — the only place where "cheaper/better than

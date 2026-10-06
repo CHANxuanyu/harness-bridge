@@ -11,10 +11,13 @@
 > repair → approve. Live interruption/timeout and comparative evaluation (T5) remain
 > **unverified**; see `docs/VALIDATION_MATRIX.md` and `docs/LIVE_REPAIR_RESULT.md`.
 
-Harness Bridge turns "delegate a coding task to another agent harness, collect evidence,
-request repairs, recover from interruptions" into a recorded, testable local protocol. It is a
+Harness Bridge aims to provide **one Advisor with one or more Executors across coding
+harnesses**: the Advisor inspects the repo, delegates tasks, reviews results and coordinates
+integration. The Bridge prepares each executor's workspace and records execution/evidence.
+The current implementation is the single-task building block for that relationship:
+delegate, collect evidence, request repairs and recover. It is a
 deterministic local CLI (`hbridge`). **It never calls a model API itself.** The supervisor is
-whoever runs the CLI (e.g. the user's existing Codex/Astra session); the executor is Claude Code
+whoever runs the CLI (the Advisor, e.g. the user's existing Codex session); the executor is Claude Code
 (live, gated, local only) or a bundled fake executor (offline).
 
 ```text

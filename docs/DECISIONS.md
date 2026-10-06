@@ -79,3 +79,8 @@ Each entry: decision — reason. Newest last.
     compatibility, host discovery, installed activation and live execution are separate evidence.
 26. **Review success is not delivery:** current `SUCCEEDED` approves an isolated candidate;
     explicit export/apply and delivery recording are required product work, not an implied merge.
+27. **Advisor + Executors is the primary product relationship (user clarification):** one main
+    agent inspects/plans/dispatches/reviews/integrates, with one or more cross-harness execution
+    sessions. Bridge owns workspace preparation and execution context, not planning intelligence.
+    `supervisor` maps to Advisor; parent/child/dependency/global-budget semantics are pending,
+    not new fields in the existing strict TaskSpec. Plugin packaging is subordinate to this model.

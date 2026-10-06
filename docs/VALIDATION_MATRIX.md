@@ -69,3 +69,9 @@ The initial-smoke rows above retain their historical scope: neither initial smok
 repair. T4-R supplies the later live repair evidence. Current affected checks: 12 offline
 parser/doctor tests passed (including 2 new repair-stream regressions), with lint/format/types
 clean; the previous full 192-test run was not repeated.
+
+2026-10-06 Advisor/Executor clarification: documentation was checked against the current
+workspace creation, adapter cwd and runner spawn paths; runtime and plugin package unchanged.
+No tests or model calls were repeated for this clarification. Parent/child coordination,
+multi-executor dependencies/aggregate budgets and integrated-goal acceptance remain
+**NOT_IMPLEMENTED / NOT_RUN**; existing per-task evidence must not be extended to those claims.

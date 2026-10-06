@@ -1,7 +1,17 @@
 # Architecture
 
+The product relationship is **one Advisor → one or more Executors across harnesses**.
+The existing term `supervisor` means Advisor. The Advisor inspects the repo, decomposes work,
+dispatches task prompts and reviews/integrates results; the deterministic Bridge prepares
+workspaces and manages execution/evidence. Plugins expose this capability to the Advisor.
+See [PRODUCT_FORM.md](PRODUCT_FORM.md) for the target role and multi-executor contract.
+
+The implementation below is the current **single-child-task** building block. Parent-goal
+coordination, dependencies, aggregate budgets and integrated-result review are not implemented.
+Several flat task records do not provide that coordination.
+
 ```text
-External supervisor (user's Codex/Astra session, or a person)
+External Advisor / supervisor (user's current coding-agent session, or a person)
   │  writes TaskSpec / ReviewDecision files, calls `hbridge` in a shell
   ▼
 hbridge CLI (cli.py) ── JSON receipts on stdout, diagnostics on stderr
@@ -20,7 +30,7 @@ Bridge core (service.py) — deterministic, never calls a model API
        ├─ base.py            ExecutorAdapter protocol, TaskPacket, process-level classification
        ├─ fake.py            adapter for the offline fake executor
        ├─ fake_executor.py   standalone fake executor process (stdlib only)
-       └─ claude_code.py     Claude Code CLI adapter (offline-tested; live NOT_RUN)
+       └─ claude_code.py     Claude Code CLI adapter (offline + bounded live initial/repair evidence)
 ```
 
 ## One attempt, end to end
@@ -28,6 +38,9 @@ Bridge core (service.py) — deterministic, never calls a model API
 1. `create`: validate the TaskSpec, refuse a dirty source checkout, resolve `base_ref` to a SHA,
    freeze the normalized spec (+ digests) in SQLite, create worktree
    `<state>/worktrees/<task_id>` on branch `hbridge/<task_id>` → `READY`.
+   The adapter receives this path and launches the executor with it as cwd; the executor
+   does not need to choose a folder or create a worktree. Generic environment bootstrap
+   is not implemented.
 2. `run`: CAS `READY → STARTING` and insert the attempt (launch token, invocation digest, runner
    identity) in one transaction. Build the invocation (pure). Spawn in a new session/process
    group; on spawn, CAS `STARTING → RUNNING` with pid/pgid. Drain and parse output; enforce the

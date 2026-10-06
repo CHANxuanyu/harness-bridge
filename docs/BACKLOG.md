@@ -8,6 +8,13 @@ T3/T4 bounded live smokes and one controlled live repair/resume (same session an
 
 Open:
 
+- User-defined core: one Advisor with one or more cross-harness Executors. Add parent goal /
+  child task ownership, Advisor takeover, dependencies and pinned dependent baselines, bounded
+  concurrency and aggregate budgets. Reuse existing per-task worktrees/attempts; no new model
+  planner inside Bridge. Validate child isolation, correctly attributed feedback and integrated
+  goal acceptance offline before claiming multi-executor behavior.
+- Explicit project environment preparation for fresh worktrees (dependencies, tests, approved
+  non-versioned resources); record failures without assuming the source's runtime state copied.
 - Product acceptance follows `docs/PRODUCT_FORM.md` (multi-subscription developers;
   independent runtime with host plugins). Local plugin alpha packaging is complete; it is
   not yet the installed end-to-end experience.
