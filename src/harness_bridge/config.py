@@ -52,6 +52,7 @@ def default_state_dir(env: dict[str, str] | None = None) -> Path:
 
 @dataclass(frozen=True)
 class BridgeConfig:
+    max_parallel_per_project: int = 1
     live_enabled: bool = False
     claude_binary: str | None = None
     allow_unlisted_flags: tuple[str, ...] = ()
@@ -68,6 +69,12 @@ def load_config(state_dir: Path) -> BridgeConfig:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise BridgeError("INVALID_INPUT", f"cannot parse {path}: {exc}") from None
+    execution = data.get("execution", {})
+    if not isinstance(execution, dict) or set(execution) - {"max_parallel_per_project"}:
+        raise BridgeError("INVALID_INPUT", "[execution] accepts only max_parallel_per_project")
+    parallel = execution.get("max_parallel_per_project", 1)
+    if type(parallel) is not int or parallel not in (1, 2):
+        raise BridgeError("INVALID_INPUT", "max_parallel_per_project must be integer 1 or 2")
     live = data.get("live", {})
     if not isinstance(live, dict):
         raise BridgeError("INVALID_INPUT", "[live] in config.toml must be a table")
@@ -95,6 +102,7 @@ def load_config(state_dir: Path) -> BridgeConfig:
     if not isinstance(reviewed, bool):
         raise BridgeError("INVALID_INPUT", "[live] hooks_and_permissions_reviewed must be a bool")
     return BridgeConfig(
+        max_parallel_per_project=parallel,
         live_enabled=enabled,
         hooks_and_permissions_reviewed=reviewed,
         claude_binary=binary,

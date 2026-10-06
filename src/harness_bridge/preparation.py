@@ -251,7 +251,9 @@ class Preparations:
                 return {**replay, "replayed": True}
             if task.state != S.READY:
                 raise BridgeError("STATE_CONFLICT", "preparation requires READY")
-            b.coordination.guard_project_slot(cur, goal["project_id"])
+            b.coordination.guard_project_slot(
+                cur, goal["project_id"], task.task_id, preparation=True
+            )
             count = cur.execute(
                 "SELECT count(*) FROM preparation_runs WHERE task_id=?", (task.task_id,)
             ).fetchone()[0]

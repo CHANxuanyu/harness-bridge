@@ -3,8 +3,9 @@
 The Advisor can now freeze bounded preparation steps in a child plan and explicitly run them
 after materialization. Bridge records their lifecycle independently of executor attempts.
 This completes the local P2 preparation contract for finite, trusted setup/check commands;
-background executor workers are described in [WORKERS.md](WORKERS.md); preparation itself
-remains foreground, with broader process/resource administration still pending.
+background executor workers are described in [WORKERS.md](WORKERS.md). Preparation remains
+foreground and project-exclusive even when executor parallelism is explicitly set to two; see
+[CONCURRENCY.md](CONCURRENCY.md). Broader process/resource administration is still pending.
 
 ## Plan and command
 
@@ -139,5 +140,5 @@ Evidence is offline: `tests/integration/test_preparation.py`, the readiness/plan
 migration checks. They use isolated Git repos, fake executors and real local setup subprocesses,
 including injected process crashes. No real coding harness, authentication or billing path was
 invoked. A subsequent P3 slice adds background executor workers and task event cursors, while
-P3–P7 (concurrency, integrated delivery, second executor and installed-host acceptance) remain
-unfinished; this is not final product acceptance.
+the subsequent P3 local core adds scoped concurrency and total executor-ceiling reservations.
+P4–P7 (integrated delivery, second executor and installed-host acceptance) remain unfinished; this is not final product acceptance.

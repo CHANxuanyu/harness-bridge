@@ -123,6 +123,7 @@ Revision 5 subsequently adds preparation/resource records and preserves old plan
 Explicit bounded preparation, cancellation/recovery, output/cache inventory and named resource
 claims complete the local P2 core; see [PREPARATION.md](PREPARATION.md) for its finite-command
 scope and remaining lifecycle limits. [WORKERS.md](WORKERS.md) covers the subsequent P3
-background-attempt slice. Two-executor concurrency, P4 integration/delivery, a second live
-executor adapter and installed host entrypoints remain later work. This is not a
+background-attempt slice; [CONCURRENCY.md](CONCURRENCY.md) adds explicit two-slot admission and
+aggregate ceiling reservations. P4 integration/delivery, a second live executor adapter and
+installed host entrypoints remain later work. This is not a
 finished V1 product.

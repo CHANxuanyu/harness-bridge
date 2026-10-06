@@ -1,13 +1,13 @@
 # Status
 
-_Last updated 2026-10-06 (P3 first worker slice; 341 full-suite checks passed; P3 remains incomplete)._
+_Last updated 2026-10-06 (P3 local worker/concurrency/ceiling core implemented)._
 
 ## Current state
 
 - **Planning milestone P0 complete:** `docs/PROJECT_PLAN.md` is the canonical product and
   engineering plan. Advisor is the user's existing agent session; Executor is a bound child
-  agent session. P1/P2 local cores are implemented and offline-validated.
-  P3 now has single-attempt background workers; P3–P7 remain incomplete. Scope defaults,
+  agent session. P1/P2/P3 local cores are implemented and offline-validated.
+  Installed-host lifecycle acceptance and P4–P7 remain incomplete. Scope defaults,
   dependency materialization, budget/ownership checks, worker lifecycle, integration and
   local-branch delivery are specified with V01–V14 acceptance criteria.
 - **P1 first vertical slice implemented:** project/goal registration, independent child links,
@@ -37,10 +37,23 @@ _Last updated 2026-10-06 (P3 first worker slice; 341 full-suite checks passed; P
   support reconnection without redispatch. Cancel and recovery distinguish fenced unclaimed
   work from unknown exits after claim. Proven non-started repairs retain feedback/session
   continuity. Schema revision 6 upgrades v1–v5 with backup/rollback. See `docs/WORKERS.md`.
-  One project slot remains; two-executor concurrency, scope overlap checks, aggregate time/turn
-  reservations, goal-wide streams and desktop-host lifecycle acceptance are still pending.
-  Preparation remains explicit foreground work. No new real calls or user-state migrations.
-- **Latest checks:** final `scripts/check.sh` → **341 passed / 0 failed / 0 skipped**, 199.87s;
+  This first slice is extended by the parallel-admission milestone below. Goal-wide streams and
+  actual desktop-host lifecycle acceptance remain pending. Preparation stays explicit foreground
+  work. No new real calls or user-state migrations.
+- **P3 local concurrency/ceiling core:** explicit state configuration permits up to two active
+  executors per goal-linked project; all goals share the cap, and disjoint declared write roots
+  are required. Preparation is project-exclusive. Reverify/resumed verification use the same
+  slot guards. Optional frozen goal wall-time/turn ceilings reserve each attempt's full limits,
+  retain executed/unknown attempts and exclude only confirmed non-starts. Status and dispatch
+  events expose the accounting and cap; old GoalSpec digests/replays remain valid. No schema
+  migration: revision 6's immutable task/attempt history is the ledger. `docs/CONCURRENCY.md`
+  specifies conservative scope proof, historical unknown holds and evidence limitations.
+- **Current checks:** final `scripts/check.sh` → **395 passed / 0 failed / 0 skipped**, 226.17s;
+  ruff/format clean (98 files), strict mypy clean (31 source files). Adds 54 offline cases:
+  29 scope/config/limit unit cases and 25 parallel/budget/lifecycle integration cases. Includes
+  simulated host process-session teardown, not actual desktop-app lifecycle acceptance.
+  No real model/auth/network calls or user-state migrations. See `docs/VALIDATION_MATRIX.md`.
+- **Prior worker checks:** final `scripts/check.sh` → **341 passed / 0 failed / 0 skipped**, 199.87s;
   ruff/format clean (94 files), strict mypy clean (30 source files). This milestone adds 33
   cases (32 worker/observation cases plus one migration revision), all offline. Detailed prior
   runs and the corrected fault-injection fixture are recorded in `docs/VALIDATION_MATRIX.md`.
@@ -84,7 +97,8 @@ _Last updated 2026-10-06 (P3 first worker slice; 341 full-suite checks passed; P
   Bridge prepares workspaces and runs/records tasks. `supervisor` is the existing name for
   Advisor. Parent goals, child ownership, takeover fencing and initial aggregate
   attempt/repair limits, fixed child dependencies and controlled finite preparation are implemented.
-  Background/concurrent workers and integrated delivery remain pending; this is not the full product behavior.
+  Background/concurrent workers now exist in the local core; integrated delivery and installed
+  host experience remain pending. This is not the full product behavior.
 
 ## Implemented
 
@@ -102,7 +116,7 @@ _Last updated 2026-10-06 (P3 first worker slice; 341 full-suite checks passed; P
 | Captured-live-redacted stream fixtures + parser regression tests (from the T3/T4 logs) | done |
 | CLI: doctor, create, run, status, list, artifacts, verify, review, recover, cancel, demo | done |
 | Goal/project registration, child ownership, Advisor takeover and old-entrypoint fencing | implemented first P1 slice; offline checks pass |
-| Goal attempt/repair ceilings; one project execution slot; unknown exit holds reservation | implemented guards and single-attempt workers; P3 concurrency/time accounting pending |
+| Goal attempt/repair/time/turn ceiling reservations; default 1 / explicit 2 project slots; scope checks | implemented, atomic; unknown exits retain all reservations |
 | Goal controls and confirmed-stop terminal projections | implemented; offline active fake-process cancellation and unknown-exit checks pass |
 | Immutable child plans / DAG validation / explicit root and dependent materialization | implemented; fixed approved inputs and conflict refusal |
 | Retained approval snapshots / goal-child context / presence preflight | implemented, offline-validated |
@@ -197,9 +211,11 @@ _Last updated 2026-10-06 (P3 first worker slice; 341 full-suite checks passed; P
 
 ## Next
 
-Continue P3 in `docs/PROJECT_PLAN.md`: two-slot project concurrency with scope-overlap guards,
-aggregate time/turn reservations and host teardown acceptance. Reuse the implemented managed
-worker/dispatch and task event/wait paths; see `docs/WORKERS.md`.
+Continue P4 in `docs/PROJECT_PLAN.md`: an owned integration workspace over retained approved
+snapshots, frozen integrated verification/review and an exact idempotent local delivery branch.
+P3 local worker/concurrency/ceiling checks are implemented; actual installed-host lifecycle and
+real multi-harness validation remain later acceptance. Reuse `docs/WORKERS.md` and
+`docs/CONCURRENCY.md`; no live authorization is renewed.
 P2 fixed baselines/context and explicit preparation are implemented; reuse them. Unknown
 preparation exits retain project slots/resource claims even after manual task failure;
 future audited release must not treat acknowledgement as proof of exit. Persistent service

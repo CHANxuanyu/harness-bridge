@@ -1,17 +1,17 @@
 # Handoff
 
-## Current state (2026-10-06, P3 first worker slice)
+## Current state (2026-10-06, P3 local core implemented)
 
 - **Canonical plan:** `docs/PROJECT_PLAN.md` consolidates the product, session relationships,
   contracts, V1 scope defaults, P0–P7 milestones and V01–V14 acceptance. P0 is complete;
-  P1/P2 local cores are implemented and offline-validated. P3 is partially implemented; P4–P7 are pending. Advisor is
+  P1/P2/P3 local cores are implemented and offline-validated; P4–P7 and installed-host lifecycle acceptance are pending. Advisor is
   explicitly an existing agent session; Bridge does not create its own planning model. `PRODUCT_FORM.md` is now a short summary, and the
   original cloud execution plan is clearly historical, not renewed authorization.
 - Key plan choices: dependencies are fixed before child execution-task/worktree materialization;
   task mutations cannot bypass goal budgets or the active Advisor epoch through old CLI paths;
   unknown exits retain reservations/slots; V1 targets managed workers and exact local-branch
   delivery with integrated acceptance. Epoch and initial aggregate guards now exist;
-  worker single-attempt lifecycle now exists; concurrent scheduling/integration/delivery remain pending.
+  managed workers and scoped parallel admission/ceilings now exist; integration/delivery remain pending.
 
 - **New P3 slice:** `jobs.py` + internal `worker.py` add idempotent `run --background`,
   atomic attempt/reservation/single claim and detached process sessions. Both foreground and
@@ -29,13 +29,34 @@
 - **Revision 6:** additive `worker_jobs`; atomic WAL-aware backed-up upgrades from revisions
   1–5, preserving all previous contracts/digests. Isolated migration fixtures updated and old
   prepared-task evidence preserved. No actual live/user state was migrated.
-- **P3 boundaries:** current project execution slot remains 1; two-executor parallelism, scope
-  overlap control and aggregate wall-time/turn reservation remain next. Events are task-scoped,
-  wait is bounded to 30 seconds, no goal-wide cursor. Preparation is still foreground. Offline
-  launcher-process detachment is not evidence of GUI-host/logout/reboot or real-model survival.
-  Full contract and current support limits: `docs/WORKERS.md`.
+- **P3 parallel-admission milestone:** `dispatch.py` projects cumulative attempt wall-time/turn
+  ceilings from integrity-checked frozen TaskSpecs. GoalSpec adds optional total ceilings while
+  omitting absent values from canonical JSON to preserve old goal digests/replay. Revision stays
+  6; no migration/new usage table. Only proven non-starts refund goal ledger; completed, cancelled,
+  failed or unknown execution retains full requested ceilings, not self-reported usage.
+- **Concurrency:** local `[execution] max_parallel_per_project = 2` explicitly enables two;
+  default 1, max 2, all goals in the same repo/state share it. Reload config at reservation, record
+  the admitted cap in events, never kill accepted work on a lower cap. Require disjoint literal
+  write roots (case/Unicode aliases conservative); broad globs/refined forbidden sets do not prove
+  disjointness. Unknown executions retain slots, including multiple historical unknowns per task.
+  A spare slot cannot admit another attempt on that same unresolved worktree. No queue.
+- **Preparation / verification:** setup remains foreground and project-exclusive because its
+  arbitrary trusted scripts lack complete effect scopes. Existing named resource holds remain.
+  Manual verify and INTERRUPTED verifier recovery reserve capacity/scope too; already VERIFYING
+  keeps its slot. No new executor budget is spent by preparation/checks.
+- **P3 boundary:** offline evidence includes two running fake processes, independent cancellation,
+  race-safe reservation, scope refusal, worker death and simulated host process-session teardown.
+  Actual Codex/ZCode desktop cleanup, logout/sleep/reboot, vendor turn enforcement and real two-harness
+  behavior remain unverified. Goal-wide event cursors are not exposed. See `docs/CONCURRENCY.md`.
 
-- **Latest checks:** final `scripts/check.sh` → **341 passed / 0 failures / 0 skipped**,
+- **Current checks:** final `scripts/check.sh` → **395 passed / 0 failures / 0 skipped**,
+  226.17s; ruff/format clean (98 files), mypy clean (31 source files). Adds 54 offline cases:
+  29 unit and 25 integration. Before edits, affected coordination/migration baseline 35 passed;
+  an intermediate full run passed 394 cases, then one additional historical unknown-slot case
+  and its conservative fix were included in the final 395-case run. No live/model/auth/network
+  calls or real user-state migration. See `docs/VALIDATION_MATRIX.md` for coverage and limits.
+
+- **Prior worker checks:** final `scripts/check.sh` → **341 passed / 0 failures / 0 skipped**,
   199.87s; ruff/format clean (94 files), mypy clean (30 source files). Adds 33 cases: 32 workers
   plus v5 migration rollback. Affected baseline 50 passed before edits; final worker subset 32
   passed. First expanded run had one incorrect stub-fault injection, corrected without deleting
@@ -121,7 +142,7 @@
   **pushed through `470f5b0`** at that check. Repair/evidence `94f7c4d`, product/plugin
   `7efd2bf`, product clarification `bab602a`, plan `24ee6ad`, first P1 slice `83f0793` and
   P1 completion `9d73e1c` and P2 first slice `72c73a8` precede the new preparation milestone;
-  preparation `591752b` and the new P3 worker milestone follow. All are local, not auto-pushed.
+  preparation `591752b`, workers `934b6c2` and the new P3 concurrency milestone follow. All are local, not auto-pushed.
   Remote was not re-queried during this offline implementation round;
   visibility remains public by instruction.
 - **Live-gate hygiene:** the global default state dir was never live-enabled; the T3/T4 test
@@ -173,13 +194,13 @@
 
 ## Next bounded work
 
-1. Continue P3 from `docs/PROJECT_PLAN.md`: explicit two-slot project configuration, disjoint
-   scope/overlap checks and aggregate wall-time/turn reservations, followed by bounded host
-   lifecycle evidence. Managed single-attempt workers and task events/wait now exist; reuse
-   `jobs.py` and the common execution path, not a second runner. Unknown preparation outcomes currently hold slots
-   and resources indefinitely; any audited release must require actual evidence, not an ack.
-   P2 finite-command/local-core contract: `docs/PREPARATION.md`; persistent services and
-   cross-state resource locks remain unsupported. No live budget is renewed.
+1. Continue P4 from `docs/PROJECT_PLAN.md`: fixed integration inputs from P2 approval refs,
+   an owned integration workspace, frozen total-goal verification/review, exact new local branch
+   delivery and replay receipts. Reuse retained snapshots and current Advisor/worker/budget
+   contracts; do not infer goal delivery from child success. Worker lifecycle and scoped 1/2-slot
+   admission are implemented (`WORKERS.md`, `CONCURRENCY.md`). No real call/push authorization is
+   renewed. Unknown preparation/attempt exits continue holding slots/resources; audited release
+   must require evidence, not an acknowledgement. Persistent services/cross-state locks unsupported.
 2. Interruption / timeout behaviour with a live executor (SIGTERM to the runner, wall
    timeout) — offline tests exist; live behaviour does not.
 3. T5 evaluation per `docs/EVALUATION_PLAN.md` — the only place where "cheaper/better than

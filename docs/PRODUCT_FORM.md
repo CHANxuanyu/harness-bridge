@@ -64,6 +64,7 @@ P1 本地协调内核已实现总目标与子任务归属、Advisor 会话接管
 具体接口见 [COORDINATION.md](COORDINATION.md) 和 [PLANNING.md](PLANNING.md)。
 P2 已补齐固定的获批依赖成果基线、后继工作区及显式有界环境准备，见 [EXECUTION_CONTEXT.md](EXECUTION_CONTEXT.md)
 和 [PREPARATION.md](PREPARATION.md)。P3 第一段已实现单尝试后台 worker、幂等派发、事件查询与取消/恢复，
-见 [WORKERS.md](WORKERS.md)。双 Executor 并发与总时间/turn 预算、多 Executor 整合、Codex 执行适配器
-和正式交付仍待实现；桌面宿主退出后的完整生命周期尚待验证。
+见 [WORKERS.md](WORKERS.md)。P3 后续一段已实现显式双 Executor 并发、修改范围检查和保守的总时间/turn
+预留，见 [CONCURRENCY.md](CONCURRENCY.md)。多 Executor 成果整合、Codex 执行适配器和正式交付仍待实现；
+真实桌面宿主退出及不同厂商同时执行仍待验证。
 当前代码是 V0.1 内核原型；计划完成不代表 V1 产品完成。

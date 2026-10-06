@@ -13,8 +13,9 @@ The implementation is `coordination.py`, used by the CLI and the existing `Bridg
 - Explicitly take over with another existing Advisor session. New binding ID and increasing
   epoch fence the old session, including through the original task CLI commands.
 - Read project/goal/task ownership from another CLI process without starting an executor.
-- Enforce aggregate budgets and a single project execution slot in the same transaction as
-  the attempt reservation. Different goals in the same project/state root share that slot.
+- Enforce aggregate budgets and the project execution cap in the attempt transaction.
+  Default 1, explicitly configured up to 2; different goals in the project/state share the cap.
+  Scope checks and total wall-time/turn reservations are in [CONCURRENCY.md](CONCURRENCY.md).
 - Preserve legacy standalone tasks and their original behavior; no invented parent records.
 
 ## GoalSpec 1.0
@@ -31,6 +32,8 @@ The implementation is `coordination.py`, used by the CLI and the existing `Bridg
 | `acceptance` | required nonempty list of nonblank goal acceptance summaries |
 | `max_attempts` | integer 1–100, default 3, across all children/retries/repairs |
 | `max_repairs` | integer 0–100, default 1, subset of attempts |
+| `max_executor_wall_seconds` | optional positive finite total reserved executor-seconds ceiling, ≤ 8,640,000 |
+| `max_executor_turns` | optional integer 1–50,000, total requested-turn reservation ceiling |
 | `allowed_executors` | nonempty subset of `fake`, `claude-code`; default `["fake"]` |
 
 Goal acceptance/constraint summaries are frozen planning metadata. They are not executable
@@ -109,11 +112,13 @@ repairs also count against the repair ceiling. Only a confirmed `spawn_failed` o
 the goal reservation. Existing per-task attempt ceilings remain conservative and unchanged.
 Goal exhaustion leaves a READY task unlaunched and returns `BUDGET_EXHAUSTED`.
 
-One project slot is supported in this slice. Running/starting/verifying tasks and attempts
-whose exit is unconfirmed hold it, including after manual cancellation or resolution. Such
-unknown reservations have no release mechanism yet; do not edit the database to bypass them.
-Managed workers and durable dispatch keys are now available; see [WORKERS.md](WORKERS.md).
-Two active executors and total time/turn accounting remain P3 work. Limits apply within one state root; this is not a cross-installation quota broker.
+One project slot is the default. Explicit local configuration permits two, subject to disjoint
+scope checks. Running/starting/verifying tasks and unconfirmed exits hold capacity, including after
+manual cancellation or resolution. Unknown reservations have no release mechanism yet; do not
+edit the database to bypass them. Preparation remains project-exclusive. Managed workers and
+durable dispatch keys are in [WORKERS.md](WORKERS.md); scope checks, optional total time/turn
+ceilings and their conservative accounting are in [CONCURRENCY.md](CONCURRENCY.md).
+Limits apply within one state root; this is not a cross-installation quota broker.
 
 Goal status is a transactional projection of child facts, not a persisted delivery verdict:
 

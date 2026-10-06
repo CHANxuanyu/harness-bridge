@@ -2,7 +2,8 @@
 
 The task contracts below remain in force for foreground and background attempts.
 For durable background dispatch keys, worker handles, incremental task events and crash semantics,
-see [WORKERS.md](WORKERS.md). Goal coordination and current Advisor checks apply to either mode.
+see [WORKERS.md](WORKERS.md). Project parallelism and aggregate ceiling accounting are in
+[CONCURRENCY.md](CONCURRENCY.md). Goal coordination and current Advisor checks apply to either mode.
 
 
 All external input is validated; unknown fields are rejected; `schema_version` must be `"1.0"`.

@@ -907,6 +907,7 @@ class Bridge:
             )
         assert task.current_attempt_id is not None
         with self._advisor_transaction(task_id) as cur:
+            self.coordination.guard_verification(cur, task_id)
             self.store.transition(
                 cur,
                 task_id,
@@ -1085,6 +1086,7 @@ class Bridge:
             and attempt is not None
         ):
             with self._advisor_transaction(task_id) as cur:
+                self.coordination.guard_verification(cur, task_id)
                 self.store.transition(
                     cur,
                     task_id,

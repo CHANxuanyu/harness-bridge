@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal, TypeVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from harness_bridge import __version__
+from harness_bridge.config import load_config
+from harness_bridge.dispatch import budget_usage, frozen_spec, guard_slot, slot_status
 from harness_bridge.errors import BridgeError
 from harness_bridge.models import RepoSpec, canonical_json, sha256_digest
 from harness_bridge.state import EXECUTING, TERMINAL, TaskState
@@ -45,9 +48,19 @@ class GoalSpec(Contract):
     acceptance: list[str] = Field(min_length=1, max_length=100)
     max_attempts: int = Field(default=3, ge=1, le=100)
     max_repairs: int = Field(default=1, ge=0, le=100)
+    max_executor_wall_seconds: float | None = Field(default=None, gt=0, le=8640000)
+    max_executor_turns: int | None = Field(default=None, ge=1, le=50000)
     allowed_executors: list[Literal["fake", "claude-code"]] = Field(
         default=["fake"], min_length=1, max_length=2
     )
+
+    def normalized(self) -> dict[str, Any]:
+        data = self.model_dump(mode="json")
+        # Preserve historical GoalSpec digests and replay keys when new limits are absent.
+        for key in ("max_executor_wall_seconds", "max_executor_turns"):
+            if data[key] is None:
+                del data[key]
+        return data
 
     @field_validator("acceptance", "constraints")
     @classmethod
@@ -122,7 +135,7 @@ class Coordinator:
     def create(self, data: Any, key: str) -> dict[str, Any]:
         check_key(key)
         spec: GoalSpec = parse_contract(GoalSpec, data)
-        normalized = spec.model_dump(mode="json")
+        normalized = spec.normalized()
         digest = sha256_digest(normalized)
         # Replay does not inspect today's repo or silently issue a newer Advisor binding.
         with self.store.transaction() as cur:
@@ -400,14 +413,8 @@ class Coordinator:
         )
 
     @staticmethod
-    def _budget(cur: sqlite3.Cursor, goal_id: str) -> dict[str, int]:
-        row = cur.execute(
-            "SELECT COUNT(*) AS attempts, COALESCE(SUM(a.kind='repair'),0) AS repairs "
-            "FROM attempts a JOIN goal_tasks gt USING(task_id) WHERE gt.goal_id=? "
-            "AND NOT (COALESCE(a.outcome,'')='spawn_failed' AND COALESCE(a.exit_confirmed,0)=1)",
-            (goal_id,),
-        ).fetchone()
-        return {"attempts": row["attempts"], "repairs": row["repairs"]}
+    def _budget(cur: sqlite3.Cursor, goal_id: str) -> dict[str, int | float]:
+        return budget_usage(cur, goal_id).to_dict()
 
     def guard_dispatch(
         self, cur: sqlite3.Cursor, task_id: str, claim: AdvisorClaim | None, kind: str
@@ -418,43 +425,67 @@ class Coordinator:
         if self.controls(cur, goal["goal_id"])["paused"]:
             raise BridgeError("STATE_CONFLICT", "goal dispatch is paused", task_id=task_id)
         spec: GoalSpec = parse_contract(GoalSpec, json.loads(goal["spec_json"]))
-        budget = self._budget(cur, goal["goal_id"])
-        if budget["attempts"] >= spec.max_attempts or (
-            kind == "repair" and budget["repairs"] >= spec.max_repairs
+        usage = budget_usage(cur, goal["goal_id"])
+        if usage.attempts >= spec.max_attempts or (
+            kind == "repair" and usage.repairs >= spec.max_repairs
         ):
             raise BridgeError(
                 "BUDGET_EXHAUSTED", "goal attempt or repair budget exhausted", task_id=task_id
             )
-        self.guard_project_slot(cur, goal["project_id"])
+        task = cur.execute("SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone()
+        assert task is not None
+        limits = frozen_spec(task).limits
+        wall = Decimal(str(limits.wall_timeout_seconds))
+        exceeded = []
+        if spec.max_executor_wall_seconds is not None and (
+            usage.wall_seconds + wall > Decimal(str(spec.max_executor_wall_seconds))
+        ):
+            exceeded.append("executor_wall_seconds")
+        if spec.max_executor_turns is not None and (
+            usage.turns + limits.max_turns_per_attempt > spec.max_executor_turns
+        ):
+            exceeded.append("executor_turns")
+        if exceeded:
+            raise BridgeError(
+                "BUDGET_EXHAUSTED",
+                "goal executor ceiling reservation exceeds budget",
+                task_id=task_id,
+                details={
+                    "exceeded": exceeded,
+                    "reserved": usage.to_dict(),
+                    "requested_wall_seconds": float(wall),
+                    "requested_turns": limits.max_turns_per_attempt,
+                },
+            )
+        parallel = self.guard_project_slot(cur, goal["project_id"], task_id)
         self.event(
             cur,
             goal["goal_id"],
             goal["advisor_epoch"],
             "dispatch_reserved",
-            {"task_id": task_id, "kind": kind},
+            {
+                "task_id": task_id,
+                "kind": kind,
+                "wall_seconds": float(wall),
+                "turns": limits.max_turns_per_attempt,
+                "max_parallel": parallel,
+                "scope_policy": "disjoint_literal_roots",
+            },
         )
 
-    @staticmethod
-    def guard_project_slot(cur: sqlite3.Cursor, project_id: str) -> None:
-        # Until managed workers/concurrency arrive, serialize across this project's goals.
-        # Unknown exits remain occupied even after manual task cancellation/resolution.
-        occupied = cur.execute(
-            "SELECT DISTINCT t.task_id FROM tasks t JOIN goal_tasks gt USING(task_id) "
-            "JOIN goals g USING(goal_id) LEFT JOIN attempts a USING(task_id) "
-            "LEFT JOIN preparation_runs p USING(task_id) "
-            "WHERE g.project_id=? AND (t.state IN ('PREPARING','STARTING','RUNNING','VERIFYING') "
-            "OR (a.attempt_id IS NOT NULL AND COALESCE(a.exit_confirmed,0)<>1) "
-            "OR (p.preparation_id IS NOT NULL AND COALESCE(p.exit_confirmed,0)<>1))",
-            (project_id,),
-        ).fetchall()
-        if occupied:
-            raise BridgeError(
-                "STATE_CONFLICT",
-                "project execution slot is occupied or exit is unknown",
-                details={
-                    "occupied_tasks": [r["task_id"] for r in occupied],
-                },
-            )
+    def guard_project_slot(
+        self, cur: sqlite3.Cursor, project_id: str, task_id: str, *, preparation: bool = False
+    ) -> int:
+        # Reload under the reservation lock: long-lived callers cannot use a stale cap.
+        parallel = load_config(self.store.db_path.parent).max_parallel_per_project
+        guard_slot(cur, project_id, task_id, parallel, preparation=preparation)
+        return parallel
+
+    def guard_verification(self, cur: sqlite3.Cursor, task_id: str) -> None:
+        goal_id = self.task_goal(cur, task_id)
+        if goal_id is not None:
+            goal = self._goal(cur, goal_id)
+            self.guard_project_slot(cur, goal["project_id"], task_id)
 
     def status(self, goal_id: str) -> dict[str, Any]:
         from harness_bridge.planning import ChildPlans
@@ -531,10 +562,18 @@ class Coordinator:
                 "repo_path": goal["repo_path"],
                 "advisor": json.loads(goal["advisor_json"]),
                 "advisor_claim": {"binding_id": goal["binding_id"], "epoch": goal["advisor_epoch"]},
+                "execution": slot_status(
+                    cur,
+                    goal["project_id"],
+                    load_config(self.store.db_path.parent).max_parallel_per_project,
+                ),
                 "budget": {
                     **self._budget(cur, goal_id),
                     "max_attempts": spec["max_attempts"],
                     "max_repairs": spec["max_repairs"],
+                    "max_executor_wall_seconds": spec.get("max_executor_wall_seconds"),
+                    "max_executor_turns": spec.get("max_executor_turns"),
+                    "accounting": "cumulative_attempt_ceilings_except_confirmed_nonstarts",
                 },
                 "children": children,
                 "plans": plans,

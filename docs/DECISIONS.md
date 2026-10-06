@@ -163,3 +163,22 @@ Each entry: decision — reason. Newest last.
 51. **Schema revision 6 and scope:** additive worker records with atomic backed-up v1–v5 upgrades;
     offline launcher-detachment evidence is not GUI-host/logout/reboot survival. P3 two-slot
     concurrency and aggregate time/turn reservation are deliberately still unimplemented.
+
+52. **P3 explicit parallel admission:** `[execution] max_parallel_per_project` defaults to 1,
+    accepts only integer 1/2 and is reloaded under each reservation lock; goals in the same
+    repo/state share it. Lowering the cap stops new reservations, not accepted work. No queue.
+53. **Conservative scopes:** parallel tasks need disjoint literal roots before glob wildcards,
+    case/Unicode normalized; ignore forbidden-set narrowing and refuse unknown overlap. This
+    describes write intent, not OS isolation. Competing candidates remain serial.
+54. **Setup and verifier slots:** preparation is project-exclusive because trusted scripts lack
+    a complete effect scope. Manual/recovered verifier entrypoints use capacity/scope guards;
+    already VERIFYING keeps its slot. Every unresolved historical execution retains capacity.
+55. **Cumulative goal ceilings:** optional immutable total executor-seconds/turn limits reserve
+    full per-attempt ceilings transactionally; success/failure/cancel/unknown retain them. Only
+    confirmed non-start refunds. Requested turns are not billing/usage/enforcement evidence.
+56. **No separate budget database:** immutable attempts plus validated TaskSpecs are the ledger,
+    with decimal seconds arithmetic; schema remains 6. Omit absent new goal fields from canonical
+    JSON to preserve prior digests/replay. No silent total cap is added to historical goals.
+57. **P3 local acceptance boundary:** two fake workers, race-safe admission and simulated host
+    session teardown meet the local core checks; installed-host cleanup, logout/reboot and real
+    multi-harness/turn-limit acceptance remain later gates. Proceed to P4 without new live spend.

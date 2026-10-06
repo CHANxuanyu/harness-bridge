@@ -205,3 +205,40 @@ relative to the previous 308: 32 worker/observation cases and one additional mig
 P3 remains partial: two-executor concurrency, overlap guards, aggregate time/turn reservations
 and complete host lifecycle acceptance remain outstanding. P4–P7 and integrated delivery remain
 incomplete. No new live calls, real auth reads, network requests or user-state migrations.
+
+## P3 local concurrency and cumulative ceilings (2026-10-06, macOS)
+
+This extends the worker milestone above; its pending concurrency/ceiling work is now implemented.
+Before source changes, the affected coordination/migration baseline passed **35 cases**, 18.15s.
+New targeted checks passed during implementation. An intermediate full regression passed **394
+cases**, 227.91s. Final review added a conservative fix and a synthetic historical case: multiple
+unknown executions on the same task must retain multiple slots, not collapse to one occupied task.
+The final shared-core `scripts/check.sh` passed **395 / 0 failed / 0 skipped**, **226.17s**;
+ruff/format clean (98 files), strict mypy clean (31 source files).
+
+This milestone adds **54 cases** relative to 341: 29 in `tests/unit/test_dispatch.py` and 25 in
+`tests/integration/test_parallel_budget.py`. Evidence is T0/T1/T2; all executors are fake/stub.
+
+| Contract | Executed evidence |
+|---|---|
+| Default one / explicit two project slots | Two detached fake workers concurrently RUNNING in distinct worktrees/process groups; third refused; one cancellation leaves the other running and admits the third |
+| Shared project capacity | Separate goals share slots/scope checks while retaining independent goal budgets; cap reload applies to existing Bridge objects and lowering it does not kill accepted work |
+| Conservative scope proof | Equal/ancestor, broad/wildcard, case and Unicode aliases refused; disjoint roots admitted; unit corpus cross-checks the existing path matcher |
+| Atomic reservation | Concurrent requests race for wall-time, turns or slots; only one reservation is accepted when only one fits |
+| Cumulative ceilings | Foreground initial/background repair keep full requested limits after completion/approval; confirmed non-start refunds, unknown exit retains; fractional seconds boundary passes |
+| Ownership and replay | Stale Advisor, pause, changed creation key content and same-key replay cannot bypass reservations; old GoalSpec digests and replay remain valid |
+| Integrity | Historical TaskSpec edits cannot silently shrink previous reservation totals |
+| Preparation / verifier protection | Preparation is project-exclusive; unknown setup holds survive logical failure; manual/recovered verification cannot bypass capacity or scope checks |
+| Unknown executions | Claimed-worker crash retains budget/slot; same unresolved worktree cannot use another slot; each synthetic historical unknown execution retains a separate slot |
+| Simulated host exit | An owned Python host launches the background CLI, then its process session is terminated; detached fake worker remains queryable and cancellable; replay returns its existing job |
+
+Database revision remains 6; no migration is required or performed. Tests use isolated state,
+HOME/provider paths, blocked network and real-binary sentinels. No real model, real auth/network
+call, real user-state migration, actual desktop host termination or live configuration change.
+Existing live smoke/repair evidence was not repeated and its spent authorization was not renewed.
+
+The local P3 worker/concurrency/ceiling core is complete within `docs/CONCURRENCY.md`'s scope.
+Simulated host process-session teardown does **not** establish installed Codex/ZCode cleanup,
+logout/sleep/reboot survival, vendor turn-limit enforcement or real concurrent harness behavior.
+P4 integrated delivery, P5 second executor, P6 installed entrypoints and P7 complete acceptance
+remain outstanding. Child success still does not mean the goal has been delivered.

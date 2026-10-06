@@ -5,9 +5,9 @@ separate local worker, and returns a durable handle. The worker uses the same ex
 output parser, timeout/cancellation, verification and evidence code as foreground `run`.
 Bridge does not add a planning model, queue, network daemon or automatic repair scheduler.
 
-This slice retains **one execution slot per goal-linked project/state root** and the existing
-aggregate attempt/repair budgets. Two concurrent executors, overlap checks and aggregate
-wall-time/turn reservations remain P3 work. Legacy standalone tasks retain their old scope;
+The subsequent [concurrency contract](CONCURRENCY.md) adds an explicit per-project opt-in to
+two slots, conservative scope checks and cumulative goal wall-time/turn ceiling reservations.
+One slot remains the default; aggregate attempt/repair guards apply in both modes. Legacy standalone tasks retain their old scope;
 they are not a machine-wide quota system. Preparation still uses explicit foreground
 `child prepare`; background dispatch requires its current readiness evidence.
 
@@ -123,5 +123,6 @@ Advisor takeover, Claude stub resume, gate closure, event pagination/wait and mi
 This proves separation from the simulated launching CLI process on this Mac. It does **not**
 prove survival of every desktop host's descendant cleanup, GUI app termination, macOS logout,
 sleep/reboot, service supervision or real-model background execution. There is no launchd
-registration or automatic worker restart. P3 remains incomplete; installed-host lifecycle and
-real cross-harness behavior need their later bounded acceptance.
+registration or automatic worker restart. The local P3 core also has concurrency/budget and
+simulated host-session teardown evidence in [CONCURRENCY.md](CONCURRENCY.md). Installed-host
+lifecycle and real cross-harness behavior still need their later bounded acceptance.
