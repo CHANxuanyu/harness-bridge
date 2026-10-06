@@ -21,6 +21,7 @@ from harness_bridge.adapters.claude_code import (
     flag_evidence,
     help_flags,
 )
+from harness_bridge.adapters.codex import CodexAdapter, CodexSettings
 from harness_bridge.config import (
     API_PROVIDER_ENV,
     CLOUD_ENV_MARKERS,
@@ -116,6 +117,11 @@ def run_doctor(state_dir: Path, *, offline: bool) -> dict[str, Any]:
             "evidence": "Project records bounded live smokes and a controlled repair/resume "
             "in docs/VALIDATION_MATRIX.md; doctor does not validate live dispatch "
             "on the current configuration",
+        },
+        {
+            "name": "codex_executor_adapter",
+            "status": "offline_only",
+            "evidence": CodexAdapter(CodexSettings()).describe_capabilities(),
         },
         {
             "name": "codex_supervisor_loop",

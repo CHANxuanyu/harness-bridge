@@ -1,6 +1,16 @@
 # Handoff
 
-## Current state (2026-10-06, P4 local core complete)
+## Current state (2026-10-06, P5 Codex offline adapter)
+
+- **P5 Codex offline adapter:** native options, strict JSONL completion/refusal handling and
+  exact UUID repair resume now reuse shared worktrees/workers/checks/reviews/budgets. Live dispatch
+  is unavailable before reservation, including with ordinary live opt-ins enabled; internal turn
+  enforcement, subscription/config provenance and native resume need evidence. No new model calls.
+  See `docs/CODEX_EXECUTOR.md`. Adds 68 offline cases (48 contracts, 20 integration).
+  Shared full regression: **642 passed**, 839.69s; following Codex-only resume/parser hardening:
+  **68 passed**, 20.87s. Lint/format and strict mypy (37 source files) clean. The final hardening
+  was checked with its affected suite, not another full run. Schema stays 10; legacy normalized
+  executor shapes are preserved.
 
 - **Final P4 completion checks:** full `scripts/check.sh` → **574 passed / 0 failed / 0 skipped**,
   769.51s (12m49s); ruff/format clean (116 files), strict mypy clean (36 source files).
@@ -22,7 +32,7 @@
 
 - **Canonical plan:** `docs/PROJECT_PLAN.md` consolidates the product, session relationships,
   contracts, V1 scope defaults, P0–P7 milestones and V01–V14 acceptance. P0 is complete;
-  P1–P4 local cores are implemented; P5–P7 and installed-host lifecycle acceptance are pending. Advisor is
+  P1–P4 local cores and P5 offline adapter are implemented; Codex live readiness and P6–P7 remain pending. Advisor is
   explicitly an existing agent session; Bridge does not create its own planning model. `PRODUCT_FORM.md` is now a short summary, and the
   original cloud execution plan is clearly historical, not renewed authorization.
 - Key plan choices: dependencies are fixed before child execution-task/worktree materialization;
@@ -277,9 +287,11 @@
 
 ## Next bounded work
 
-1. P4 local core is complete. Next bounded implementation is P5's Codex executor adapter with
-   stub/strict-contract evidence first (`docs/PROJECT_PLAN.md`). Do not add live use before new
-   bounded authorization. P4 references: `INTEGRATION_REPAIRS.md` and `CLEANUP.md` complete the
+1. P4 local core and P5 Codex offline adapter are implemented. Next bounded work is
+   model-free investigation of a supported Codex turn ceiling/config provenance, and P6 Advisor
+   entrypoint wiring against goals/children/workers (`docs/CODEX_EXECUTOR.md`). Live Codex is
+   unavailable until capability gaps are resolved; new bounded authorization is also required.
+   P4 references: `INTEGRATION_REPAIRS.md` and `CLEANUP.md` complete the
    existing candidate/check/review/delivery chain. Preserve all required inputs and original total
    checks when selecting a repair; every execution of a repair child counts against goal repairs.
    Cleanup intentionally retains dirty approved worktrees, caches, all refs/evidence and unknown

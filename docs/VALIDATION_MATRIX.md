@@ -441,3 +441,49 @@ This adds **55 cases** relative to 519: **18** repair integration, **24** cleanu
 partial runs. No further broad testing was needed after its success; only status/handoff/validation
 documentation was finalized. P4 local core is complete with the explicit conservative retention
 policy; installed host lifecycle and real cross-harness acceptance remain later gates.
+
+## P5 Codex offline adapter (2026-10-06, macOS)
+
+Affected pre-edit Claude contract/stub baseline: **44 passed**, 8.50s, with lint/format/types
+clean (116 files, 36 source files). No prior full suite or paid smoke was rerun for handoff.
+This slice adds **68 cases**: 48 Codex contracts and 20 integration cases using a non-model stand-in.
+
+The first expanded affected run had **121 passed, 3 failed**, 21.08s. Two contract fixtures assigned
+nonexistent `cancelled`/`interrupted` attributes instead of ProcessOutcome.stop_reason; corrected
+to use the real field and dataclass replacement (which rejects nonexistent fields). A third
+fixture incorrectly requested a review_template on a BLOCKED task; that task correctly has no
+review template. It now checks BLOCKED/no-template while failed verifiable attempts still test
+rejected approvals. No production refusal was weakened, and no failing case was removed/skipped.
+The corrected affected run: **124 passed**, 25.78s, lint/format/types clean. Additional binding,
+resume opt-out and background-repair cases then completed **20 integration cases**, 20.60s.
+
+Coverage: native options without Claude defaults; stdin/workspace binding; process-exit dominance;
+unknown/malformed/oversized/missing/duplicate/out-of-order events; usage nullability; quota/auth/
+permission/argument refusal; explicit UUID resume/mismatch; binding to task/repo/worktree/kind/model;
+foreground and worker repair; background replay, stale Advisor refusal and shared goal ceiling;
+wall deadline/cancel with confirmed exit; missing/real-named/symlink stub rejection; doctor gaps;
+fully opted-in foreground/background live refusal before attempt reservation or binary execution.
+
+Fixtures use documented event envelopes with synthetic IDs, text and usage. They are not captured
+live Codex data. Official references and local CLI 0.160.0 help/version observations are recorded
+in CODEX_EXECUTOR.md. Those three non-inference host checks used empty temporary HOME/CODEX_HOME;
+no user auth/config was inspected. Tests used isolated HOME, harness sentinels and the Python
+network guard. No real model/Executor run, actual user-state migration, live-config change,
+remote push or visibility change. Official documentation was read over the web outside tests.
+Schema remains 10. Native Codex turn enforcement, subscription/config provenance and resume remain
+unverified, with live dispatch unavailable in code; this is P5 offline evidence, not P7 acceptance.
+
+Shared full `scripts/check.sh`: **642 passed / 0 failed / 0 skipped**, 839.69s (13m59s).
+Ruff/format clean (120 files), strict mypy clean (37 source files). All 106 source/test/script/
+lock inputs were hash-checked unchanged throughout that run.
+
+Review during that run reproduced two additional Codex-only edges using synthetic in-memory
+inputs: a mismatched resume ID could remain bound when timeout/interruption won outcome priority,
+and oversized integers/deeply nested JSON could raise ValueError/RecursionError out of parsing.
+After the full run finished, corrected only `adapters/codex.py` and strengthened the existing
+contract cases: process evidence still wins, but never trusts a mismatched resume ID; pathological
+JSON becomes malformed protocol evidence. No shared orchestration code changed after the full run.
+Final affected `scripts/check.sh` on both Codex suites: **68 passed / 0 failed / 0 skipped**,
+20.87s, lint/format clean (121 files), strict mypy clean (37 source files). Existing case count
+remains 642; this records a full regression followed by a targeted final correction, not a claimed
+single full green run on the corrected adapter. No further broad rerun was needed.

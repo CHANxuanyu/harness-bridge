@@ -23,7 +23,8 @@ exact Advisor review, budgeted integration repair children, explicit local branc
 conservative worktree cleanup. It is a
 deterministic local CLI (`hbridge`). **It never calls a model API itself.** The supervisor is
 whoever runs the CLI (the Advisor, e.g. the user's existing Codex session); the executor is Claude Code
-(live, gated, local only) or a bundled fake executor (offline).
+(live, gated, local only), a bundled fake executor (offline), or the Codex adapter
+with an explicit test stand-in (offline only; real Codex dispatch is unavailable).
 
 ```text
 supervisor (Codex/Astra or a person)
@@ -50,7 +51,7 @@ distinguishes existing V0.1 code from proposed coordination and delivery capabil
 A [local plugin alpha](plugins/harness-bridge/README.md) now packages one shared supervisor
 Skill with Codex and ZCode manifests. It requires a separately installed runtime. Package
 checks and Codex marketplace discovery passed; installed-host activation and ZCode loading
-have not been verified. This does **not** add Codex/ZCode executor adapters, background
+have not been verified. The plugin package itself does **not** add executor adapters or background
 execution support by itself, or a delivery/merge command. See [plugin validation](docs/PLUGIN_ALPHA_RESULT.md).
 
 The [goal coordination reference](docs/COORDINATION.md) documents the implemented
@@ -70,7 +71,8 @@ The [local delivery reference](docs/DELIVERY.md) covers exact branch delivery, c
 READY_TO_DELIVER/DELIVERED projections. [Integration repairs](docs/INTEGRATION_REPAIRS.md) bind
 conflict/failed-check children to retained inputs and existing budgets; [cleanup](docs/CLEANUP.md)
 removes only selected clean owned worktrees after delivery, retaining refs/evidence and user changes.
-P4 local core is implemented; installed-host lifecycle and P5–P7 remain incomplete. Approval alone
+P4 local core and P5 Codex offline adapter are implemented; Codex live readiness, installed-host
+lifecycle and P6–P7 remain incomplete. See [Codex capability boundary](docs/CODEX_EXECUTOR.md). Approval alone
 does not deliver a goal.
 
 ## Quick start (offline, no model, no network needed after install)

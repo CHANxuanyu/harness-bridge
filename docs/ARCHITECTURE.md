@@ -38,7 +38,8 @@ Bridge core (service.py) — deterministic, never calls a model API
        ├─ base.py            ExecutorAdapter protocol, TaskPacket, process-level classification
        ├─ fake.py            adapter for the offline fake executor
        ├─ fake_executor.py   standalone fake executor process (stdlib only)
-       └─ claude_code.py     Claude Code CLI adapter (offline + bounded live initial/repair evidence)
+       ├─ claude_code.py     Claude Code CLI adapter (offline + bounded live initial/repair evidence)
+       └─ codex.py           Codex exec adapter (offline stub only; live capability gaps)
 ```
 
 ## One attempt, end to end

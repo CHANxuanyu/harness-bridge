@@ -58,8 +58,8 @@ class GoalSpec(Contract):
     max_repairs: int = Field(default=1, ge=0, le=100)
     max_executor_wall_seconds: float | None = Field(default=None, gt=0, le=8640000)
     max_executor_turns: int | None = Field(default=None, ge=1, le=50000)
-    allowed_executors: list[Literal["fake", "claude-code"]] = Field(
-        default=["fake"], min_length=1, max_length=2
+    allowed_executors: list[Literal["fake", "claude-code", "codex"]] = Field(
+        default=["fake"], min_length=1, max_length=3
     )
 
     def normalized(self) -> dict[str, Any]:

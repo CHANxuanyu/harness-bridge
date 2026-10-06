@@ -145,7 +145,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--stub-binary",
         default=None,
         help="mock mode only: absolute path of a non-model stand-in executable for "
-        "the claude-code adapter (contract testing)",
+        "the claude-code or codex adapter (contract testing)",
     )
 
     p = sub.add_parser("job", parents=[common], help="read a background worker handle")

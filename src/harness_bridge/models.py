@@ -159,6 +159,24 @@ class ExecutorSpec(_Strict):
         return self
 
 
+class CodexExecutorSpec(_Strict):
+    """Codex-native options; Claude permissions/default model have no meaning here."""
+
+    kind: Literal["codex"]
+    requested_model: str | None = Field(default=None, min_length=1, max_length=128)
+    sandbox: Literal["read-only", "workspace-write"] = "workspace-write"
+    resume_on_repair: bool = True
+
+    @field_validator("requested_model")
+    @classmethod
+    def _model(cls, value: str | None) -> str | None:
+        if value is not None:
+            _no_nul(value, "requested_model")
+            if value.startswith("-") or any(c.isspace() for c in value):
+                raise ValueError("requested_model must not be an option or contain whitespace")
+        return value
+
+
 class TaskDefinition(_Strict):
     """Task requirements without a repository/base; shared by plans and execution specs."""
 
@@ -168,7 +186,7 @@ class TaskDefinition(_Strict):
     forbidden_paths: list[str] = Field(default_factory=lambda: list(DEFAULT_FORBIDDEN_PATHS))
     verification: list[VerificationCommand] = Field(min_length=1, max_length=50)
     limits: Limits = Field(default_factory=Limits)
-    executor: ExecutorSpec
+    executor: ExecutorSpec | CodexExecutorSpec = Field(discriminator="kind")
 
     @field_validator("allowed_paths", "forbidden_paths")
     @classmethod

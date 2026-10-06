@@ -36,8 +36,10 @@ Evidence: `docs/VALIDATION_MATRIX.md`, `docs/LIVE_REPAIR_RESULT.md`, `docs/PLUGI
    Exact local delivery/receipts and READY_TO_DELIVER/DELIVERED projections now exist (`DELIVERY.md`).
    Budgeted repair-child binding and conservative post-delivery cleanup now exist
    (`INTEGRATION_REPAIRS.md`, `CLEANUP.md`); dirty worktrees and all refs/evidence remain retained.
-5. **P5 — Codex executor adapter.** Stub/contract evidence first; capability-specific live
-   validation only under new bounded authorization. ZCode executor remains exploratory.
+5. **P5 — Codex executor adapter (offline core implemented).** Native contract and foreground/
+   worker stub repair now exist (`CODEX_EXECUTOR.md`). Live is unavailable until internal turn
+   enforcement, subscription/config provenance and native recovery gaps have evidence; any
+   real validation also requires new bounded authorization. ZCode executor remains exploratory.
 6. **P6 — Advisor host entrypoints.** Install/activate Codex and ZCode packages, stable project
    discovery, task operations and session continuation. Loading a plugin is not full behavior.
 7. **P7 — Live product acceptance / distribution.** One Advisor session and two executor harnesses,

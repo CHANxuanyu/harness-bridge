@@ -1,8 +1,18 @@
 # Status
 
-_Last updated 2026-10-06 (P4 local core complete; 574 offline cases passed)._
+_Last updated 2026-10-06 (P5 offline adapter; 642 full + 68 final affected checks passed)._
 
 ## Current state
+
+- **P5 Codex offline adapter:** native options, strict JSONL completion/refusal handling and
+  exact UUID repair resume now reuse shared worktrees/workers/checks/reviews/budgets. Live dispatch
+  is unavailable before reservation, including with ordinary live opt-ins enabled; internal turn
+  enforcement, subscription/config provenance and native resume need evidence. No new model calls.
+  See `docs/CODEX_EXECUTOR.md`. Adds 68 offline cases (48 contracts, 20 integration).
+  Shared full regression: **642 passed**, 839.69s; following Codex-only resume/parser hardening:
+  **68 passed**, 20.87s. Lint/format and strict mypy (37 source files) clean. The final hardening
+  was checked with its affected suite, not another full run. Schema stays 10; legacy normalized
+  executor shapes are preserved.
 
 - **Final P4 completion checks:** full `scripts/check.sh` → **574 passed / 0 failed / 0 skipped**,
   769.51s (12m49s); ruff/format clean (116 files), strict mypy clean (36 source files).
@@ -28,7 +38,7 @@ _Last updated 2026-10-06 (P4 local core complete; 574 offline cases passed)._
 - **Planning milestone P0 complete:** `docs/PROJECT_PLAN.md` is the canonical product and
   engineering plan. Advisor is the user's existing agent session; Executor is a bound child
   agent session. P1/P2/P3 local cores are implemented and offline-validated.
-  Installed-host lifecycle acceptance and P5–P7 remain incomplete. Scope defaults,
+  P5 offline adapter is implemented; its live readiness and P6–P7 remain incomplete. Scope defaults,
   dependency materialization, budget/ownership checks, worker lifecycle, integration and
   local-branch delivery are specified with V01–V14 acceptance criteria.
 - **P1 first vertical slice implemented:** project/goal registration, independent child links,
