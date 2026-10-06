@@ -122,6 +122,7 @@ state was migrated in this implementation round.
 Revision 5 subsequently adds preparation/resource records and preserves old plan digests.
 Explicit bounded preparation, cancellation/recovery, output/cache inventory and named resource
 claims complete the local P2 core; see [PREPARATION.md](PREPARATION.md) for its finite-command
-scope and remaining lifecycle limits. P3 workers/concurrency, P4 integration/delivery, a second
-live executor adapter and installed host entrypoints remain later milestones. This is not a
+scope and remaining lifecycle limits. [WORKERS.md](WORKERS.md) covers the subsequent P3
+background-attempt slice. Two-executor concurrency, P4 integration/delivery, a second live
+executor adapter and installed host entrypoints remain later work. This is not a
 finished V1 product.

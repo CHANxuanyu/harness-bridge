@@ -119,4 +119,27 @@ CREATE TABLE preparation_resources (
 );
 """
 
-MIGRATIONS = {2: COORDINATION_SCHEMA, 3: PLANNING_SCHEMA, 4: BASELINE_SCHEMA, 5: PREPARATION_SCHEMA}
+WORKER_SCHEMA = """
+CREATE TABLE worker_jobs (
+    job_id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(task_id),
+    attempt_id TEXT NOT NULL UNIQUE REFERENCES attempts(attempt_id),
+    idempotency_key TEXT NOT NULL,
+    request_digest TEXT NOT NULL,
+    execution_json TEXT NOT NULL,
+    execution_digest TEXT NOT NULL,
+    phase TEXT NOT NULL CHECK(phase IN ('reserved','claimed','finished','abandoned','recovered')),
+    error_code TEXT,
+    created_at TEXT NOT NULL,
+    ended_at TEXT,
+    UNIQUE(task_id,idempotency_key)
+);
+"""
+
+MIGRATIONS = {
+    2: COORDINATION_SCHEMA,
+    3: PLANNING_SCHEMA,
+    4: BASELINE_SCHEMA,
+    5: PREPARATION_SCHEMA,
+    6: WORKER_SCHEMA,
+}

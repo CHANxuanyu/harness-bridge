@@ -25,9 +25,10 @@ Evidence: `docs/VALIDATION_MATRIX.md`, `docs/LIVE_REPAIR_RESULT.md`, `docs/PLUGI
    crash recovery, candidate binding, output/cache inventory and state-wide resource claims.
    References: `EXECUTION_CONTEXT.md`, `PREPARATION.md`. No persistent service management or
    automatic resource discovery; unknown exits remain reserved until future audited resolution.
-3. **P3 — Managed worker and aggregate limits.** Bounded concurrent attempts, goal budgets,
-   reservations held for unknown exits, incremental events, cancel/recover and host teardown.
-   Validate the actual macOS worker lifecycle before claiming detached operation.
+3. **P3 — Managed worker and aggregate limits (partial).** Durable single-attempt background
+   workers, task events/wait and cancel/recover are implemented; see `WORKERS.md`. Two-slot
+   concurrency with scope-overlap guards, aggregate time/turn reservations and desktop-host
+   teardown acceptance remain. Offline launcher exit is tested; full host survival is not.
 4. **P4 — Integration / delivery.** Immutable approved snapshots, conflict handling, integrated
    goal verification, exact local delivery branch, idempotent receipts and ownership-safe cleanup.
 5. **P5 — Codex executor adapter.** Stub/contract evidence first; capability-specific live

@@ -175,3 +175,33 @@ smokes, live repair or actual user-state migration occurred.
 P2 local core is complete for finite, explicitly configured preparation, as defined in
 `PREPARATION.md`. Persistent service hosting, cross-state resource coordination and audited
 release of unknown reservations remain outside this completion claim. P3–P7 are unfinished.
+
+## P3 durable background attempts and task observation — 2026-10-06
+
+| Scope | Evidence | Result | Boundary |
+|---|---|---|---|
+| Detached attempt lifecycle | Launching CLI exits or loses its receipt after spawning; a separate worker finishes verification/review; original job can be replayed and queried | PASS, offline macOS | Simulated CLI launcher, not GUI-host/logout/reboot or real-model survival |
+| Durable dispatch/claim races | Concurrent same-key requests return one job; different children race against aggregate budget; two worker processes claim one attempt at most once | PASS, offline | One project slot; no queue or two-executor concurrency claim |
+| Cancellation and wall timeout | Detached fake hang process plus child, explicit cancel or deadline, confirmed group exit; independent query timeout does not stop/redispatch | PASS, offline | Only owned groups signalled; no live timeout claim |
+| Unclaimed crash window | Launcher crashes after transaction before worker; recovery/cancel fences the reservation and delayed worker cannot execute; uncertain launcher retained | PASS, offline | Only proven non-start refunds goal ledger; task attempt ceiling remains conservative |
+| Claimed worker death | Crash immediately after claim and SIGKILL after fake executor steady state; recovery retains unknown exit/budget/slot even after logical failure/cancel | PASS, offline | No guessed PID signals, automatic retry or acknowledgement-based release |
+| Verifier-only recovery | Crash after confirmed executor exit/VERIFYING commit; explicit recovery runs frozen checks and marks recovered job; executor count remains one | PASS, offline | Existing verifier lifecycle contract; recovered job is not exit proof |
+| Advisor/prepare/gate boundaries | Stale Advisor refused; accepted worker completes after takeover; late preparation change prevents invocation; live-route gate closure checked with configured non-model stub | PASS, offline | Stub exercise of live code path is not a real harness run or new spend authorization |
+| Repair continuity | Detached Claude stub initial/repair keeps cwd/session/feedback; an intervening proven non-start preserves feedback and resumes last observed compatible session | PASS, offline stub | Unknown or actually executed intervening attempts cannot be skipped |
+| Incremental observation | Paginated task cursors with no duplicates/mutation, bounded wait wake/timeout, invalid/oversized cursor and nonfinite wait rejection | PASS, offline | Task-scoped only; goal-wide stream still pending |
+| Revision 6 | v5 prepared task/Advisor/records preserved through upgrade; reconstructed v2/v3/v4 preserved; final-stage failure rollback from v1–v5 | PASS, isolated fixtures | No actual user/live state migrated |
+
+Before edits: 50 affected coordination/recovery/migration checks passed in 37.11s. The first
+worker set passed 23 checks in 21.19s. The expanded full run recorded 338 passed / 1 failed:
+an added test attempted to inject a Claude-stub invocation mismatch by changing the fake-Python
+setting, which does not affect Claude argv. The fixture now changes an actual invocation input
+(environment-name set); it asserts no stub invocation, preserved feedback and later bound resume.
+After that correction and two input/recovery-boundary cases, all 32 worker checks passed in 28.39s.
+No test was deleted or skipped, and no actual model binary/auth/network call was used.
+
+Final shared-core `scripts/check.sh`: **341 passed / 0 failed / 0 skipped**, 199.87s on macOS;
+ruff/format clean (94 files), strict mypy clean (30 source files). This milestone adds 33 cases
+relative to the previous 308: 32 worker/observation cases and one additional migration revision.
+P3 remains partial: two-executor concurrency, overlap guards, aggregate time/turn reservations
+and complete host lifecycle acceptance remain outstanding. P4–P7 and integrated delivery remain
+incomplete. No new live calls, real auth reads, network requests or user-state migrations.

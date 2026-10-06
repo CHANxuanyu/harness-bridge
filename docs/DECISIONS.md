@@ -147,3 +147,19 @@ Each entry: decision — reason. Newest last.
     so this is not an OS/billing sandbox. Existing live executor gates are unchanged.
 46. **Schema revision 5:** additive preparation/claim tables with atomic backed-up migration;
     omit absent preparation from canonical old plans so existing replay digests stay stable.
+
+47. **P3 single-attempt workers:** persist background key/attempt/packet together under existing
+    guards, then spawn a detached local Python worker; claim once transactionally and reuse the
+    foreground execution/evidence path. No automatic queue, scheduling or worker restart.
+48. **Unclaimed versus claimed recovery:** atomically fencing a never-claimed reservation proves
+    non-execution even with a delayed worker. After claim, unknown exits retain goal budget/slot;
+    a recovered worker record never substitutes for process-exit evidence.
+49. **Dispatch and observation:** background keys are required and replay the original attempt;
+    task event cursors and bounded waits are read-only. Query timeout never restarts a worker.
+    Accepted work survives Advisor takeover; fresh reservations still require the current epoch.
+50. **Worker readiness/gates:** persist no environment values; reconstruct/digest-check invocation,
+    recheck preparation and local live gate before execution. Proven non-started repairs preserve
+    feedback and can reuse the last actually observed compatible session, without inventing one.
+51. **Schema revision 6 and scope:** additive worker records with atomic backed-up v1–v5 upgrades;
+    offline launcher-detachment evidence is not GUI-host/logout/reboot survival. P3 two-slot
+    concurrency and aggregate time/turn reservation are deliberately still unimplemented.

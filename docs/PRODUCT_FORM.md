@@ -62,5 +62,8 @@ repair/resume 已通过。Codex/ZCode 插件包原型已制作，安装后的完
 P1 本地协调内核已实现总目标与子任务归属、Advisor 会话接管、总尝试/返修额度、单执行名额，
 以及目标暂停/取消、待执行子任务计划和依赖无环检查。独立子任务可以显式创建工作区；依赖任务等待固定成果基线。
 具体接口见 [COORDINATION.md](COORDINATION.md) 和 [PLANNING.md](PLANNING.md)。
-依赖成果基线与环境准备、多 Executor 整合、后台 worker、Codex 执行适配器和正式交付仍待实现。
+P2 已补齐固定的获批依赖成果基线、后继工作区及显式有界环境准备，见 [EXECUTION_CONTEXT.md](EXECUTION_CONTEXT.md)
+和 [PREPARATION.md](PREPARATION.md)。P3 第一段已实现单尝试后台 worker、幂等派发、事件查询与取消/恢复，
+见 [WORKERS.md](WORKERS.md)。双 Executor 并发与总时间/turn 预算、多 Executor 整合、Codex 执行适配器
+和正式交付仍待实现；桌面宿主退出后的完整生命周期尚待验证。
 当前代码是 V0.1 内核原型；计划完成不代表 V1 产品完成。

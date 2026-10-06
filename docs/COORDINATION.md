@@ -112,8 +112,8 @@ Goal exhaustion leaves a READY task unlaunched and returns `BUDGET_EXHAUSTED`.
 One project slot is supported in this slice. Running/starting/verifying tasks and attempts
 whose exit is unconfirmed hold it, including after manual cancellation or resolution. Such
 unknown reservations have no release mechanism yet; do not edit the database to bypass them.
-Managed workers, durable dispatch keys, two active executors and total time/turn accounting are
-P3 work. Limits apply within one state root; this is not a cross-installation quota broker.
+Managed workers and durable dispatch keys are now available; see [WORKERS.md](WORKERS.md).
+Two active executors and total time/turn accounting remain P3 work. Limits apply within one state root; this is not a cross-installation quota broker.
 
 Goal status is a transactional projection of child facts, not a persisted delivery verdict:
 
@@ -129,7 +129,8 @@ Goal status is a transactional projection of child facts, not a persisted delive
 goal success. Goal controls and confirmed-stop terminal states are now available; the complete state table
 and child-plan views are in [PLANNING.md](PLANNING.md). Integrated approval/delivery gates belong to P4. Recent goal events
 include sequence, epoch and associated task IDs; the view is limited to 50 events. Incremental
-cursor/wait APIs are not implemented. Existing task events/manifests retain detailed evidence.
+task cursor/wait APIs are now implemented in `events`; goal-wide incremental streams remain
+pending. Existing task events/manifests retain detailed evidence.
 
 ## Storage upgrade
 

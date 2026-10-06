@@ -17,8 +17,8 @@ integration. The Bridge prepares each executor's workspace and records execution
 The current implementation includes the task execution/review core and a first goal/session
 coordination core: child plans/ownership, Advisor takeover, goal pause/cancel, aggregate attempt
 limits, fixed approved dependency baselines, workspace readiness checks and state-root project
-discovery. Explicit bounded environment setup is supported; background workers and integrated
-delivery remain pending. It is a
+discovery. Explicit bounded environment setup and single-slot managed background attempts
+are supported; concurrent scheduling and integrated delivery remain pending. It is a
 deterministic local CLI (`hbridge`). **It never calls a model API itself.** The supervisor is
 whoever runs the CLI (the Advisor, e.g. the user's existing Codex session); the executor is Claude Code
 (live, gated, local only) or a bundled fake executor (offline).
@@ -49,7 +49,7 @@ A [local plugin alpha](plugins/harness-bridge/README.md) now packages one shared
 Skill with Codex and ZCode manifests. It requires a separately installed runtime. Package
 checks and Codex marketplace discovery passed; installed-host activation and ZCode loading
 have not been verified. This does **not** add Codex/ZCode executor adapters, background
-workers, or a delivery/merge command. See [plugin validation](docs/PLUGIN_ALPHA_RESULT.md).
+execution support by itself, or a delivery/merge command. See [plugin validation](docs/PLUGIN_ALPHA_RESULT.md).
 
 The [goal coordination reference](docs/COORDINATION.md) documents the implemented
 `goal create/status/takeover`, `projects` and `create --goal` commands. Linked tasks require
@@ -58,7 +58,9 @@ The [planning/control reference](docs/PLANNING.md) covers `goal plan/control` an
 `child status/materialize`. The [execution context reference](docs/EXECUTION_CONTEXT.md) covers
 fixed dependency versions, `retain-approved` and `child preflight`. The [preparation reference](docs/PREPARATION.md)
 covers `child prepare`, cancellation/recovery and shared-resource claims. P1/P2 local cores are
-implemented; P3–P7 remain pending, including managed workers and integrated delivery.
+implemented. The [background worker reference](docs/WORKERS.md) covers durable dispatch,
+`job`, incremental `events`, cancellation and recovery. P3 is partially implemented;
+two-executor concurrency and P4–P7, including integrated delivery, remain incomplete.
 
 ## Quick start (offline, no model, no network needed after install)
 

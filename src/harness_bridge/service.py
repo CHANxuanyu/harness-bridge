@@ -1,8 +1,8 @@
 """Bridge core: task lifecycle orchestration on top of store, workspace, runner and adapters.
 
 Every public method returns a JSON-serializable receipt or raises :class:`BridgeError`. The
-foreground ``run`` owns the executor process group for the duration of the attempt; other CLI
-processes communicate with it only through the SQLite store (e.g. ``cancel_requested``).
+foreground runner or detached worker owns the executor process group; other CLI processes
+communicate with it only through the SQLite store (e.g. ``cancel_requested``).
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from harness_bridge.adapters.base import (
     ExecutorAdapter,
     ExecutorResult,
     InvocationContext,
+    InvocationSpec,
     ParsedEvent,
     TaskPacket,
 )
@@ -46,6 +47,7 @@ from harness_bridge.baselines import approved, retain_approval, validate_pin
 from harness_bridge.config import BridgeConfig, evaluate_live_gate, load_config
 from harness_bridge.coordination import AdvisorClaim, Coordinator
 from harness_bridge.errors import BridgeError
+from harness_bridge.jobs import WorkerJobs
 from harness_bridge.models import (
     TaskSpec,
     canonical_json,
@@ -121,6 +123,7 @@ class Bridge:
         self.coordination = Coordinator(self.store)
         self.plans = ChildPlans(self.coordination)
         self.preparations = Preparations(self)
+        self.jobs = WorkerJobs(self)
         self.advisor_claim = advisor_claim
         self.python = python_executable or sys.executable
         self.stop_flag = stop_flag or StopFlag()
@@ -531,7 +534,20 @@ class Bridge:
         mode: str = "mock",
         allow_model_usage: bool = False,
         executor_binary: str | None = None,
+        background: bool = False,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
+        self._check_advisor(task_id, allow_stopping=background)
+        request = self.jobs.request(mode, allow_model_usage, executor_binary)
+        if background:
+            self.jobs.validate_key(idempotency_key)
+            with self.store.transaction() as cur:
+                self.coordination.guard_task(cur, task_id, self.advisor_claim, allow_stopping=True)
+                replay = self.jobs.replay(cur, task_id, idempotency_key, request)
+            if replay:
+                return self.jobs.status(replay, replayed=True)
+        elif idempotency_key is not None:
+            raise BridgeError("USAGE_ERROR", "--idempotency-key requires --background")
         self._check_advisor(task_id)
         if mode not in ("mock", "live"):
             raise BridgeError("USAGE_ERROR", "mode must be 'mock' or 'live'")
@@ -550,6 +566,11 @@ class Bridge:
                 )
         adapter, binary = self._adapter(spec, mode, executor_binary)
         if task.state != S.READY:
+            if background:
+                with self._advisor_transaction(task_id, allow_stopping=True) as cur:
+                    replay = self.jobs.replay(cur, task_id, idempotency_key, request)
+                    if replay:
+                        return self.jobs.status(replay, replayed=True, cur=cur)
             raise BridgeError(
                 "STATE_CONFLICT",
                 f"run requires state READY, task is {task.state}",
@@ -617,6 +638,10 @@ class Bridge:
         launch_token = uuid.uuid4().hex
         evidence = _evidence_level(spec.executor.kind, mode)
         with self._advisor_transaction(task_id) as cur:
+            if background:
+                replay = self.jobs.replay(cur, task_id, idempotency_key, request)
+                if replay:
+                    return self.jobs.status(replay, replayed=True, cur=cur)
             self.coordination.guard_dispatch(cur, task_id, self.advisor_claim, kind)
             # Check again after invocation construction: a late filesystem/ownership
             # change must not slip through the legacy run entrypoint.
@@ -660,8 +685,27 @@ class Bridge:
                     "evidence_level": evidence,
                 },
             )
+            if background:
+                job_id = self.jobs.reserve(
+                    cur, task_id, attempt_id, idempotency_key, request, packet, invocation
+                )
         _fault_point("after_starting_commit")
+        if background:
+            self.jobs.launch(job_id)
+            _fault_point("after_worker_launch")
+            return self.jobs.status(job_id, replayed=False)
+        return self._execute_attempt(task, spec, attempt_id, adapter, invocation)
 
+    def _execute_attempt(
+        self,
+        task: TaskRecord,
+        spec: TaskSpec,
+        attempt_id: str,
+        adapter: ExecutorAdapter,
+        invocation: InvocationSpec,
+    ) -> dict[str, Any]:
+        """One execution path, owned by either the foreground runner or a claimed worker."""
+        task_id = task.task_id
         events: list[ParsedEvent] = []
         dropped = 0
         session_recorded = False
@@ -885,6 +929,9 @@ class Bridge:
         human decision for BLOCKED / INTERRUPTED tasks.
         """
         self._check_advisor(task_id, allow_stopping=True)
+        pending = self.jobs.recover_unclaimed(task_id) if resolve is None else None
+        if pending is not None:
+            return pending
         task = self.store.get_task(task_id)
         spec = self._spec(task)
         attempt = (
@@ -1052,6 +1099,7 @@ class Bridge:
             actions.append("interrupted verification re-run (executor not re-run)")
         else:
             actions.append("no automatic action for this state")
+        self.jobs.reconcile_recovery(task_id)
         after = self.store.get_task(task_id)
         report.update(
             {
@@ -1092,6 +1140,8 @@ class Bridge:
     def cancel(
         self, task_id: str, *, wait_seconds: float = 0.0, acknowledge_unknown: bool = False
     ) -> dict[str, Any]:
+        if self.jobs.cancel_unclaimed(task_id):
+            return {"task_id": task_id, "status": "cancelled", "state": S.CANCELLED.value}
         task = self.store.get_task(task_id)
         details = task.state_details or {}
         if task.state in (S.SUCCEEDED, S.FAILED, S.CANCELLED):
@@ -1134,7 +1184,7 @@ class Bridge:
                 "state": now.state.value,
                 "runner_alive": alive,
                 "note": (
-                    "the foreground runner will stop its own process group and record CANCELLED"
+                    "the owning runner will stop its own process group and record CANCELLED"
                     if alive
                     else "runner is not alive; nothing was signalled. Run `hbridge recover`."
                 ),
@@ -1183,9 +1233,18 @@ class Bridge:
         if spec.executor.kind != "claude-code" or not spec.executor.resume_on_repair:
             return None
         attempts = self.store.list_attempts(task.task_id)
-        if not attempts:
+        # A proven non-start cannot supersede the last observed session. In particular,
+        # a worker preflight failure may have recorded a repair without invoking Claude.
+        prev = next(
+            (
+                a
+                for a in reversed(attempts)
+                if not (a.outcome == "spawn_failed" and a.exit_confirmed)
+            ),
+            None,
+        )
+        if prev is None:
             return None
-        prev = attempts[-1]
         binding = prev.session_binding or {}
         if (
             prev.session_id
@@ -1472,6 +1531,14 @@ class Bridge:
         with self.store.transaction() as cur:
             retained = approved(cur, task_id)
             preparation = self.preparations.latest(cur, task_id)
+            workers = [
+                dict(r)
+                for r in cur.execute(
+                    "SELECT job_id,attempt_id,phase,error_code FROM worker_jobs "
+                    "WHERE task_id=? ORDER BY rowid",
+                    (task_id,),
+                )
+            ]
         attempts = self.store.list_attempts(task_id)
         current = next((a for a in attempts if a.attempt_id == task.current_attempt_id), None)
         gate: dict[str, Any] | None = None
@@ -1500,6 +1567,7 @@ class Bridge:
             "approval_gate": gate,
             "approved_snapshot": retained,
             "preparation": preparation,
+            "worker_jobs": workers,
             "reviews": self.store.list_reviews(task_id),
             "recent_events": [
                 {k: e[k] for k in ("seq", "type", "from_state", "to_state", "created_at")}

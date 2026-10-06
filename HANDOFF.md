@@ -1,17 +1,45 @@
 # Handoff
 
-## Current state (2026-10-06, P2 local core complete)
+## Current state (2026-10-06, P3 first worker slice)
 
 - **Canonical plan:** `docs/PROJECT_PLAN.md` consolidates the product, session relationships,
   contracts, V1 scope defaults, P0–P7 milestones and V01–V14 acceptance. P0 is complete;
-  P1/P2 local cores are implemented and offline-validated. P3–P7 are pending. Advisor is
+  P1/P2 local cores are implemented and offline-validated. P3 is partially implemented; P4–P7 are pending. Advisor is
   explicitly an existing agent session; Bridge does not create its own planning model. `PRODUCT_FORM.md` is now a short summary, and the
   original cloud execution plan is clearly historical, not renewed authorization.
 - Key plan choices: dependencies are fixed before child execution-task/worktree materialization;
   task mutations cannot bypass goal budgets or the active Advisor epoch through old CLI paths;
   unknown exits retain reservations/slots; V1 targets managed workers and exact local-branch
   delivery with integrated acceptance. Epoch and initial aggregate guards now exist;
-  managed workers/integration/delivery remain proposed runtime behavior.
+  worker single-attempt lifecycle now exists; concurrent scheduling/integration/delivery remain pending.
+
+- **New P3 slice:** `jobs.py` + internal `worker.py` add idempotent `run --background`,
+  atomic attempt/reservation/single claim and detached process sessions. Both foreground and
+  background use `Bridge._execute_attempt`; worker rebuilds/digest-checks the accepted invocation
+  and rechecks preparation/live gates. Reads (`job`, `events`) never dispatch; task status lists
+  worker handles. Current Advisor required for dispatch/replay; accepted work may finish after
+  takeover. No auto restart/repair, queue, launchd service or new model dependency.
+- **Worker failure contract:** unclaimed dead-launcher reservations can be transactionally fenced
+  and marked confirmed non-start, so even delayed workers cannot execute; emergency cancel also
+  fences unclaimed work. After claim, ordinary recovery retains unknown exits/budgets/slots and
+  sends no guessed-process signals. Confirmed executor exit allows verifier-only recovery.
+  `recovered` job phase does not mean confirmed exit. Goal ledger excludes proven non-starts;
+  task attempt numbers/ceilings remain conservatively consumed. Non-started repairs retain
+  feedback and skip only proven non-starts when selecting the last observed compatible session.
+- **Revision 6:** additive `worker_jobs`; atomic WAL-aware backed-up upgrades from revisions
+  1–5, preserving all previous contracts/digests. Isolated migration fixtures updated and old
+  prepared-task evidence preserved. No actual live/user state was migrated.
+- **P3 boundaries:** current project execution slot remains 1; two-executor parallelism, scope
+  overlap control and aggregate wall-time/turn reservation remain next. Events are task-scoped,
+  wait is bounded to 30 seconds, no goal-wide cursor. Preparation is still foreground. Offline
+  launcher-process detachment is not evidence of GUI-host/logout/reboot or real-model survival.
+  Full contract and current support limits: `docs/WORKERS.md`.
+
+- **Latest checks:** final `scripts/check.sh` → **341 passed / 0 failures / 0 skipped**,
+  199.87s; ruff/format clean (94 files), mypy clean (30 source files). Adds 33 cases: 32 workers
+  plus v5 migration rollback. Affected baseline 50 passed before edits; final worker subset 32
+  passed. First expanded run had one incorrect stub-fault injection, corrected without deleting
+  or skipping a test; details in the validation matrix. No new real model/auth/network calls.
 
 - **New P1 code:** `coordination.py` implements GoalSpec/AdvisorClaim/TakeoverRequest, project
   registration within an explicit state root, goal/child links, takeover fencing and initial
@@ -47,7 +75,7 @@
   all-stage rollback. Old plan digests and replay keys are preserved. Older approved tasks need
   explicit `retain-approved` with matching unchanged evidence/candidate; no silent resnapshot.
   No actual live/user state directory was migrated. Preserve Git refs/objects and state/artifacts.
-- **Checks:** full shared-core `scripts/check.sh`: **307 passed**, 163.10s; lint/format/mypy
+- **P2 checks (prior milestone):** full shared-core `scripts/check.sh`: **307 passed**, 163.10s; lint/format/mypy
   clean (28 source files). One later added preparation→repair/session regression also passed
   via exact-test `scripts/check.sh`, 4.95s. **308 current cases were executed across these runs**;
   do not report a single 308-case full run. 30 new cases in this milestone; affected 72-case
@@ -93,7 +121,7 @@
   **pushed through `470f5b0`** at that check. Repair/evidence `94f7c4d`, product/plugin
   `7efd2bf`, product clarification `bab602a`, plan `24ee6ad`, first P1 slice `83f0793` and
   P1 completion `9d73e1c` and P2 first slice `72c73a8` precede the new preparation milestone;
-  all are local, not auto-pushed.
+  preparation `591752b` and the new P3 worker milestone follow. All are local, not auto-pushed.
   Remote was not re-queried during this offline implementation round;
   visibility remains public by instruction.
 - **Live-gate hygiene:** the global default state dir was never live-enabled; the T3/T4 test
@@ -145,9 +173,10 @@
 
 ## Next bounded work
 
-1. Continue P3 from `docs/PROJECT_PLAN.md`: managed workers, incremental events/wait,
-   concurrency/aggregate reservations and host-lifecycle recovery. Reuse P2 baselines/context/
-   preparation, not a second setup runner. Unknown preparation outcomes currently hold slots
+1. Continue P3 from `docs/PROJECT_PLAN.md`: explicit two-slot project configuration, disjoint
+   scope/overlap checks and aggregate wall-time/turn reservations, followed by bounded host
+   lifecycle evidence. Managed single-attempt workers and task events/wait now exist; reuse
+   `jobs.py` and the common execution path, not a second runner. Unknown preparation outcomes currently hold slots
    and resources indefinitely; any audited release must require actual evidence, not an ack.
    P2 finite-command/local-core contract: `docs/PREPARATION.md`; persistent services and
    cross-state resource locks remain unsupported. No live budget is renewed.

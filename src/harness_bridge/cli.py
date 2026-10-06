@@ -92,9 +92,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("retain-approved", parents=[common], help="pin an unchanged older approval")
     p.add_argument("task_id")
 
-    p = sub.add_parser("run", parents=[common], help="run one executor attempt (foreground)")
+    p = sub.add_parser("run", parents=[common], help="run one executor attempt")
     p.add_argument("task_id")
     p.add_argument("--mode", choices=["mock", "live"], default="mock")
+    p.add_argument("--background", action="store_true", help="return a durable worker handle")
+    p.add_argument("--idempotency-key", help="required for background dispatch")
     p.add_argument(
         "--allow-model-usage",
         action="store_true",
@@ -106,6 +108,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="mock mode only: absolute path of a non-model stand-in executable for "
         "the claude-code adapter (contract testing)",
     )
+
+    p = sub.add_parser("job", parents=[common], help="read a background worker handle")
+    p.add_argument("job_id")
+    p = sub.add_parser("events", parents=[common], help="read incremental task events")
+    p.add_argument("task_id")
+    p.add_argument("--after", type=int, default=0)
+    p.add_argument("--limit", type=int, default=100)
+    p.add_argument("--wait", type=float, default=0, help="bounded read-only wait, 0..30 seconds")
 
     p = sub.add_parser("status", parents=[common], help="show task state")
     p.add_argument("task_id")
@@ -249,6 +259,14 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 mode=args.mode,
                 allow_model_usage=args.allow_model_usage,
                 executor_binary=args.stub_binary,
+                background=args.background,
+                idempotency_key=args.idempotency_key,
+            )
+        if cmd == "job":
+            return bridge.jobs.status(args.job_id)
+        if cmd == "events":
+            return bridge.jobs.events(
+                args.task_id, after=args.after, limit=args.limit, wait_seconds=args.wait
             )
         if cmd == "status":
             return bridge.status(args.task_id)

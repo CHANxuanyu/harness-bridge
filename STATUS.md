@@ -1,13 +1,13 @@
 # Status
 
-_Last updated 2026-10-06 (P2 local core complete; 307 full-suite + 1 added targeted check passed)._
+_Last updated 2026-10-06 (P3 first worker slice; 341 full-suite checks passed; P3 remains incomplete)._
 
 ## Current state
 
 - **Planning milestone P0 complete:** `docs/PROJECT_PLAN.md` is the canonical product and
   engineering plan. Advisor is the user's existing agent session; Executor is a bound child
   agent session. P1/P2 local cores are implemented and offline-validated.
-  P3–P7 remain incomplete. Scope defaults,
+  P3 now has single-attempt background workers; P3–P7 remain incomplete. Scope defaults,
   dependency materialization, budget/ownership checks, worker lifecycle, integration and
   local-branch delivery are specified with V01–V14 acceptance criteria.
 - **P1 first vertical slice implemented:** project/goal registration, independent child links,
@@ -29,7 +29,21 @@ _Last updated 2026-10-06 (P2 local core complete; 307 full-suite + 1 added targe
   same-key replay never re-executes, unknown exits retain slots/resources. No persistent service
   hosting or cross-state coordination is claimed. Schema revision 5 upgrades v1–v4 atomically
   with backup, preserving old plan digests. See `docs/PREPARATION.md`.
-  P3 workers, P4 integrated delivery and P6 installed entrypoints remain future work.
+  P4 integrated delivery and P6 installed entrypoints remain future work.
+- **P3 first worker slice:** `run --background --idempotency-key` atomically reserves an
+  attempt/worker handle before a detached process claims it once. It reuses the foreground
+  executor/verification path; current Advisor, preparation, project-slot and aggregate-attempt
+  checks still apply. `job`, task `status` worker handles and incremental `events --after/--wait`
+  support reconnection without redispatch. Cancel and recovery distinguish fenced unclaimed
+  work from unknown exits after claim. Proven non-started repairs retain feedback/session
+  continuity. Schema revision 6 upgrades v1–v5 with backup/rollback. See `docs/WORKERS.md`.
+  One project slot remains; two-executor concurrency, scope overlap checks, aggregate time/turn
+  reservations, goal-wide streams and desktop-host lifecycle acceptance are still pending.
+  Preparation remains explicit foreground work. No new real calls or user-state migrations.
+- **Latest checks:** final `scripts/check.sh` → **341 passed / 0 failed / 0 skipped**, 199.87s;
+  ruff/format clean (94 files), strict mypy clean (30 source files). This milestone adds 33
+  cases (32 worker/observation cases plus one migration revision), all offline. Detailed prior
+  runs and the corrected fault-injection fixture are recorded in `docs/VALIDATION_MATRIX.md`.
 - **Experimental prototype (V0.1, milestones M0–M4).** The live path has now been exercised
   for real in bounded initial smokes and one controlled repair/resume task on 2026-10-06.
 - **Verified so far**
@@ -88,12 +102,13 @@ _Last updated 2026-10-06 (P2 local core complete; 307 full-suite + 1 added targe
 | Captured-live-redacted stream fixtures + parser regression tests (from the T3/T4 logs) | done |
 | CLI: doctor, create, run, status, list, artifacts, verify, review, recover, cancel, demo | done |
 | Goal/project registration, child ownership, Advisor takeover and old-entrypoint fencing | implemented first P1 slice; offline checks pass |
-| Goal attempt/repair ceilings; one project execution slot; unknown exit holds reservation | implemented initial guards; P3 worker/concurrency/time accounting pending |
+| Goal attempt/repair ceilings; one project execution slot; unknown exit holds reservation | implemented guards and single-attempt workers; P3 concurrency/time accounting pending |
 | Goal controls and confirmed-stop terminal projections | implemented; offline active fake-process cancellation and unknown-exit checks pass |
 | Immutable child plans / DAG validation / explicit root and dependent materialization | implemented; fixed approved inputs and conflict refusal |
 | Retained approval snapshots / goal-child context / presence preflight | implemented, offline-validated |
 | Explicit finite preparation / output-cache inventory / resource claims / cancel-recover | implemented; unknown exits stay reserved; no persistent services or cross-state locks |
-| SQLite revision 1/2/3/4→5 upgrade + WAL-consistent backup/rollback | implemented; isolated fixtures only, real user state not migrated |
+| SQLite revision 1/2/3/4/5→6 upgrade + WAL-consistent backup/rollback | implemented; isolated fixtures only, real user state not migrated |
+| Durable background dispatch / task event cursors and bounded wait | implemented first P3 slice; offline worker lifecycle checks |
 | Offline demos `success`, `bug-then-repair` | pass |
 | Manual offline CI workflow (`workflow_dispatch`) | written, never run |
 | Codex / ZCode plugin source package, shared supervisor Skill, host catalogs | alpha; static/copy/CLI-contract checks pass; Codex catalog discovery pass; installed activation and ZCode loading NOT_RUN |
@@ -182,8 +197,9 @@ _Last updated 2026-10-06 (P2 local core complete; 307 full-suite + 1 added targe
 
 ## Next
 
-Continue P3 in `docs/PROJECT_PLAN.md`: managed background workers, incremental wait/query,
-aggregate concurrency/time/turn reservations, cancellation/recovery and host teardown behavior.
+Continue P3 in `docs/PROJECT_PLAN.md`: two-slot project concurrency with scope-overlap guards,
+aggregate time/turn reservations and host teardown acceptance. Reuse the implemented managed
+worker/dispatch and task event/wait paths; see `docs/WORKERS.md`.
 P2 fixed baselines/context and explicit preparation are implemented; reuse them. Unknown
 preparation exits retain project slots/resource claims even after manual task failure;
 future audited release must not treat acknowledgement as proof of exit. Persistent service
