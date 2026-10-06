@@ -15,7 +15,8 @@ import sqlite3
 import sys
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,7 @@ from harness_bridge.artifacts import (
     store_capture,
 )
 from harness_bridge.config import BridgeConfig, evaluate_live_gate, load_config
+from harness_bridge.coordination import AdvisorClaim, Coordinator
 from harness_bridge.errors import BridgeError
 from harness_bridge.models import (
     TaskSpec,
@@ -105,17 +107,38 @@ class Bridge:
         env: dict[str, str] | None = None,
         python_executable: str | None = None,
         stop_flag: StopFlag | None = None,
+        advisor_claim: AdvisorClaim | None = None,
     ) -> None:
         self.state_dir = state_dir.expanduser().resolve()
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.env = dict(os.environ) if env is None else dict(env)
         self.config: BridgeConfig = load_config(self.state_dir)
         self.store = Store(self.state_dir / "bridge.sqlite3")
+        self.coordination = Coordinator(self.store)
+        self.advisor_claim = advisor_claim
         self.python = python_executable or sys.executable
         self.stop_flag = stop_flag or StopFlag()
 
     def close(self) -> None:
         self.store.close()
+
+    @contextmanager
+    def _advisor_transaction(self, task_id: str) -> Iterator[sqlite3.Cursor]:
+        with self.store.transaction() as cur:
+            goal = self.coordination.guard_task(cur, task_id, self.advisor_claim)
+            yield cur
+            if goal is not None:
+                self.coordination.event(
+                    cur,
+                    goal["goal_id"],
+                    goal["advisor_epoch"],
+                    "child_mutation",
+                    {"task_id": task_id},
+                )
+
+    def _check_advisor(self, task_id: str) -> None:
+        with self.store.transaction() as cur:
+            self.coordination.guard_task(cur, task_id, self.advisor_claim)
 
     # --- paths -------------------------------------------------------------------------------
 
@@ -152,15 +175,20 @@ class Bridge:
 
     # --- create --------------------------------------------------------------------------
 
-    def create(self, spec_data: Any, idempotency_key: str) -> dict[str, Any]:
+    def create(
+        self, spec_data: Any, idempotency_key: str, *, goal_id: str | None = None
+    ) -> dict[str, Any]:
         if not idempotency_key or len(idempotency_key) > 200 or not idempotency_key.isprintable():
             raise BridgeError("INVALID_INPUT", "idempotency key must be 1-200 printable characters")
+        if goal_id is not None:
+            with self.store.transaction() as cur:
+                self.coordination.guard_goal(cur, goal_id, self.advisor_claim)
         spec = parse_task_spec(spec_data)
         normalized = spec.model_dump(mode="json")
         request_digest = sha256_digest(normalized)
         existing = self.store.find_task_by_key(idempotency_key)
         if existing is not None:
-            return self._create_replay(existing, request_digest)
+            return self._create_replay(existing, request_digest, goal_id)
 
         src = inspect_source_repo(spec.repo.path, spec.repo.base_ref)
         task_id = new_id("tsk")
@@ -181,6 +209,10 @@ class Bridge:
         try:
             with self.store.transaction() as cur:
                 self.store.insert_task(cur, values)
+                if goal_id is not None:
+                    self.coordination.link_task(
+                        cur, goal_id, self.advisor_claim, values, spec.executor.kind
+                    )
                 self.store.add_event(
                     cur,
                     task_id,
@@ -192,11 +224,19 @@ class Bridge:
             raced = self.store.find_task_by_key(idempotency_key)
             if raced is None:
                 raise
-            return self._create_replay(raced, request_digest)
+            return self._create_replay(raced, request_digest, goal_id)
         self._prepare_workspace(task_id)
         return self._task_receipt(self.store.get_task(task_id), created=True)
 
-    def _create_replay(self, existing: TaskRecord, request_digest: str) -> dict[str, Any]:
+    def _create_replay(
+        self, existing: TaskRecord, request_digest: str, goal_id: str | None
+    ) -> dict[str, Any]:
+        with self.store.transaction() as cur:
+            self.coordination.guard_task(cur, existing.task_id, self.advisor_claim)
+            if self.coordination.task_goal(cur, existing.task_id) != goal_id:
+                raise BridgeError(
+                    "IDEMPOTENCY_CONFLICT", "existing task belongs to a different goal"
+                )
         if existing.request_digest != request_digest:
             raise BridgeError(
                 "IDEMPOTENCY_CONFLICT",
@@ -235,8 +275,13 @@ class Bridge:
                 task_branch=branch,
             )
 
+    def _goal_id(self, task_id: str) -> str | None:
+        with self.store.transaction() as cur:
+            return self.coordination.task_goal(cur, task_id)
+
     def _task_receipt(self, task: TaskRecord, **extra: Any) -> dict[str, Any]:
         out = {
+            "goal_id": self._goal_id(task.task_id),
             "task_id": task.task_id,
             "state": task.state.value,
             "task_version": task.task_version,
@@ -321,6 +366,7 @@ class Bridge:
         allow_model_usage: bool = False,
         executor_binary: str | None = None,
     ) -> dict[str, Any]:
+        self._check_advisor(task_id)
         if mode not in ("mock", "live"):
             raise BridgeError("USAGE_ERROR", "mode must be 'mock' or 'live'")
         task = self.store.get_task(task_id)
@@ -345,7 +391,7 @@ class Bridge:
                 details={"actual_state": task.state.value},
             )
         if task.attempts_used >= spec.limits.max_attempts:
-            with self.store.transaction() as cur:
+            with self._advisor_transaction(task_id) as cur:
                 self.store.transition(
                     cur, task_id, S.READY, S.FAILED, reason="attempt_budget_exhausted"
                 )
@@ -401,7 +447,8 @@ class Bridge:
             )
         launch_token = uuid.uuid4().hex
         evidence = _evidence_level(spec.executor.kind, mode)
-        with self.store.transaction() as cur:
+        with self._advisor_transaction(task_id) as cur:
+            self.coordination.guard_dispatch(cur, task_id, self.advisor_claim, kind)
             self.store.transition(
                 cur,
                 task_id,
@@ -632,6 +679,7 @@ class Bridge:
 
     def verify(self, task_id: str) -> dict[str, Any]:
         """Re-snapshot and re-run the frozen verifiers for the current attempt (no executor)."""
+        self._check_advisor(task_id)
         task = self.store.get_task(task_id)
         self._spec(task)
         if task.state != S.AWAITING_REVIEW:
@@ -642,7 +690,7 @@ class Bridge:
                 details={"actual_state": task.state.value},
             )
         assert task.current_attempt_id is not None
-        with self.store.transaction() as cur:
+        with self._advisor_transaction(task_id) as cur:
             self.store.transition(
                 cur,
                 task_id,
@@ -664,6 +712,7 @@ class Bridge:
         Never re-dispatches an executor by itself. ``resolve='retry'|'fail'`` records an explicit
         human decision for BLOCKED / INTERRUPTED tasks.
         """
+        self._check_advisor(task_id)
         task = self.store.get_task(task_id)
         spec = self._spec(task)
         attempt = (
@@ -708,7 +757,7 @@ class Bridge:
                 if resolve == "fail"
                 else ("attempt_budget_exhausted" if exhausted else "resolved_retry")
             )
-            with self.store.transaction() as cur:
+            with self._advisor_transaction(task_id) as cur:
                 self.store.transition(
                     cur,
                     task_id,
@@ -721,6 +770,8 @@ class Bridge:
                 )
             actions.append(f"{task.state.value} -> {target.value} ({reason})")
         elif task.state == S.CREATED:
+            with self._advisor_transaction(task_id) as cur:
+                self.store.add_event(cur, task_id, "workspace_recovery_requested", {})
             self._prepare_workspace(task_id)
             actions.append("workspace prepared (no model involved): CREATED -> READY")
         elif task.state in (S.STARTING, S.RUNNING, S.VERIFYING):
@@ -744,7 +795,7 @@ class Bridge:
                 pg = attempt.pgid if attempt else None
                 group = None if pg is None else _group_alive(pg)
                 phase = "launch" if task.state == S.STARTING else "executor"
-                with self.store.transaction() as cur:
+                with self._advisor_transaction(task_id) as cur:
                     self.store.transition(
                         cur,
                         task_id,
@@ -772,7 +823,7 @@ class Bridge:
             and details.get("phase") == "verification"
             and attempt is not None
         ):
-            with self.store.transaction() as cur:
+            with self._advisor_transaction(task_id) as cur:
                 self.store.transition(
                     cur,
                     task_id,
@@ -802,7 +853,7 @@ class Bridge:
 
     def _claim_verification(self, task: TaskRecord, origin: str) -> None:
         """Take over a VERIFYING task whose runner died (CAS on revision)."""
-        with self.store.transaction() as cur:
+        with self._advisor_transaction(task.task_id) as cur:
             details = dict(task.state_details or {})
             details["runner"] = runner_identity()
             details["claimed_by"] = origin
@@ -893,6 +944,7 @@ class Bridge:
             else None
         )
         return {
+            "goal_id": self._goal_id(task_id),
             "task_id": task_id,
             "state": task.state.value,
             "state_reason": task.state_reason,
@@ -1092,6 +1144,7 @@ class Bridge:
             "kind": "hbridge.artifact_manifest",
             "bridge_version": __version__,
             "generated_at": utc_now(),
+            "goal_id": self._goal_id(task.task_id),
             "task_id": task.task_id,
             "attempt_id": attempt.attempt_id,
             "attempt_seq": attempt.seq,
@@ -1205,6 +1258,7 @@ class Bridge:
             blockers = self.gate_blockers(task, current, manifest, self.current_fingerprint(task))
             gate = {"approvable": not blockers, "blockers": blockers}
         return {
+            "goal_id": self._goal_id(task.task_id),
             "task_id": task.task_id,
             "state": task.state.value,
             "state_reason": task.state_reason,
@@ -1266,6 +1320,7 @@ class Bridge:
         )
         adir = self.attempt_dir(task.task_id, attempt.attempt_id)
         out: dict[str, Any] = {
+            "goal_id": self._goal_id(task.task_id),
             "task_id": task.task_id,
             "state": task.state.value,
             "goal": spec.goal[:2000],
@@ -1389,6 +1444,7 @@ class Bridge:
     # --- review --------------------------------------------------------------------------------
 
     def review(self, task_id: str, data: Any) -> dict[str, Any]:
+        self._check_advisor(task_id)
         decision = parse_review(data)
         if decision.task_id != task_id:
             raise BridgeError(
@@ -1467,7 +1523,7 @@ class Bridge:
                             "resulting_state": task.state.value,
                         }
                     )
-                    with self.store.transaction() as cur:
+                    with self._advisor_transaction(task_id) as cur:
                         self.store.insert_review(
                             cur, {**row, "status": "rejected", "receipt": receipt}
                         )
@@ -1480,7 +1536,7 @@ class Bridge:
                         )
                     raise self._gate_error(receipt)
                 receipt.update({"status": "accepted", "resulting_state": S.SUCCEEDED.value})
-                with self.store.transaction() as cur:
+                with self._advisor_transaction(task_id) as cur:
                     self.store.insert_review(cur, {**row, "status": "accepted", "receipt": receipt})
                     self.store.transition(
                         cur,
@@ -1501,7 +1557,7 @@ class Bridge:
                 receipt.update({"status": "accepted", "resulting_state": new_state.value})
                 if exhausted:
                     receipt["note"] = "repair budget exhausted; no further attempt will be made"
-                with self.store.transaction() as cur:
+                with self._advisor_transaction(task_id) as cur:
                     self.store.insert_review(cur, {**row, "status": "accepted", "receipt": receipt})
                     self.store.transition(
                         cur,
@@ -1516,7 +1572,7 @@ class Bridge:
                     )
             else:
                 receipt.update({"status": "accepted", "resulting_state": S.BLOCKED.value})
-                with self.store.transaction() as cur:
+                with self._advisor_transaction(task_id) as cur:
                     self.store.insert_review(cur, {**row, "status": "accepted", "receipt": receipt})
                     self.store.transition(
                         cur,

@@ -33,6 +33,8 @@ def _read_json_file(path: str) -> Any:
 def _build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--state-dir", default=argparse.SUPPRESS, help="state root directory")
+    common.add_argument("--advisor-binding", default=argparse.SUPPRESS)
+    common.add_argument("--advisor-epoch", type=int, default=argparse.SUPPRESS)
     common.add_argument(
         "--json",
         action="store_true",
@@ -54,6 +56,20 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("create", parents=[common], help="create a task from a TaskSpec file")
     p.add_argument("--task", required=True, help="TaskSpec JSON file ('-' for stdin)")
+    p.add_argument("--idempotency-key", required=True)
+    p.add_argument("--goal", default=None, help="parent goal (requires current Advisor claim)")
+
+    sub.add_parser("projects", parents=[common], help="discover projects/goals in this state root")
+    p = sub.add_parser("goal", parents=[common], help="coordinate a goal and its Advisor session")
+    goal_sub = p.add_subparsers(dest="goal_command", required=True)
+    p = goal_sub.add_parser("create", parents=[common])
+    p.add_argument("--file", required=True, help="GoalSpec JSON")
+    p.add_argument("--idempotency-key", required=True)
+    p = goal_sub.add_parser("status", parents=[common])
+    p.add_argument("goal_id")
+    p = goal_sub.add_parser("takeover", parents=[common])
+    p.add_argument("goal_id")
+    p.add_argument("--file", required=True, help="TakeoverRequest JSON")
     p.add_argument("--idempotency-key", required=True)
 
     p = sub.add_parser("run", parents=[common], help="run one executor attempt (foreground)")
@@ -139,6 +155,7 @@ def _install_signal_handlers(flag: Any) -> None:
 
 
 def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
+    from harness_bridge.coordination import AdvisorClaim, parse_contract
     from harness_bridge.service import Bridge, StopFlag
 
     state_dir = Path(getattr(args, "state_dir", None) or default_state_dir())
@@ -162,10 +179,26 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
         return run_doctor(state_dir, offline=args.offline)
 
     flag = StopFlag()
-    bridge = Bridge(state_dir, stop_flag=flag)
+    binding, epoch = getattr(args, "advisor_binding", None), getattr(args, "advisor_epoch", None)
+    claim = None
+    if binding is not None or epoch is not None:
+        claim = parse_contract(AdvisorClaim, {"binding_id": binding, "epoch": epoch})
+    bridge = Bridge(state_dir, stop_flag=flag, advisor_claim=claim)
     try:
+        if cmd == "projects":
+            return bridge.coordination.projects()
+        if cmd == "goal":
+            if args.goal_command == "create":
+                return bridge.coordination.create(_read_json_file(args.file), args.idempotency_key)
+            if args.goal_command == "takeover":
+                return bridge.coordination.takeover(
+                    args.goal_id, _read_json_file(args.file), args.idempotency_key
+                )
+            return bridge.coordination.status(args.goal_id)
         if cmd == "create":
-            return bridge.create(_read_json_file(args.task), args.idempotency_key)
+            return bridge.create(
+                _read_json_file(args.task), args.idempotency_key, goal_id=args.goal
+            )
         if cmd == "run":
             _install_signal_handlers(flag)
             return bridge.run(

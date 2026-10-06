@@ -2,6 +2,11 @@
 
 All external input is validated; unknown fields are rejected; `schema_version` must be `"1.0"`.
 
+GoalSpec/TakeoverRequest and goal ownership flags are documented in
+[COORDINATION.md](COORDINATION.md). They do not add fields to TaskSpec or ReviewDecision.
+For goal-linked tasks, mutating task commands require `--advisor-binding` and
+`--advisor-epoch`; omitted or stale claims fail closed. Reads and emergency cancel are exempt.
+
 ## TaskSpec
 
 | Field | Type | Notes |

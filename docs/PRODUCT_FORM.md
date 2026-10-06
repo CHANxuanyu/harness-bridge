@@ -59,5 +59,7 @@ V01–V14 验收项和待验证假设都在 [项目计划书](PROJECT_PLAN.md)�
 已有单任务的 worktree/cwd、执行/验证/审查、持久化和有界返修基础；真实 Claude 初次执行和一次受控
 repair/resume 已通过。Codex/ZCode 插件包原型已制作，安装后的完整体验尚未验证。
 
-父子任务协调、总预算、依赖基线、多 Executor 整合、后台 worker、Codex 执行适配器和正式交付仍待实现。
+P1 第一段已实现总目标与子任务归属、Advisor 会话接管、总尝试/返修额度，以及同一项目内的单执行名额，
+经过离线 fake 执行验证。具体接口与限制见 [COORDINATION.md](COORDINATION.md)。
+完整目标控制、待物化子任务计划、依赖基线、多 Executor 整合、后台 worker、Codex 执行适配器和正式交付仍待实现。
 当前代码是 V0.1 内核原型；计划完成不代表 V1 产品完成。

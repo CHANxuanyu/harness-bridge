@@ -8,9 +8,11 @@ Both roles are agent sessions. The Advisor is the current external session, not 
 service created by Bridge. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the target session,
 workspace, coordination and delivery contracts; [PRODUCT_FORM.md](PRODUCT_FORM.md) is a summary.
 
-The implementation below is the current **single-child-task** building block. Parent-goal
-coordination, dependencies, aggregate budgets and integrated-result review are not implemented.
-Several flat task records do not provide that coordination.
+The execution path below remains the foreground task core. The first P1 coordination slice
+now adds project/goal registration, child links, Advisor takeover epochs, aggregate attempt/repair
+budgets and one shared project slot. See [COORDINATION.md](COORDINATION.md) for the implemented
+contract and migration. Dependency plans, full goal control, workers and integrated review are
+still pending; this is not complete V1 coordination.
 
 ```text
 External Advisor / supervisor (user's current coding-agent session)
@@ -20,7 +22,9 @@ hbridge CLI (cli.py) ── JSON receipts on stdout, diagnostics on stderr
   ▼
 Bridge core (service.py) — deterministic, never calls a model API
   ├─ models.py        versioned contracts (pydantic, extra="forbid")
-  ├─ store.py         SQLite: tasks, attempts, events, verification_runs, reviews (single authority)
+  ├─ coordination.py  goal/session contracts, project registration, epoch/budget guards
+  ├─ store.py         SQLite single authority; migration 1→2 with a restorable backup
+  ├─ migrations.py    additive project/goal/child/takeover/event tables
   ├─ state.py         state machine + attempt outcome classes
   ├─ workspace.py     source checks, bridge-owned worktree, temp-index snapshots, diffs
   ├─ runner.py        foreground subprocess runner (own process group, drain, limits, signals)

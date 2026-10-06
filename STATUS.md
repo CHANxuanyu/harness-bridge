@@ -1,14 +1,21 @@
 # Status
 
-_Last updated 2026-10-06 (unified project plan P0; runtime unchanged)._
+_Last updated 2026-10-06 (P1 first coordination slice; 223 offline tests passed)._
 
 ## Current state
 
 - **Planning milestone P0 complete:** `docs/PROJECT_PLAN.md` is the canonical product and
   engineering plan. Advisor is the user's existing agent session; Executor is a bound child
-  agent session. P1–P7 are future implementation/acceptance, not complete. Scope defaults,
+  agent session. P1 is in progress; its first runtime slice is now implemented. P2–P7 remain
+  future implementation/acceptance, not complete. Scope defaults,
   dependency materialization, budget/ownership checks, worker lifecycle, integration and
   local-branch delivery are specified with V01–V14 acceptance criteria.
+- **P1 first vertical slice implemented:** project/goal registration, independent child links,
+  Advisor binding/epoch takeover, shared guards on old task mutation paths, goal attempt/repair
+  ceilings and one execution slot across a project's goals. Revision 1→2 migration backs up
+  committed WAL data and rolls back failed upgrades. See `docs/COORDINATION.md`.
+  Goal control/terminal semantics, unmaterialized child plans and host discovery wiring are
+  not complete. No managed worker, concurrent executors or integrated delivery is implied.
 - **Experimental prototype (V0.1, milestones M0–M4).** The live path has now been exercised
   for real in bounded initial smokes and one controlled repair/resume task on 2026-10-06.
 - **Verified so far**
@@ -47,8 +54,9 @@ _Last updated 2026-10-06 (unified project plan P0; runtime unchanged)._
 - **User clarification:** the primary relationship is one Advisor (main agent) directing one
   or more Executors (cross-harness subagents). The Advisor inspects/plans/reviews/integrates;
   Bridge prepares workspaces and runs/records tasks. `supervisor` is the existing name for
-  Advisor. Parent goals, child dependencies, aggregate budgets and multi-executor integration
-  remain unimplemented; several flat tasks are not proof of this product behavior.
+  Advisor. Parent goals, child ownership, takeover fencing and initial aggregate
+  attempt/repair limits are now implemented. Child dependencies, background/concurrent workers and multi-executor
+  integration remain pending; this is not the full product behavior.
 
 ## Implemented
 
@@ -65,6 +73,9 @@ _Last updated 2026-10-06 (unified project plan P0; runtime unchanged)._
 | Claude Code adapter: command builder, stream parser, classification, resume binding, live gate + per-flag evidence preflight, run-time argument-rejection stop | done, offline contract + live smoke evidence (T3/T4) |
 | Captured-live-redacted stream fixtures + parser regression tests (from the T3/T4 logs) | done |
 | CLI: doctor, create, run, status, list, artifacts, verify, review, recover, cancel, demo | done |
+| Goal/project registration, child ownership, Advisor takeover and old-entrypoint fencing | implemented first P1 slice; offline checks pass |
+| Goal attempt/repair ceilings; one project execution slot; unknown exit holds reservation | implemented initial guards; P3 worker/concurrency/time accounting pending |
+| SQLite revision 1→2 upgrade + WAL-consistent backup/rollback | implemented; five migration tests pass |
 | Offline demos `success`, `bug-then-repair` | pass |
 | Manual offline CI workflow (`workflow_dispatch`) | written, never run |
 | Codex / ZCode plugin source package, shared supervisor Skill, host catalogs | alpha; static/copy/CLI-contract checks pass; Codex catalog discovery pass; installed activation and ZCode loading NOT_RUN |
@@ -94,6 +105,13 @@ _Last updated 2026-10-06 (unified project plan P0; runtime unchanged)._
   0.160.0 recognized the temporarily registered catalog and version; source removed after
   inspection, no plugin installed. See `docs/PLUGIN_ALPHA_RESULT.md`.
 
+- **P1 first runtime slice (macOS, 2026-10-06):** before changes, affected store/CLI baseline
+  → 14 passed. New coordination/migration checks → 29 passed. Final `scripts/check.sh` →
+  **223 passed / 0 skipped / 0 failed**, 74.68 seconds; ruff/format clean (78 files), strict
+  mypy clean (24 source files). Full regression is justified by changes to shared store and
+  mutation paths; it includes existing CLI demos, not new live smokes. No model/network/auth
+  calls; test isolation/sentinel guards remain in force. No real user state directory migrated.
+
 ## Findings worth knowing
 
 - `--max-turns`: official docs declare it; `--help` of CLI 2.1.291 does not list it; on this
@@ -120,9 +138,10 @@ _Last updated 2026-10-06 (unified project plan P0; runtime unchanged)._
 
 ## Next
 
-Follow P1 in `docs/PROJECT_PLAN.md`: goal/child/session coordination and project discovery,
-with epoch-bound Advisor writes, aggregate checks through every mutation entrypoint and
-backward-compatible storage. P2–P7 define the remaining dependency order and acceptance.
+Continue the remaining P1/P2 boundary in `docs/PROJECT_PLAN.md`: complete goal control and
+unmaterialized child-plan contracts, then dependency pinning/delayed execution-task creation and
+explicit environment readiness. Reuse the implemented epoch guards and migration path;
+`docs/COORDINATION.md` is the actual CLI contract. P3–P7 retain their dependency order.
 `docs/PRODUCT_FORM.md` is an overview only. The plan is documentation, not execution evidence.
 
 Real interruption/timeout validation and T5 evaluation (`docs/EVALUATION_PLAN.md`) still

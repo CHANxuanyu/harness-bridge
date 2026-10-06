@@ -18,9 +18,10 @@ from pathlib import Path
 from typing import Any
 
 from harness_bridge.errors import BridgeError
+from harness_bridge.migrations import COORDINATION_SCHEMA
 from harness_bridge.state import TaskState, check_transition
 
-SCHEMA_REVISION = 1
+SCHEMA_REVISION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -305,19 +306,64 @@ class Store:
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA synchronous = FULL")
         self._conn.execute("PRAGMA foreign_keys = ON")
-        self._conn.executescript(_SCHEMA)
+        try:
+            self._initialize_schema()
+        except BaseException:
+            self._conn.close()
+            raise
+
+    def _initialize_schema(self) -> None:
+        # Do not use executescript here: it commits before executing its statements.
         with self.transaction() as cur:
-            cur.execute(
-                "INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_revision', ?)",
-                (str(SCHEMA_REVISION),),
+            tables = {
+                r[0] for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            if not tables:
+                self._apply_schema(cur, _SCHEMA)
+                self._apply_schema(cur, COORDINATION_SCHEMA)
+                cur.execute(
+                    "INSERT INTO meta(key, value) VALUES ('schema_revision', ?)",
+                    (str(SCHEMA_REVISION),),
+                )
+                return
+            row = (
+                cur.execute("SELECT value FROM meta WHERE key='schema_revision'").fetchone()
+                if "meta" in tables
+                else None
             )
-            row = cur.execute("SELECT value FROM meta WHERE key='schema_revision'").fetchone()
-            if int(row["value"]) != SCHEMA_REVISION:
+            revision = row["value"] if row else "unknown"
+            if revision not in ("1", str(SCHEMA_REVISION)):
                 raise BridgeError(
                     "INTEGRITY_ERROR",
-                    f"state database schema revision {row['value']} is not supported "
+                    f"state database schema revision {revision} is not supported "
                     f"(expected {SCHEMA_REVISION})",
                 )
+            if revision == "1":
+                # Separate read connection can snapshot committed WAL data while this
+                # connection holds the migration writer lock; no other writer can race us.
+                backup_dir = self.db_path.parent / "backups"
+                backup_dir.mkdir(exist_ok=True)
+                backup_path = backup_dir / f"pre-v2-{uuid.uuid4().hex}.sqlite3"
+                source = sqlite3.connect(str(self.db_path))
+                try:
+                    destination = sqlite3.connect(str(backup_path))
+                    try:
+                        source.backup(destination)
+                    finally:
+                        destination.close()
+                finally:
+                    source.close()
+                backup_path.chmod(0o600)
+                self._apply_schema(cur, COORDINATION_SCHEMA)
+                cur.execute(
+                    "UPDATE meta SET value=? WHERE key='schema_revision'", (str(SCHEMA_REVISION),)
+                )
+
+    @staticmethod
+    def _apply_schema(cur: sqlite3.Cursor, schema: str) -> None:
+        for statement in schema.split(";"):
+            if statement.strip():
+                cur.execute(statement)
 
     def close(self) -> None:
         self._conn.close()

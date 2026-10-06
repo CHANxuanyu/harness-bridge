@@ -92,3 +92,15 @@ Each entry: decision — reason. Newest last.
     dependency snapshots are fixed, then create its immutable execution spec/worktree. All
     mutating entrypoints for goal-linked tasks must enforce active Advisor epoch and aggregate
     constraints; the old task CLI cannot be a bypass. Pending implementation in P1–P3.
+
+30. **P1 first slice:** link ready independent tasks to goals without changing TaskSpec 1.0;
+    defer unmaterialized child plans/DAGs and full goal control, explicitly retaining P1 in-progress.
+31. **Advisor fencing:** binding ID + epoch checks occur before preparation and in each linked
+    mutation transaction; accepted attempt observations may finish after takeover. Read/cancel
+    remain available; bindings are cooperation metadata, not same-user authentication.
+32. **Initial aggregate guard:** charge all reserved attempts except confirmed spawn failures;
+    serialize goal-linked execution across one project's goals in one state root, retaining
+    unknown-exit slots even after cancellation. Managed workers/time/turn accounting remain P3.
+33. **Storage revision 2:** additive coordination tables; take a SQLite backup including WAL
+    under the writer lock before migrating, commit schema/version atomically, refuse unknown
+    revisions and preserve historical standalone tasks without inventing goal events.

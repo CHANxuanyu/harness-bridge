@@ -14,8 +14,9 @@
 Harness Bridge aims to provide **one Advisor with one or more Executors across coding
 harnesses**: the Advisor inspects the repo, delegates tasks, reviews results and coordinates
 integration. The Bridge prepares each executor's workspace and records execution/evidence.
-The current implementation is the single-task building block for that relationship:
-delegate, collect evidence, request repairs and recover. It is a
+The current implementation includes the task execution/review core and a first goal/session
+coordination slice: child ownership, Advisor takeover, aggregate attempt limits and state-root
+project discovery. Dependencies, background workers and integrated delivery remain pending. It is a
 deterministic local CLI (`hbridge`). **It never calls a model API itself.** The supervisor is
 whoever runs the CLI (the Advisor, e.g. the user's existing Codex session); the executor is Claude Code
 (live, gated, local only) or a bundled fake executor (offline).
@@ -47,6 +48,11 @@ Skill with Codex and ZCode manifests. It requires a separately installed runtime
 checks and Codex marketplace discovery passed; installed-host activation and ZCode loading
 have not been verified. This does **not** add Codex/ZCode executor adapters, background
 workers, or a delivery/merge command. See [plugin validation](docs/PLUGIN_ALPHA_RESULT.md).
+
+The [goal coordination reference](docs/COORDINATION.md) documents the implemented
+`goal create/status/takeover`, `projects` and `create --goal` commands. Linked tasks require
+the current Advisor binding/epoch on mutations; original standalone tasks remain compatible.
+P1 is in progress. This does not yet provide the complete multi-executor product.
 
 ## Quick start (offline, no model, no network needed after install)
 

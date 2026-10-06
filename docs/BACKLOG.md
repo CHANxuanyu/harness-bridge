@@ -16,8 +16,11 @@ Evidence: `docs/VALIDATION_MATRIX.md`, `docs/LIVE_REPAIR_RESULT.md`, `docs/PLUGI
 
 ## Product work, in dependency order
 
-1. **P1 — Goal / session coordination.** Project/runtime/state discovery, Advisor binding and
-   takeover epoch, child ownership, shared mutation guards, versioned storage/migration.
+1. **P1 — Goal / session coordination (in progress).** First slice implemented: state-root
+   project registration, goal/child links, Advisor takeover fencing, initial aggregate counters,
+   one project slot and backed-up schema migration. Finish goal control/terminal semantics and
+   the unmaterialized child-plan contract before dependency execution; complete host discovery
+   wiring in P6. Current contract: `docs/COORDINATION.md`.
 2. **P2 — Execution context.** Dependency plans and delayed materialization of frozen execution
    specs, independent workspaces, explicit environment preparation, attributable feedback.
 3. **P3 — Managed worker and aggregate limits.** Bounded concurrent attempts, goal budgets,

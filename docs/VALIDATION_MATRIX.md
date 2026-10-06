@@ -66,7 +66,7 @@ NOT_RUN. No macOS result below is copied from Linux.
 | P03 | ZCode local plugin activation | prototype format only | official docs | — | NOT_RUN | manifest/catalog checks do not prove native loading |
 
 The initial-smoke rows above retain their historical scope: neither initial smoke exercised
-repair. T4-R supplies the later live repair evidence. Current affected checks: 12 offline
+repair. T4-R supplies the later live repair evidence. At the earlier repair consolidation: 12 offline
 parser/doctor tests passed (including 2 new repair-stream regressions), with lint/format/types
 clean; the previous full 192-test run was not repeated.
 
@@ -80,3 +80,24 @@ Planning P0 (2026-10-06): `docs/PROJECT_PLAN.md` consolidates the current baseli
 proposed V1 contracts. Documentation cross-references, milestone/acceptance IDs and
 requirement coverage were reviewed. No runtime or plugin behavior changed; no model calls
 or runtime tests were repeated. V01–V14 are planned acceptance criteria, not new PASS rows.
+
+
+## P1 first coordination slice — 2026-10-06
+
+`docs/COORDINATION.md` describes the implemented subset; P1 remains in progress.
+
+| Scope | Evidence | Result | Limit |
+|---|---|---|---|
+| Goal/child ownership and project discovery | `test_goal_two_children_and_takeover_preserve_workspaces`, `test_cli_goal_claim_and_project_discovery`, child repo/base/executor rejection | PASS, offline | Explicit state root; ready independent children only; no installed-host discovery or DAG |
+| Old Advisor and legacy entrypoints | 10 guard cases; dispatch-preparation and review-snapshot takeover races; idempotent takeover/create replay | PASS, offline | Logical same-user fencing; native session metadata is declarative |
+| Competing takeovers | two independent SQLite connections compete for one epoch; one accepted event | PASS, offline | No cross-host coordination |
+| Aggregate attempt/repair limits | two independent connections prepare dispatch concurrently; only one fake subprocess gets last attempt; zero repair ceiling; confirmed spawn-failure refund | PASS, offline | Initial counters and serial slot, not the full P3 worker/time/turn budget design |
+| Unknown exit and accepted work after takeover | real CLI crash in STARTING; cancel retains slot even for another goal; already accepted fake attempt completes after ownership change | PASS, offline | No live executor or host-teardown validation; unknown slot release not implemented |
+| Revision 1→2 upgrade | 5 tests: committed WAL snapshot, reopen, injected rollback/retry, unknown revision refusal, concurrent upgrade, backup failure (several assertions share a test) | PASS, offline | No production/user state directory migrated; backup is DB-only |
+| Shared-core regression | `scripts/check.sh`: ruff + format (78 files), strict mypy (24 source files), **223 passed**, 74.68s | PASS, macOS | Offline simulated/stub executors; no new real calls |
+
+New checks: 24 coordination cases and 5 migration cases (29 total). The full suite includes
+194 existing cases, including the two earlier repair-stream additions. It is the first new
+full-suite evidence since the historical 192-test report, justified by shared-core code changes.
+Do not generalize these rows to P1 completion, all V01–V14 criteria, background survival,
+two simultaneous executors, integrated goal acceptance, Codex execution or installed plugins.
