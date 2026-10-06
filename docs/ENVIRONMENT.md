@@ -28,7 +28,9 @@ environment variables are reported as present/absent only.
   URL). It was created by the user before this session and was empty (no refs) at start.
 - Repository visibility at session start: **public** (GitHub API `private: false`). The execution
   plan asks for private by default; changing visibility is the user's decision and was not done
-  by the agent. See STATUS.md for the push decision.
+  by the agent. Pushing was held for the user's decision (STATUS.md → Remote).
+- Fresh-clone verification: `git clone` of the local repo at `1cc850b`, `uv sync --frozen`,
+  `scripts/check.sh` → 169 passed; both demos passed.
 - Working branch: `claude/new-repo-plan-dn1eac` (assigned by the cloud platform).
 - `GITHUB_TOKEN` / `GH_TOKEN`: present (values not read or logged).
 

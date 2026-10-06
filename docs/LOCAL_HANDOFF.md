@@ -1,0 +1,100 @@
+# Local handoff
+
+Three separate things — none of them happens automatically:
+1. **continue developing** the bridge (offline; no model usage needed);
+2. **first real Claude CLI test** (T3; needs your explicit authorization of a small model use);
+3. **first real Codex/Astra → Claude loop** (T4; after T3).
+
+## Where the code is
+- Repository: `CHANxuanyu/harness-bridge` (was **public** at session start; the plan expected
+  private — check the visibility you want before pushing more).
+- Branch: `claude/new-repo-plan-dn1eac`
+- Last verified code revision: `1cc850b` (full offline suite + both demos re-run from a fresh
+  clone with `uv sync --frozen` on Linux / Python 3.11.17). Later commits on this branch are
+  documentation only unless `STATUS.md` says otherwise.
+- Push status and any bundle file: see `STATUS.md` → "Remote".
+
+## 1. Reproduce the offline results locally
+```bash
+gh repo clone CHANxuanyu/harness-bridge      # or: git clone harness-bridge.bundle harness-bridge
+cd harness-bridge
+git switch claude/new-repo-plan-dn1eac
+uv sync --frozen                             # uv fetches Python 3.11 if it is missing
+uv run ruff check .
+uv run mypy src/harness_bridge
+uv run pytest -m "not live"                  # expected: 169 passed
+uv run hbridge doctor --offline --json
+uv run hbridge demo --scenario success
+uv run hbridge demo --scenario bug-then-repair
+```
+
+### macOS differences to verify (cloud only ran Linux)
+- process groups / `killpg`, TERM→KILL escalation and zombie handling (no `/proc`; the code
+  falls back to `ps -A -o pid=,pgid=,stat=` and `ps -o lstart=`): run
+  `uv run pytest tests/unit/test_runner.py tests/integration/test_recovery.py -v`;
+- worktree creation under `~/.local/state/harness-bridge/worktrees`, path case sensitivity
+  (default APFS is case-insensitive; forbidden globs already match case-insensitively);
+- SQLite WAL locking with two concurrent `hbridge run` processes (`test_r05_*`);
+- install from a clean shell (`uv sync --frozen`).
+Record results in `docs/VALIDATION_MATRIX.md` with platform/version; do not copy Linux PASS.
+
+## 2. First real Claude CLI run (T3) — only after you explicitly authorize it
+Do this in a **small disposable fixture repo** (e.g. `uv run hbridge demo --scenario success
+--workdir /tmp/hb-fixture` creates one at `/tmp/hb-fixture/fixture-repo`; its task spec in
+`/tmp/hb-fixture/task.json` can be copied and changed to the claude-code executor).
+
+Checklist, all by you in your own terminal:
+1. `claude --version`; log in with the official subscription flow yourself (the bridge never
+   logs in, reads tokens or copies credentials).
+2. In that shell, make sure no `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+   `ANTHROPIC_BASE_URL`, Bedrock/Vertex/Foundry variables are set
+   (`uv run hbridge doctor --json` lists their *names*). Check extra-usage / auto top-up in
+   your account UI. If unknown, do not claim "no extra cost".
+3. Review hooks, MCP servers and permissions that `claude -p` will load: `~/.claude/settings.json`,
+   the fixture's `.claude/` (if any), managed settings. The adapter adds `--strict-mcp-config`
+   by default and never adds `--bare` (which would ignore subscription login).
+4. `--max-turns`: CLI 2.1.291 does not list it in `--help`. A non-inference check that may help:
+   `claude -p --max-turns 1 --output-format stream-json --verbose < /dev/null` — an
+   "unknown option" error means unsupported; a "no input/prompt" error suggests it parses. Treat
+   this as unverified until you see it. If supported, allow it explicitly (below).
+5. Create `~/.local/state/harness-bridge/config.toml` (or under your `--state-dir`):
+   ```toml
+   [live]
+   enabled = true
+   hooks_and_permissions_reviewed = true
+   allow_unlisted_flags = ["--max-turns"]   # only if step 4 confirmed it
+   ```
+6. TaskSpec for the first run: `"executor": {"kind": "claude-code", "requested_model":
+   "claude-opus-5-5", "allowed_tools": ["Read", "Edit", "Write", "Glob", "Grep",
+   "Bash(python3 -B -m unittest:*)"]}`, `"limits": {"max_attempts": 1, "max_repair_cycles": 0,
+   "wall_timeout_seconds": 600, "max_turns_per_attempt": 10}`.
+7. Run:
+   ```bash
+   uv run hbridge --json create --task task-live.json --idempotency-key live-smoke-1
+   uv run hbridge --json run TASK_ID --mode live --allow-model-usage
+   uv run hbridge --json artifacts TASK_ID
+   ```
+   Check: `observed_model` / `model_pin`, `session_id`, `executor_reported.api_key_source`
+   (should not indicate an API key), usage fields, exit/permission behaviour.
+8. Save `artifacts/<task>/<attempt>/executor.stdout.log` (already redacted) as a
+   `captured-live` fixture under `tests/fixtures/claude_stream_live/` with CLI version and date
+   in a new provenance file. Do not overwrite the synthetic set. Then update the parser if the
+   real schema differs and raise the matrix row to T3 only with that evidence.
+9. Separately, test one controlled repair with `--resume` (max_attempts 2) and record whether
+   the session id is preserved.
+
+Never: `--dangerously-skip-permissions`, disabling nested-session protection, unrestricted Bash,
+long multi-retry runs, or waiting for quota resets automatically.
+
+## 3. First Codex/Astra → bridge → Claude loop (T4)
+Paste `examples/supervisor-instructions.md` into the Codex session. Astra writes the TaskSpec,
+calls `hbridge`, reads `artifacts`, submits reviews. The bridge does not call OpenAI. If Codex's
+sandbox cannot start the local `claude` or cannot wait for a foreground `run`, run the same
+`hbridge` command yourself in another terminal and record it as **manual handoff** (not proof of
+an automatic Codex launch chain). Mark T4 only after one normal and one repair task, with model,
+CLI and configuration sources recorded.
+
+## Continuing development
+Read `AGENTS.md`, `STATUS.md`, `HANDOFF.md`, `docs/VALIDATION_MATRIX.md`; run
+`scripts/check.sh`; take the next bounded work package from `HANDOFF.md`. Cloud-session upload
+permission does not extend to future remote operations — push per your local decision.

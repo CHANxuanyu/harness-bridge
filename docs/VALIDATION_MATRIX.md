@@ -6,7 +6,8 @@ subprocess, real git, real SQLite, real verifier) · T3 live single harness (rea
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
 All results below were produced on: Linux 6.18 x86_64 container, Python 3.11.17, git 2.43.0,
-SQLite 3.45.1 (Claude Code Cloud session, 2026-10-06). macOS is the target platform but is
+SQLite 3.45.1 (Claude Code Cloud session, 2026-10-06), code revision `1cc850b`, also
+re-run from a fresh clone of that revision. macOS is the target platform but is
 **not yet verified**. "PASS" means the listed tests passed on that platform; it says nothing
 about real model behaviour.
 
