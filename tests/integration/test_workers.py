@@ -424,6 +424,7 @@ def test_v5_migration_preserves_prepared_task_and_current_advisor(fx: Fixture) -
     path = b.store.db_path
     b.close()
     with sqlite3.connect(path) as old:
+        old.execute("DROP TABLE cleanup_requests")
         old.execute("DROP TABLE deliveries")
         old.execute("DROP TABLE integration_reviews")
         old.execute("DROP TABLE integration_verifications")

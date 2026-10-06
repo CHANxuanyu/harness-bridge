@@ -363,6 +363,7 @@ def test_v7_migration_preserves_frozen_candidate_and_cli_can_verify_review(fx: F
     db = b.store.db_path
     b.close()
     with sqlite3.connect(db) as old:
+        old.execute("DROP TABLE cleanup_requests")
         old.execute("DROP TABLE deliveries")
         old.execute("DROP TABLE integration_reviews")
         old.execute("DROP TABLE integration_verifications")

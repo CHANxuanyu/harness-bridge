@@ -364,6 +364,7 @@ def test_v8_upgrade_keeps_approval_and_cli_delivers_without_new_checks(fx: Fixtu
     db = b.store.db_path
     b.close()
     with sqlite3.connect(db) as old:
+        old.execute("DROP TABLE cleanup_requests")
         old.execute("DROP TABLE deliveries")
         old.execute("UPDATE meta SET value='8' WHERE key='schema_revision'")
     b = fx.bridge()

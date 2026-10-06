@@ -384,3 +384,60 @@ process visibility because the macOS execution sandbox blocks `ps`; the existing
 is process-level, not an OS subprocess firewall. No real harness/model/auth/network call or remote
 push occurred. Conflict-repair task binding and ownership-safe cleanup remain P4 work; installed
 host lifecycle and real multi-harness acceptance remain later milestones. See `DELIVERY.md`.
+
+
+## P4 completion: integration repairs and conservative cleanup (2026-10-06, macOS)
+
+Relevant candidate/dependency/delivery baseline: **88 passed**, 235.64s, ruff/format/types clean
+(109 files, 34 source files before edits). No old live smoke or full suite was repeated solely for
+handoff. This milestone adds optional repair-plan/source binding and explicit integration resolution,
+shared repair-child budget accounting, strict cleanup previews/receipts and schema 10 migration.
+
+Development checks retained all refusal cases. First repair run: **2 passed, 1 failed**, 33.72s;
+a fixture incorrectly accessed Store.conn instead of its transaction API. Next: **14 passed,
+1 failed**, 78.83s; a fixture used Fixture.root instead of Fixture.base. Corrected those fixture
+accesses. The expanded run reached **22 passed, 1 failed**, 124.51s: cleanup preview used the
+materialization path helper, which raised on a symlink before it could report per-resource retention.
+Kept the refusal and moved it into cleanup's explicit ownership/eligibility observation.
+
+Further cleanup iterations: **14 passed, 1 failed**, 80.65s (a child CLI rejected a stale preview
+while retention checks were being tightened), then a single-case failure at 5.64s and a diagnostic
+single-case failure at 5.81s. The stricter Git metadata check identified ordinary Git-created
+ORIG_HEAD and an empty per-worktree refs directory. The corrected rule validates ORIG_HEAD ancestry
+against the preserved branch and permits only empty refs directories; nonempty worktree refs,
+unreachable prior commits and unfinished Git operations retain the workspace. No force flag,
+Git reset, evidence deletion, removed/skipped failure or expanded Executor permission was used.
+
+Coverage includes conflict → budgeted repair → new candidate → original total verification → new
+exact review → delivery → cleanup; failed total-check repair iterations; explicit negative review;
+later normal tasks after an exact repair prefix; source/candidate/approval immutability; required-input
+and frozen-check retention; stale Advisor/reopen/CLI and altered pin refusal; initial repair budget
+admission and accounting. Cleanup coverage includes preview/apply/replay, dirty/ignored/empty/hidden/
+staged/symlink/foreign/locked resources, clean committed tasks, source/evidence/ref preservation,
+known-exit and delivery guards, three actual CLI crash windows, changed previews and v9 receipt
+migration. Contract coverage preserves old canonical digests and rejects unbound or destructive inputs.
+
+Only isolated local Git/SQLite/checker/fake Executor processes run, with isolated HOME, auth
+sentinels and the existing Python-process network guard. Process tests require local process
+visibility because the macOS tool sandbox blocks ps; this is not an OS-wide subprocess firewall.
+No real harness/model/auth/network call, live configuration change or actual user-state migration.
+No remote push or visibility change. P4 means the local core; P5–P7 and installed-host/real
+multi-harness acceptance remain outstanding. See INTEGRATION_REPAIRS.md and CLEANUP.md.
+
+The next cleanup run reached **20 passed, 1 failed**, 119.05s: a clean committed task still had
+Git's COMMIT_EDITMSG. Cleanup now permits that file only when its bytes equal the current retained
+commit message, preserving different drafts. The three focused end-to-end cases then passed;
+a new normalization contract assertion failed (3 passed, 1 failed, 19.88s) because its expected
+raw input omitted long-existing model defaults. Corrected the expected legacy normalized TaskDefinition
+and VerificationCommand shape, not the production normalization rule. Final strict contracts plus
+v1–v9 migration/rollback checks: **27 passed**, 1.06s; lint/format clean (116 files), strict mypy clean
+(36 source files). All failures/refusals remain represented; the final shared regression follows.
+
+Final frozen-source shared-core `scripts/check.sh`: **574 passed / 0 failed / 0 skipped**, 769.51s
+(12m49s). Ruff and format clean (116 files); strict mypy clean (36 source files). All source/test
+files stayed unchanged during and after this run (hash consistency checked before commit).
+This adds **55 cases** relative to 519: **18** repair integration, **24** cleanup integration,
+**12** strict contracts and **1** migration revision. This is one full green run, not a union of
+partial runs. No further broad testing was needed after its success; only status/handoff/validation
+documentation was finalized. P4 local core is complete with the explicit conservative retention
+policy; installed host lifecycle and real cross-harness acceptance remain later gates.

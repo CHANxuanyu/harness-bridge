@@ -195,6 +195,19 @@ CREATE UNIQUE INDEX reserved_delivery_branch ON deliveries(project_id,branch)
     WHERE status<>'aborted';
 """
 
+CLEANUP_SCHEMA = """
+CREATE TABLE cleanup_requests (
+    cleanup_id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL REFERENCES goals(goal_id),
+    idempotency_key TEXT NOT NULL,
+    request_digest TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    record_digest TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(goal_id,idempotency_key)
+);
+"""
+
 MIGRATIONS = {
     2: COORDINATION_SCHEMA,
     3: PLANNING_SCHEMA,
@@ -204,4 +217,5 @@ MIGRATIONS = {
     7: INTEGRATION_SCHEMA,
     8: INTEGRATION_CHECK_SCHEMA,
     9: DELIVERY_SCHEMA,
+    10: CLEANUP_SCHEMA,
 }

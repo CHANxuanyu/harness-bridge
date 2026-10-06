@@ -141,4 +141,4 @@ migration checks. They use isolated Git repos, fake executors and real local set
 including injected process crashes. No real coding harness, authentication or billing path was
 invoked. A subsequent P3 slice adds background executor workers and task event cursors, while
 the subsequent P3 local core adds scoped concurrency and total executor-ceiling reservations.
-P4–P7 (integrated delivery, second executor and installed-host acceptance) remain unfinished; this is not final product acceptance.
+P4 local integration/delivery/retention is implemented; P5–P7 (second executor and installed-host acceptance) remain unfinished; this is not final product acceptance.

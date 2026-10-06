@@ -121,7 +121,8 @@ These guarantees cover cooperating bridge operations in one state root and Git's
 transaction. External Git commands/worktree selections are not serialized by SQLite. Status is an
 observation, not a permanent lock on user branches; the private refs are integrity/ownership evidence,
 not authentication against the same local user deliberately rewriting all records. All candidate,
-verification, private-ref and delivery evidence is retained; no cleanup is implemented here.
+verification, private-ref and delivery evidence is retained. [CLEANUP.md](CLEANUP.md) now documents
+explicit post-delivery cleanup of selected clean owned worktrees while retaining this evidence.
 
 ## Persistence and acceptance
 

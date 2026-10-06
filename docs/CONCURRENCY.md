@@ -130,5 +130,5 @@ This closes the local worker/concurrency/ceiling implementation, subject to the 
 checks. It does not validate every desktop host's process cleanup, logout/sleep/reboot survival,
 real two-harness concurrent execution or vendor turn-limit enforcement. Host-specific acceptance
 and installed entrypoints remain in the project plan; no real-model authorization is renewed.
-Integration and exact local-branch delivery (P4), second executor (P5), installed entrypoints (P6)
+Integration and exact local-branch delivery (P4) now exist. Second executor (P5), installed entrypoints (P6)
 and complete real-product acceptance (P7) remain outstanding.

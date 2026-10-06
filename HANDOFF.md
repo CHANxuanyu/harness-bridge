@@ -1,10 +1,28 @@
 # Handoff
 
-## Current state (2026-10-06, P4 candidate, review and local delivery implemented)
+## Current state (2026-10-06, P4 local core complete)
+
+- **Final P4 completion checks:** full `scripts/check.sh` → **574 passed / 0 failed / 0 skipped**,
+  769.51s (12m49s); ruff/format clean (116 files), strict mypy clean (36 source files).
+  Adds 55 cases relative to 519: 18 repair integration, 24 cleanup integration, 12 strict contracts
+  and one migration revision. Source/tests were unchanged throughout the final shared-core run;
+  no further broad rerun was needed. Evidence is offline T0/T1/T2, not real multi-harness acceptance.
+  No new model/auth/network call, actual user-state migration or remote publication.
+
+- **Completion slice:** optional ChildPlan `integration_repair` atomically binds a retained source
+  integration baseline. Optional IntegrationSpec `repair_child_id` resolves that exact input prefix;
+  original required inputs and checks remain. `integration_repairs.py` reuses existing task execution,
+  ownership/preparation/worker controls; shared dispatch accounting counts repair children.
+- **Cleanup:** `cleanup.py` adds read-only preview, explicit policy/fingerprint-bound apply and durable
+  receipts; current Advisor + completed matching delivery + known inactive project are required.
+  Raw file/mode/registration/metadata checks precede non-force Git worktree removal. No source edits,
+  branch deletion, evidence GC or cache deletion. Unconfirmed removals are retained and not relaunched.
+- **Schema 10:** `cleanup_requests` only; old canonical digests remain compatible. Isolated fixture
+  upgrades/backups only. Full validation details and corrected failures are in `VALIDATION_MATRIX.md`.
 
 - **Canonical plan:** `docs/PROJECT_PLAN.md` consolidates the product, session relationships,
   contracts, V1 scope defaults, P0–P7 milestones and V01–V14 acceptance. P0 is complete;
-  P1/P2/P3 local cores are implemented and offline-validated; P4–P7 and installed-host lifecycle acceptance are pending. Advisor is
+  P1–P4 local cores are implemented; P5–P7 and installed-host lifecycle acceptance are pending. Advisor is
   explicitly an existing agent session; Bridge does not create its own planning model. `PRODUCT_FORM.md` is now a short summary, and the
   original cloud execution plan is clearly historical, not renewed authorization.
 - Key plan choices: dependencies are fixed before child execution-task/worktree materialization;
@@ -12,7 +30,7 @@
   unknown exits retain reservations/slots; V1 targets managed workers and exact local-branch
   delivery with integrated acceptance. Epoch and initial aggregate guards now exist;
   managed workers, scoped parallel admission and frozen integration candidates now exist;
-  integrated checking/review and explicit local delivery now exist; conflict repair/cleanup remain.
+  integrated checking/review, explicit local delivery, budgeted conflict repair and conservative cleanup now exist.
 
 - **New P3 slice:** `jobs.py` + internal `worker.py` add idempotent `run --background`,
   atomic attempt/reservation/single claim and detached process sessions. Both foreground and
@@ -75,7 +93,7 @@
   Checks use isolated environment and bounded logs, but remain trusted scripts, not OS sandboxed.
   Changed candidates/evidence, unknown exits and stale Advisor epochs cannot yield current
   approval. `APPROVED` alone is not goal delivery; explicit exact branch delivery is implemented
-  below. Conflict-repair binding and ownership-safe retention/cleanup remain P4 work.
+  below. Conflict-repair binding and retention/cleanup were completed by the subsequent slice above.
 - **P4 exact local delivery:** `goal deliver` freezes an intent and creates a new named local
   branch at the exact approved commit/tree, paired atomically with a private publication proof.
   READY_TO_DELIVER requires the latest frozen integration's current exact approval and an idle
@@ -89,7 +107,7 @@
   attention rather than reopening the goal. See `docs/DELIVERY.md`.
 - **Revision 9:** additive delivery records and goal/branch reservations, backed-up atomic v1–v8
   migrations retaining old approved integration digests. All workspaces and evidence remain;
-  conflict-repair child binding and cleanup still pending. No real user/live state migrated.
+  conflict-repair child binding and cleanup were pending at that milestone, now completed above. No real user/live state migrated.
 - **Current delivery checks:** full `scripts/check.sh` ran all 519 cases: **518 passed, 1 failed**
   (509.18s). The sole failure expected the retired `delivery: not_implemented` string. Updated
   that assertion to require structured `not_ready` plus ACTIVE (child approvals still cannot
@@ -259,14 +277,13 @@
 
 ## Next bounded work
 
-1. Continue P4 from `docs/PROJECT_PLAN.md`: budgeted conflict-repair child binding and safe
-   retention/cleanup. Fixed candidates/partial versions, total checks/exact review and exact local
-   delivery now exist (`docs/INTEGRATION.md`, `docs/INTEGRATION_CHECKS.md`, `docs/DELIVERY.md`).
-   Reuse retained snapshots and current Advisor/worker/budget
-   contracts; do not infer goal delivery from child success. Worker lifecycle and scoped 1/2-slot
-   admission are implemented (`WORKERS.md`, `CONCURRENCY.md`). No real call/push authorization is
-   renewed. Unknown preparation/attempt exits continue holding slots/resources; audited release
-   must require evidence, not an acknowledgement. Persistent services/cross-state locks unsupported.
+1. P4 local core is complete. Next bounded implementation is P5's Codex executor adapter with
+   stub/strict-contract evidence first (`docs/PROJECT_PLAN.md`). Do not add live use before new
+   bounded authorization. P4 references: `INTEGRATION_REPAIRS.md` and `CLEANUP.md` complete the
+   existing candidate/check/review/delivery chain. Preserve all required inputs and original total
+   checks when selecting a repair; every execution of a repair child counts against goal repairs.
+   Cleanup intentionally retains dirty approved worktrees, caches, all refs/evidence and unknown
+   lifetimes; never force cleanup, delete evidence or infer exit from an acknowledgement.
 2. Interruption / timeout behaviour with a live executor (SIGTERM to the runner, wall
    timeout) — offline tests exist; live behaviour does not.
 3. T5 evaluation per `docs/EVALUATION_PLAN.md` — the only place where "cheaper/better than

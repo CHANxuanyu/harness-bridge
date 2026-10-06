@@ -30,6 +30,7 @@ IntegrationSpec 1.0 rejects unknown fields:
 |---|---|
 | `schema_version` | `"1.0"` |
 | `task_ids` | 1–100 distinct task IDs, in explicit integration order |
+| `repair_child_id` | Optional approved integration-repair child; see [INTEGRATION_REPAIRS.md](INTEGRATION_REPAIRS.md) |
 | `verification` | 1–50 existing VerificationCommand objects; unique IDs, at least one required check |
 
 The verification commands, cwd, timeout, required flag and trust labels are frozen now for the later
@@ -81,8 +82,8 @@ edits by this point; they are preserved and are not included in the fixed-base c
 On conflict, the record identifies the incoming task and the preceding applied task IDs, and pins
 the last clean composition under `/partial`. No conflict-filled candidate worktree is created. All
 original approved trees remain unchanged. The retained partial commit, original input bases and
-approved commits are the evidence for a future explicit integration-repair child. Automatic conflict
-resolution, a repair-child baseline binding and final conflict supersession are not yet implemented.
+approved commits are the evidence for an explicit budgeted integration-repair child, now implemented
+in [INTEGRATION_REPAIRS.md](INTEGRATION_REPAIRS.md). No automatic model dispatch occurs.
 The latest materialized conflict makes the goal need attention; it does not spend model budget.
 
 Worktrees share Git configuration/objects and are not an OS sandbox. Existing Git filter and ignored
@@ -114,8 +115,8 @@ or overwritten. An incomplete Git operation may require inspection; retry does n
 After CANDIDATE or CONFLICT has been recorded, materialization replay never recomposes or recreates
 a missing worktree. It returns the existing receipt and an observed workspace status (`unchanged`,
 `changed`, `foreign` or `missing`). Status also checks the frozen inputs and private refs. A changed
-candidate is never promoted to approval or delivery by replay. No cleanup command is added: retain
-all workspaces, private refs and evidence until the later ownership-safe retention/cleanup stage.
+candidate is never promoted to approval or delivery by replay. Explicit post-delivery cleanup is
+now implemented in [CLEANUP.md](CLEANUP.md), retaining all refs/evidence and non-clean workspaces.
 
 ## Persistence and acceptance boundary
 
@@ -130,5 +131,6 @@ changed/foreign/symlink workspaces, actual process exit after Git materializatio
 real simulated-worker history. No real harness, auth or model usage was invoked.
 
 Total-goal checks and exact integration review are now implemented in [INTEGRATION_CHECKS.md](INTEGRATION_CHECKS.md).
-Exact local branch delivery is implemented in [DELIVERY.md](DELIVERY.md). Next P4 work:
-materialize budgeted conflict-repair children and implement ownership-safe retention/cleanup. Installed-host and real multi-harness acceptance remain later gates.
+Exact local branch delivery is implemented in [DELIVERY.md](DELIVERY.md). Budgeted repair children
+and conservative cleanup complete the local P4 core; installed-host and real multi-harness acceptance
+remain later gates. See [INTEGRATION_REPAIRS.md](INTEGRATION_REPAIRS.md) and [CLEANUP.md](CLEANUP.md).

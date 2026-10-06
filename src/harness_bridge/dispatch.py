@@ -58,8 +58,18 @@ def budget_usage(cur: sqlite3.Cursor, goal_id: str) -> BudgetUsage:
         limits = specs[row["task_id"]].limits
         wall += Decimal(str(limits.wall_timeout_seconds))
         turns += limits.max_turns_per_attempt
-        repairs += row["kind"] == "repair"
+        repairs += row["kind"] == "repair" or integration_repair_task(cur, row["task_id"])
     return BudgetUsage(len(rows), repairs, wall, turns)
+
+
+def integration_repair_task(cur: sqlite3.Cursor, task_id: str) -> bool:
+    row = cur.execute("SELECT * FROM child_plans WHERE task_id=?", (task_id,)).fetchone()
+    if row is None:
+        return False
+    spec = json.loads(row["spec_json"])
+    if sha256_digest(spec) != row["spec_digest"]:
+        raise BridgeError("INTEGRITY_ERROR", "repair child plan digest changed")
+    return bool(spec.get("integration_repair"))
 
 
 def literal_root(pattern: str) -> tuple[str, ...]:

@@ -226,3 +226,8 @@ Each entry: decision — reason. Newest last.
 71. **P4 delivery persistence:** schema 9 adds intents/receipts and goal/branch uniqueness, with
     backed-up v1–v8 upgrade/rollback. Local delivery spends no Executor budget; conflict-repair
     binding and cleanup remain. No real user-state migration or model/remote publication calls.
+
+72. **P4 repair provenance:** a single repair plan binds the latest conflict/failed candidate and all pending inputs in an immutable child baseline; normal task dispatch counts every repair-child execution against both goal attempt and repair ceilings.
+73. **P4 explicit resolution:** new integrations select an approved repair child resolving an exact ordered input prefix, preserve all required inputs and original total checks, and create new ancestry/verification/review rather than mutating old approvals.
+74. **P4 retention:** explicit post-delivery cleanup only non-force-removes selected clean owned worktrees after raw file/registration/epoch/activity checks; all branches, pins, evidence, caches and working edits remain, including approved uncommitted changes.
+75. **P4 cleanup interruptions:** persist per-resource launch markers; uncertain removal is never reissued, and new keys cannot bypass an unresolved resource. Schema 10 adds backed-up atomic v1–v9 cleanup receipts without rewriting existing digests or migrating actual user state.

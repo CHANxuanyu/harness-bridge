@@ -21,7 +21,7 @@ from harness_bridge.errors import BridgeError
 from harness_bridge.migrations import MIGRATIONS
 from harness_bridge.state import TaskState, check_transition
 
-SCHEMA_REVISION = 9
+SCHEMA_REVISION = 10
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);

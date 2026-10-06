@@ -128,7 +128,7 @@ setup commands and resource claims are now implemented; see [PREPARATION.md](PRE
 | Fail requested, stopping fully confirmed | `FAILED` |
 
 `dispatch_paused` is independent of the projected state. All children approved still does
-not imply integrated success: `READY_TO_DELIVER` and `DELIVERED` require P4's future integration
+not imply integrated success: `READY_TO_DELIVER` and `DELIVERED` require P4's implemented integration
 and exact-delivery gates. No command can set those states directly.
 
 ## Storage and evidence
@@ -145,3 +145,7 @@ records. See the execution context and preparation references.
 Evidence: `tests/integration/test_goal_planning.py`, the prior coordination suite, and
 `tests/unit/test_migrations.py`. These are offline simulated executors with real subprocesses,
 Git workspaces and SQLite transactions; no new native-harness or host-teardown claim is made.
+
+Optional integration-repair plans use a frozen source candidate/partial baseline instead of DAG
+dependencies; see [INTEGRATION_REPAIRS.md](INTEGRATION_REPAIRS.md). They reuse ordinary task dispatch
+and count every execution against the shared goal attempt and repair ceilings.

@@ -44,12 +44,14 @@ from harness_bridge.artifacts import (
     store_capture,
 )
 from harness_bridge.baselines import approved, retain_approval, validate_pin
+from harness_bridge.cleanup import Cleanup
 from harness_bridge.config import BridgeConfig, evaluate_live_gate, load_config
 from harness_bridge.coordination import AdvisorClaim, Coordinator
 from harness_bridge.delivery import Deliveries
 from harness_bridge.errors import BridgeError
 from harness_bridge.integration import Integrations
 from harness_bridge.integration_checks import IntegrationChecks
+from harness_bridge.integration_repairs import IntegrationRepairs
 from harness_bridge.jobs import WorkerJobs
 from harness_bridge.models import (
     TaskSpec,
@@ -129,7 +131,10 @@ class Bridge:
         self.jobs = WorkerJobs(self)
         self.integrations = Integrations(self)
         self.integration_checks = IntegrationChecks(self)
+        self.integration_repairs = IntegrationRepairs(self)
+        self.plans.repair_baseline = self.integration_repairs.baseline
         self.deliveries = Deliveries(self)
+        self.cleanup = Cleanup(self)
         self.coordination.delivery_view = self.deliveries.goal_view
         self.advisor_claim = advisor_claim
         self.python = python_executable or sys.executable
@@ -347,6 +352,7 @@ class Bridge:
                 task_id=task_id,
                 details=readiness,
             )
+        repair = self.integration_repairs.context(cur, child["child_id"])
         return {
             "goal_id": goal["goal_id"],
             "objective": json.loads(goal["spec_json"])["objective"],
@@ -355,6 +361,7 @@ class Bridge:
             "base_sha": task.base_sha,
             "worktree": task.worktree_path,
             "dependencies": baseline["inputs"] if baseline else [],
+            **({"integration_repair": repair} if repair is not None else {}),
             "environment": data,
             "preparation_id": readiness.get("preparation", {})
             .get("latest", {})

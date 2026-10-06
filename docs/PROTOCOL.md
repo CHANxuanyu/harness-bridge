@@ -3,7 +3,8 @@
 The task contracts below remain in force for foreground and background attempts.
 For durable background dispatch keys, worker handles, incremental task events and crash semantics,
 see [WORKERS.md](WORKERS.md). Frozen integration candidates are described in
-[INTEGRATION.md](INTEGRATION.md); they do not yet expose final verification/review/delivery. Project parallelism and aggregate ceiling accounting are in
+[INTEGRATION.md](INTEGRATION.md), total verification/review in [INTEGRATION_CHECKS.md](INTEGRATION_CHECKS.md),
+and exact local delivery in [DELIVERY.md](DELIVERY.md). Project parallelism and aggregate ceiling accounting are in
 [CONCURRENCY.md](CONCURRENCY.md). Goal coordination and current Advisor checks apply to either mode.
 
 
@@ -145,3 +146,7 @@ allow_unlisted_flags = []               # exact flag names you confirmed locally
 Local goal delivery is specified in [DELIVERY.md](DELIVERY.md): `goal deliver`, `delivery status`,
 `delivery abort`, and structured `goal status.delivery`. `DELIVERY_CONFLICT` uses exit status 3
 with `retryable: false`; callers must inspect refs/receipts rather than automatically overwrite.
+
+P4 completion adds optional ChildPlan `integration_repair` and IntegrationSpec `repair_child_id`
+([INTEGRATION_REPAIRS.md](INTEGRATION_REPAIRS.md)), plus `goal cleanup GOAL` preview, explicit
+`--file/--idempotency-key` apply and `cleanup ID` receipts ([CLEANUP.md](CLEANUP.md)).

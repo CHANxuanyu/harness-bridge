@@ -19,7 +19,8 @@ coordination core: child plans/ownership, Advisor takeover, goal pause/cancel, a
 limits, fixed approved dependency baselines, workspace readiness checks and state-root project
 discovery. Explicit bounded environment setup, managed background attempts and up to two scoped
 concurrent executors with goal ceiling reservations are supported, along with integrated acceptance,
-exact Advisor review and explicit local branch delivery. Conflict repair and cleanup remain pending. It is a
+exact Advisor review, budgeted integration repair children, explicit local branch delivery and
+conservative worktree cleanup. It is a
 deterministic local CLI (`hbridge`). **It never calls a model API itself.** The supervisor is
 whoever runs the CLI (the Advisor, e.g. the user's existing Codex session); the executor is Claude Code
 (live, gated, local only) or a bundled fake executor (offline).
@@ -66,8 +67,11 @@ is implemented. The [integration reference](docs/INTEGRATION.md) covers the firs
 frozen approved inputs, owned candidate workspaces and durable conflict/crash handling. Total-goal
 checks and exact Advisor approval are covered by the [verification/review reference](docs/INTEGRATION_CHECKS.md).
 The [local delivery reference](docs/DELIVERY.md) covers exact branch delivery, crash recovery and
-READY_TO_DELIVER/DELIVERED projections. Conflict-repair binding, cleanup, actual installed-host
-lifecycle acceptance and later milestones remain incomplete; approval alone does not deliver a goal.
+READY_TO_DELIVER/DELIVERED projections. [Integration repairs](docs/INTEGRATION_REPAIRS.md) bind
+conflict/failed-check children to retained inputs and existing budgets; [cleanup](docs/CLEANUP.md)
+removes only selected clean owned worktrees after delivery, retaining refs/evidence and user changes.
+P4 local core is implemented; installed-host lifecycle and P5–P7 remain incomplete. Approval alone
+does not deliver a goal.
 
 ## Quick start (offline, no model, no network needed after install)
 

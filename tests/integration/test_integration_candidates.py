@@ -433,6 +433,7 @@ def test_v6_upgrade_preserves_worker_history_and_goal_budget(fx: Fixture) -> Non
     path = b.store.db_path
     b.close()
     with sqlite3.connect(path) as old:
+        old.execute("DROP TABLE cleanup_requests")
         old.execute("DROP TABLE deliveries")
         old.execute("DROP TABLE integration_reviews")
         old.execute("DROP TABLE integration_verifications")

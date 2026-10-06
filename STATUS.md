@@ -1,13 +1,34 @@
 # Status
 
-_Last updated 2026-10-06 (P4 exact local delivery implemented; conflict repair/cleanup pending)._
+_Last updated 2026-10-06 (P4 local core complete; 574 offline cases passed)._
 
 ## Current state
+
+- **Final P4 completion checks:** full `scripts/check.sh` → **574 passed / 0 failed / 0 skipped**,
+  769.51s (12m49s); ruff/format clean (116 files), strict mypy clean (36 source files).
+  Adds 55 cases relative to 519: 18 repair integration, 24 cleanup integration, 12 strict contracts
+  and one migration revision. Source/tests were unchanged throughout the final shared-core run;
+  no further broad rerun was needed. Evidence is offline T0/T1/T2, not real multi-harness acceptance.
+  No new model/auth/network call, actual user-state migration or remote publication.
+
+- **P4 local core completion:** budgeted integration-repair children bind the last clean partial
+  or failed candidate, original/pending inputs and acceptance evidence. New integrations explicitly
+  select the approved resolution, retain all required inputs and preserve the original total checks;
+  each candidate needs fresh exact verification/review before delivery. Initial and later repair-child
+  executions consume shared goal attempt/repair/time/turn ceilings. See `docs/INTEGRATION_REPAIRS.md`.
+- **Explicit retention/cleanup:** `goal cleanup` previews owned resources and frozen fingerprints;
+  apply requires the current Advisor, matching completed delivery and idle known-exit project.
+  Only clean, raw-byte/mode-matching owned worktrees are non-force removed. User changes, ignored
+  extras, unfinished Git operations, unknown removals, all refs/branches/evidence and caches remain.
+  Durable per-resource outcomes make replay preserve recreated directories. See `docs/CLEANUP.md`.
+- **Revision 10:** additive cleanup receipts with atomic backed-up v1–v9 migrations, preserving
+  prior plan/integration/approval/delivery digests. Only isolated test databases were upgraded.
+  P4 completion means the local offline core; real cross-harness and installed-host acceptance remain P5–P7.
 
 - **Planning milestone P0 complete:** `docs/PROJECT_PLAN.md` is the canonical product and
   engineering plan. Advisor is the user's existing agent session; Executor is a bound child
   agent session. P1/P2/P3 local cores are implemented and offline-validated.
-  Installed-host lifecycle acceptance and P4–P7 remain incomplete. Scope defaults,
+  Installed-host lifecycle acceptance and P5–P7 remain incomplete. Scope defaults,
   dependency materialization, budget/ownership checks, worker lifecycle, integration and
   local-branch delivery are specified with V01–V14 acceptance criteria.
 - **P1 first vertical slice implemented:** project/goal registration, independent child links,
@@ -29,7 +50,7 @@ _Last updated 2026-10-06 (P4 exact local delivery implemented; conflict repair/c
   same-key replay never re-executes, unknown exits retain slots/resources. No persistent service
   hosting or cross-state coordination is claimed. Schema revision 5 upgrades v1–v4 atomically
   with backup, preserving old plan digests. See `docs/PREPARATION.md`.
-  P4 conflict repair/cleanup and P6 installed entrypoints remain future work.
+  P4 repair/cleanup is completed below; P6 installed entrypoints remain future work.
 - **P3 first worker slice:** `run --background --idempotency-key` atomically reserves an
   attempt/worker handle before a detached process claims it once. It reuses the foreground
   executor/verification path; current Advisor, preparation, project-slot and aggregate-attempt
@@ -66,7 +87,7 @@ _Last updated 2026-10-06 (P4 exact local delivery implemented; conflict repair/c
   Checks use isolated environment and bounded logs, but remain trusted scripts, not OS sandboxed.
   Changed candidates/evidence, unknown exits and stale Advisor epochs cannot yield current
   approval. `APPROVED` alone is not goal delivery; explicit exact branch delivery is implemented
-  below. Conflict-repair binding and ownership-safe retention/cleanup remain P4 work.
+  below. Conflict-repair binding and retention/cleanup were completed in the subsequent slice below.
 - **P4 exact local delivery:** `goal deliver` freezes an intent and creates a new named local
   branch at the exact approved commit/tree, paired atomically with a private publication proof.
   READY_TO_DELIVER requires the latest frozen integration's current exact approval and an idle
@@ -80,8 +101,8 @@ _Last updated 2026-10-06 (P4 exact local delivery implemented; conflict repair/c
   attention rather than reopening the goal. See `docs/DELIVERY.md`.
 - **Revision 9:** additive delivery records and goal/branch reservations, backed-up atomic v1–v8
   migrations retaining old approved integration digests. All workspaces and evidence remain;
-  conflict-repair child binding and cleanup still pending. No real user/live state migrated.
-- **Current delivery checks:** full `scripts/check.sh` ran all 519 cases: **518 passed, 1 failed**
+  conflict-repair child binding and cleanup were still pending at that milestone. No real user/live state migrated.
+- **Prior delivery checks:** full `scripts/check.sh` ran all 519 cases: **518 passed, 1 failed**
   (509.18s). The sole failure expected the retired `delivery: not_implemented` string. Updated
   that assertion to require structured `not_ready` plus ACTIVE (child approvals still cannot
   imply delivery); its exact-test `scripts/check.sh` then **passed**, 5.92s. Runtime code was

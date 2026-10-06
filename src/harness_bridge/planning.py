@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from graphlib import CycleError, TopologicalSorter
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from harness_bridge.baselines import approved, compose, read_record, validate_pin
 from harness_bridge.coordination import AdvisorClaim, Contract, check_key, parse_contract
@@ -21,12 +22,24 @@ if TYPE_CHECKING:
     from harness_bridge.coordination import Coordinator
 
 
+class IntegrationRepair(Contract):
+    integration_id: str = Field(min_length=1, max_length=128)
+    reason: str = Field(min_length=1, max_length=4000)
+
+
 class ChildPlan(Contract):
     key: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
     task: TaskDefinition
     depends_on: list[str] = Field(default_factory=list, max_length=100)
     environment: EnvironmentRequirements | None = None
     preparation: PreparationSpec | None = None
+    integration_repair: IntegrationRepair | None = None
+
+    @model_validator(mode="after")
+    def repair_dependencies(self) -> ChildPlan:
+        if self.integration_repair and self.depends_on:
+            raise ValueError("integration repair uses its frozen integration baseline")
+        return self
 
     def normalized(self) -> dict[str, Any]:
         value = self.model_dump(mode="json")
@@ -34,6 +47,8 @@ class ChildPlan(Contract):
             value.pop("environment")  # Preserve pre-v4 immutable plan/replay digests.
         if self.preparation is None:
             value.pop("preparation")
+        if self.integration_repair is None:
+            value.pop("integration_repair")
         return value
 
     @field_validator("depends_on")
@@ -53,6 +68,9 @@ class ChildPlans:
     def __init__(self, coordination: Coordinator) -> None:
         self.coordination = coordination
         self.store = coordination.store
+        self.repair_baseline: (
+            Callable[[sqlite3.Cursor, sqlite3.Row, str, ChildPlan], dict[str, Any]] | None
+        ) = None
 
     def get(self, cur: sqlite3.Cursor, child_id: str) -> sqlite3.Row:
         row = cur.execute("SELECT * FROM child_plans WHERE child_id=?", (child_id,)).fetchone()
@@ -110,6 +128,14 @@ class ChildPlans:
                 raise BridgeError(
                     "INVALID_INPUT", "child dependency graph contains a cycle"
                 ) from None
+            repair_baselines = {}
+            for plan in batch.children:
+                if plan.integration_repair:
+                    if len(batch.children) != 1 or self.repair_baseline is None:
+                        raise BridgeError("INVALID_INPUT", "submit an integration repair alone")
+                    repair_baselines[ids[plan.key]] = self.repair_baseline(
+                        cur, goal, ids[plan.key], plan
+                    )
             for plan in batch.children:
                 normalized = plan.normalized()
                 cur.execute(
@@ -123,6 +149,11 @@ class ChildPlans:
                         None,
                         self.store.clock(),
                     ),
+                )
+            for child_id, baseline in repair_baselines.items():
+                cur.execute(
+                    "INSERT INTO child_baselines VALUES (?,?,?)",
+                    (child_id, canonical_json(baseline), sha256_digest(baseline)),
                 )
             for plan in batch.children:
                 for dependency in plan.depends_on:
@@ -195,6 +226,12 @@ class ChildPlans:
             or record["plan_digest"] != self.get(cur, child_id)["spec_digest"]
         ):
             raise BridgeError("INTEGRITY_ERROR", "baseline is not bound to this child plan")
+        spec = json.loads(self.get(cur, child_id)["spec_json"])
+        if spec.get("integration_repair") and (
+            record is None
+            or record.get("integration_repair", {}).get("request") != spec["integration_repair"]
+        ):
+            raise BridgeError("INTEGRITY_ERROR", "integration repair baseline binding missing")
         return record
 
     def freeze_baseline(

@@ -27,7 +27,7 @@ through garbage collection; they are not delivery branches or a merge into the u
 Git and SQLite cannot commit atomically. If a crash rolls back SQLite after creating a ref,
 the ref may remain without a claimed approval. A retry can adopt only the exact deterministic
 commit; a mismatching existing ref is never overwritten. Cleanup of retained/unclaimed refs
-is deferred to P4. Keep the repository objects/refs and state directory together when backing up.
+is conservatively implemented in [CLEANUP.md](CLEANUP.md). Keep the repository objects/refs and state directory together when backing up.
 
 An older `SUCCEEDED` task may have no retained snapshot. It remains approved, but dependent
 children report `WAITING_BASELINE / approved_dependency_snapshot_missing`. To retain it:
@@ -125,6 +125,6 @@ claims complete the local P2 core; see [PREPARATION.md](PREPARATION.md) for its 
 scope and remaining lifecycle limits. [WORKERS.md](WORKERS.md) covers the subsequent P3
 background-attempt slice; [CONCURRENCY.md](CONCURRENCY.md) adds explicit two-slot admission and
 aggregate ceiling reservations. [INTEGRATION.md](INTEGRATION.md) covers P4 frozen candidate
-workspaces; total-goal verification/review/delivery, a second live executor adapter and
-installed host entrypoints remain later work. This is not a
-finished V1 product.
+workspaces; P4 now also covers total verification/review/delivery, budgeted integration repairs and
+conservative cleanup. A second live executor adapter and installed host entrypoints remain later work.
+This is not a finished V1 product.

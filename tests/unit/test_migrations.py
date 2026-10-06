@@ -12,6 +12,7 @@ import pytest
 from harness_bridge.errors import BridgeError
 from harness_bridge.migrations import (
     BASELINE_SCHEMA,
+    CLEANUP_SCHEMA,
     COORDINATION_SCHEMA,
     DELIVERY_SCHEMA,
     INTEGRATION_CHECK_SCHEMA,
@@ -127,32 +128,34 @@ def test_backup_failure_aborts_upgrade(tmp_path: Path, monkeypatch: pytest.Monke
     old.close()
 
 
-@pytest.mark.parametrize("revision", ["1", "2", "3", "4", "5", "6", "7", "8"])
+@pytest.mark.parametrize("revision", ["1", "2", "3", "4", "5", "6", "7", "8", "9"])
 def test_failure_at_last_migration_rolls_back_all_stages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, revision: str
 ) -> None:
     path = tmp_path / "state.sqlite3"
     old = legacy(path, revision)
-    if revision in ("2", "3", "4", "5", "6", "7", "8"):
+    if revision in ("2", "3", "4", "5", "6", "7", "8", "9"):
         old.executescript(COORDINATION_SCHEMA)
-    if revision in ("3", "4", "5", "6", "7", "8"):
+    if revision in ("3", "4", "5", "6", "7", "8", "9"):
         old.executescript(PLANNING_SCHEMA)
-    if revision in ("4", "5", "6", "7", "8"):
+    if revision in ("4", "5", "6", "7", "8", "9"):
         old.executescript(BASELINE_SCHEMA)
-    if revision in ("5", "6", "7", "8"):
+    if revision in ("5", "6", "7", "8", "9"):
         old.executescript(PREPARATION_SCHEMA)
-    if revision in ("6", "7", "8"):
+    if revision in ("6", "7", "8", "9"):
         old.executescript(WORKER_SCHEMA)
-    if revision in ("7", "8"):
+    if revision in ("7", "8", "9"):
         old.executescript(INTEGRATION_SCHEMA)
-    if revision == "8":
+    if revision in ("8", "9"):
         old.executescript(INTEGRATION_CHECK_SCHEMA)
+    if revision == "9":
+        old.executescript(DELIVERY_SCHEMA)
     before = list(old.iterdump())
     original = Store._apply_schema
 
     def fail(cur: sqlite3.Cursor, schema: str) -> None:
         original(cur, schema)
-        if schema == DELIVERY_SCHEMA:
+        if schema == CLEANUP_SCHEMA:
             raise RuntimeError("interrupted after new tables, before version commit")
 
     monkeypatch.setattr(Store, "_apply_schema", staticmethod(fail))
@@ -172,6 +175,7 @@ def test_upgrade_v2_preserves_goal_binding_and_real_task(fx: Fixture) -> None:
     # Reconstruct the actual v2 schema while retaining its project/goal/task rows.
     old = sqlite3.connect(path, isolation_level=None)
     for table in (
+        "cleanup_requests",
         "deliveries",
         "integration_reviews",
         "integration_verifications",

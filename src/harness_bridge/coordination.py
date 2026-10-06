@@ -19,7 +19,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from harness_bridge import __version__
 from harness_bridge.baselines import read_record
 from harness_bridge.config import load_config
-from harness_bridge.dispatch import budget_usage, frozen_spec, guard_slot, slot_status
+from harness_bridge.dispatch import (
+    budget_usage,
+    frozen_spec,
+    guard_slot,
+    integration_repair_task,
+    slot_status,
+)
 from harness_bridge.errors import BridgeError
 from harness_bridge.models import RepoSpec, canonical_json, sha256_digest
 from harness_bridge.state import EXECUTING, TERMINAL, TaskState
@@ -449,7 +455,8 @@ class Coordinator:
         spec: GoalSpec = parse_contract(GoalSpec, json.loads(goal["spec_json"]))
         usage = budget_usage(cur, goal["goal_id"])
         if usage.attempts >= spec.max_attempts or (
-            kind == "repair" and usage.repairs >= spec.max_repairs
+            (kind == "repair" or integration_repair_task(cur, task_id))
+            and usage.repairs >= spec.max_repairs
         ):
             raise BridgeError(
                 "BUDGET_EXHAUSTED", "goal attempt or repair budget exhausted", task_id=task_id

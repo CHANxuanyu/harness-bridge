@@ -91,6 +91,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--integration", required=True)
     p.add_argument("--branch", required=True)
     p.add_argument("--idempotency-key", required=True)
+    p = goal_sub.add_parser(
+        "cleanup", parents=[common], help="preview or apply conservative worktree cleanup"
+    )
+    p.add_argument("goal_id")
+    p.add_argument("--file", help="apply a reviewed CleanupRequest; omitted means preview only")
+    p.add_argument("--idempotency-key")
+    p = sub.add_parser("cleanup", parents=[common], help="inspect a cleanup receipt")
+    p.add_argument("cleanup_id")
     p = sub.add_parser("delivery", parents=[common], help="inspect or abort a local delivery")
     delivery_sub = p.add_subparsers(dest="delivery_command", required=True)
     for operation in ("status", "abort"):
@@ -248,6 +256,18 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
     try:
         if cmd == "projects":
             return bridge.coordination.projects()
+        if cmd == "cleanup":
+            return bridge.cleanup.status(args.cleanup_id)
+        if cmd == "goal" and args.goal_command == "cleanup":
+            if bool(args.file) != bool(args.idempotency_key):
+                raise BridgeError(
+                    "INVALID_INPUT", "cleanup apply requires both --file and --idempotency-key"
+                )
+            return (
+                bridge.cleanup.apply(args.goal_id, _read_json_file(args.file), args.idempotency_key)
+                if args.file
+                else bridge.cleanup.preview(args.goal_id)
+            )
         if cmd == "delivery":
             if args.delivery_command == "abort":
                 return bridge.deliveries.abort(args.delivery_id, args.reason)

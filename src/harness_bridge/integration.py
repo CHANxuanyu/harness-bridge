@@ -46,6 +46,13 @@ class IntegrationSpec(Contract):
     schema_version: Literal["1.0"]
     task_ids: list[str] = Field(min_length=1, max_length=100)
     verification: list[VerificationCommand] = Field(min_length=1, max_length=50)
+    repair_child_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+    def normalized(self) -> dict[str, Any]:
+        data = self.model_dump(mode="json")
+        if self.repair_child_id is None:
+            data.pop("repair_child_id")
+        return data
 
     @field_validator("task_ids")
     @classmethod
@@ -86,6 +93,7 @@ class Integrations:
             or [i["task_id"] for i in record["inputs"]] != spec["task_ids"]
             or record["verification"] != spec["verification"]
             or record["verifier_digest"] != sha256_digest(spec["verification"])
+            or record.get("repair", {}).get("child_id") != spec.get("repair_child_id")
         ):
             raise BridgeError("INTEGRITY_ERROR", "integration request/record binding changed")
         return record
@@ -169,12 +177,22 @@ class Integrations:
             raise BridgeError(
                 "STATE_CONFLICT", "integration inputs no longer match the frozen goal"
             )
+        repair = self.bridge.integration_repairs.resolution(
+            cur,
+            goal,
+            record.get("repair", {}).get("child_id"),
+            inputs,
+            membership,
+            record["verification"],
+        )
+        if repair != record.get("repair"):
+            raise BridgeError("INTEGRITY_ERROR", "integration repair resolution binding changed")
         if record["result"] is not None:
             validate_pin(goal["repo_path"], record["result"])
 
     def freeze(self, goal_id: str, data: Any, key: str) -> dict[str, Any]:
         check_key(key)
-        spec = parse_contract(IntegrationSpec, data).model_dump(mode="json")
+        spec = parse_contract(IntegrationSpec, data).normalized()
         digest = sha256_digest(spec)
         with self.store.transaction() as cur:
             goal = self.bridge.coordination.guard_goal(cur, goal_id, self.bridge.advisor_claim)
@@ -188,6 +206,9 @@ class Integrations:
                     raise BridgeError("IDEMPOTENCY_CONFLICT", "integration key already used")
                 return {**self.get(cur, replay["integration_id"]), "replayed": True}
             inputs, membership = self._inputs(cur, goal, spec["task_ids"])
+            repair = self.bridge.integration_repairs.resolution(
+                cur, goal, spec.get("repair_child_id"), inputs, membership, spec["verification"]
+            )
             record = {
                 "integration_id": new_id("integration"),
                 "goal_id": goal_id,
@@ -204,8 +225,10 @@ class Integrations:
                 "result": None,
                 "workspace": None,
                 "verification_status": "not_run",
-                "delivery": "not_implemented",
+                "delivery": "not_ready",
             }
+            if repair:
+                record["repair"] = repair
             cur.execute(
                 "INSERT INTO integrations VALUES (?,?,?,?,?,?,?,?)",
                 (
@@ -233,7 +256,19 @@ class Integrations:
         current = record["base_sha"]
         conflict = None
         completed = []
-        for incoming in record["inputs"]:
+        remaining = record["inputs"]
+        if repair := record.get("repair"):
+            position = repair["position"]
+            resolved = remaining[: position + 1]
+            current = commit_tree(
+                repo,
+                resolved[-1]["tree_sha"],
+                [current, *(i["commit_sha"] for i in resolved)],
+                f"Harness Bridge integration resolution {sha256_digest(repair)}",
+            )
+            completed = [i["task_id"] for i in resolved]
+            remaining = remaining[position + 1 :]
+        for incoming in remaining:
             tree = merge_tree(repo, current, incoming["commit_sha"])
             if tree is None:
                 conflict = incoming["task_id"]
