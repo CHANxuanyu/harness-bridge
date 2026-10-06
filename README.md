@@ -2,11 +2,13 @@
 
 > **Experimental prototype (V0.1, milestone M3/M4).** Not production-ready.
 >
-> **Validation level:** offline only — unit tests and offline integration tests with a
-> *simulated* executor (a real subprocess, real git repositories, real verifier commands, real
-> SQLite). **No real Claude Code or Codex run has ever gone through this bridge** (T3/T4:
-> NOT_RUN). The Claude Code adapter exists and is contract-tested against synthetic /
-> docs-derived streams and a stub binary only.
+> **Validation level:** the offline suite is green on Linux and macOS (unit + offline
+> integration tests with a *simulated* executor: real subprocess, real git, real verifier,
+> real SQLite). Two bounded **real** smoke runs went through the bridge on 2026-10-06 and
+> passed: T3 (operator → bridge → Claude Code) and a T4 single-run (Codex session → bridge →
+> Claude Code → review → SUCCEEDED). Live repair/`--resume`, interruption recovery and the
+> comparative evaluation (T5) are **not** verified; see `docs/VALIDATION_MATRIX.md`,
+> `docs/LOCAL_SMOKE_HANDOFF.md` and `docs/T4_SMOKE_RESULT.md`.
 
 Harness Bridge turns "delegate a coding task to another agent harness, collect evidence,
 request repairs, recover from interruptions" into a recorded, testable local protocol. It is a
@@ -21,7 +23,7 @@ supervisor (Codex/Astra or a person)
 Harness Bridge  ── SQLite state + events ── bridge-owned git worktree
    │                                         independent verifier commands
    ▼                                         evidence manifest + approval gate
-executor: fake subprocess (offline)  |  claude -p … (live, explicitly gated, NOT_RUN)
+executor: fake subprocess (offline)  |  claude -p … (live, explicitly gated; smoke-verified)
 ```
 
 ## Quick start (offline, no model, no network needed after install)

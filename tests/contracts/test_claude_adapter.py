@@ -1,8 +1,9 @@
 """Offline contract tests for the Claude Code adapter.
 
 Evidence: synthetic / docs-derived fixtures (see tests/fixtures/claude_stream/PROVENANCE.json)
-and captured ``claude --help`` text of CLI 2.1.291. These tests do NOT show that a real Claude
-Code run produces the same stream; that is T3 and remains NOT_RUN.
+and captured ``claude --help`` text of CLI 2.1.291. Real captured streams from the bounded
+live smokes of 2026-10-06 are covered separately, as redacted regression samples, in
+tests/contracts/test_claude_adapter_live.py (see tests/fixtures/claude_stream_live/).
 """
 
 from __future__ import annotations

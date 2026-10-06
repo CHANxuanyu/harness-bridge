@@ -1,0 +1,27 @@
+{"type": "system", "subtype": "init", "session_id": "00000000-0000-4000-8000-000000000002", "model": "claude-opus-5-5", "permissionMode": "acceptEdits", "apiKeySource": "none", "claude_code_version": "2.1.291", "mcp_servers": []}
+{"type": "assistant", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "rate_limit_event", "session_id": "00000000-0000-4000-8000-000000000002"}
+{"type": "user", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "user", "model": null}}
+{"type": "system", "subtype": "thinking_tokens", "session_id": "00000000-0000-4000-8000-000000000002", "estimated_tokens": 50, "estimated_tokens_delta": 50}
+{"type": "system", "subtype": "thinking_tokens", "session_id": "00000000-0000-4000-8000-000000000002", "estimated_tokens": 210, "estimated_tokens_delta": 160}
+{"type": "assistant", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "assistant", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "system", "subtype": "permission_denied", "session_id": "00000000-0000-4000-8000-000000000002", "tool_name": "Bash", "decision_reason_type": "other", "tool_use_id": "toolu_t4_redacted_1"}
+{"type": "user", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "user", "model": null}}
+{"type": "rate_limit_event", "session_id": "00000000-0000-4000-8000-000000000002"}
+{"type": "assistant", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "assistant", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "user", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "user", "model": null}}
+{"type": "assistant", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "user", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "user", "model": null}}
+{"type": "assistant", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "user", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "user", "model": null}}
+{"type": "assistant", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "user", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "user", "model": null}}
+{"type": "assistant", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "system", "subtype": "permission_denied", "session_id": "00000000-0000-4000-8000-000000000002", "tool_name": "Bash", "decision_reason_type": "other", "tool_use_id": "toolu_t4_redacted_2"}
+{"type": "user", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "user", "model": null}}
+{"type": "assistant", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "assistant", "session_id": "00000000-0000-4000-8000-000000000002", "message": {"role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "rate_limit_event", "session_id": "00000000-0000-4000-8000-000000000002"}
+{"type": "result", "subtype": "success", "session_id": "00000000-0000-4000-8000-000000000002", "is_error": false, "num_turns": 8, "duration_ms": 22076, "total_cost_usd": 0.19822239999999997, "result": "[REDACTED EXECUTOR FINAL SUMMARY]", "usage": {"input_tokens": 10, "cache_creation_input_tokens": 15804, "cache_read_input_tokens": 104352, "output_tokens": 2544}, "modelUsage": {"claude-opus-5-5": {"inputTokens": 10, "outputTokens": 2544, "cacheReadInputTokens": 104352, "cacheCreationInputTokens": 15804, "costUSD": 0.19822239999999997}}, "permission_denials": [{"tool_name": "Bash", "tool_use_id": "toolu_t4_redacted_1"}, {"tool_name": "Bash", "tool_use_id": "toolu_t4_redacted_2"}]}

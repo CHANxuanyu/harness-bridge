@@ -1,0 +1,49 @@
+{
+  "_about": "Provenance of the captured-live-redacted Claude Code stream fixtures. These are field-level redactions of executor stream logs that the bridge itself captured during the two authorized live smokes on 2026-10-06 (T3: GLM operator -> bridge -> Claude Code; T4: Codex/Astra supervisor -> bridge -> Claude Code). No model was invoked to produce this file. The raw logs stay in state directories OUTSIDE this repository and are not published; only these redacted samples are.",
+  "provenance": "captured-live-redacted",
+  "captured": "2026-10-06",
+  "cli_version_captured": "2.1.291",
+  "executor_model": "claude-opus-5-5",
+  "related_run_records": [
+    "docs/LOCAL_SMOKE_HANDOFF.md (T3 execution record)",
+    "docs/T4_SMOKE_RESULT.md (T4 single-run smoke)"
+  ],
+  "integrity": {
+    "events_added_or_removed": "none; line count and event order of each original log are preserved exactly (T3: 25 events, T4: 27 events)",
+    "numbers": "usage token counts, num_turns, duration_ms, total_cost_usd, thinking_tokens estimates are the real captured values",
+    "stream_shape": "real; in particular the unrecognized rate_limit_event types are the actual events the CLI emitted"
+  },
+  "redaction": {
+    "session_id": "replaced, consistently within each file, with the fictional ids below; the mapping to real session ids is not recorded anywhere in this repository",
+    "tool_use_id": "replaced with per-file fictional ids; the pairing between system permission_denied events and result.permission_denials entries is preserved by mapping each original id to one fictional id",
+    "values_replaced": {
+      "result.result": "[REDACTED EXECUTOR FINAL SUMMARY] (the executor's final summary prose; original text not published)",
+      "fictitious_session_ids": {
+        "t3_live_smoke_redacted.jsonl": "00000000-0000-4000-8000-000000000001",
+        "t4_live_smoke_redacted.jsonl": "00000000-0000-4000-8000-000000000002"
+      },
+      "fictitious_tool_use_id_prefix": "toolu_t3_redacted_N / toolu_t4_redacted_N"
+    },
+    "fields_removed": {
+      "system:init": ["uuid", "cwd", "agents", "capabilities", "analytics_disabled", "fast_mode_disabled_reason", "fast_mode_state", "memory_paths", "messaging_socket_path", "output_style", "per_turn_effort_active", "plugins", "product_feedback_disabled", "skills", "slash_commands", "terminal_slash_commands", "tools (26 real entries; tools_count therefore not asserted from live samples)", "view_mode"],
+      "assistant": ["message.content and all other message fields (conversation and tool-call content), wire_tool_inputs (real tool inputs), wire_ingest_context, request_id, uuid, timestamp, parent_tool_use_id, thinking_duration_ms; message kept as {role, model}"],
+      "user": ["message content, tool_use_result (real command output), tool_result_meta, uuid, timestamp, parent_tool_use_id; message kept as {role}"],
+      "system:thinking_tokens": ["uuid"],
+      "system:permission_denied": ["message (real command text with local paths), decision_reason, uuid"],
+      "rate_limit_event": ["rate_limit_info (rate-window state incl. absolute reset timestamps)"],
+      "result": ["uuid", "api_error_status", "duration_api_ms", "first_content_frame_ms", "ttft_ms", "ttft_stream_ms", "time_to_request_ms", "stop_reason", "terminal_reason", "queued_turn_count", "result_index", "subagent_stats", "fast_mode_disabled_reason", "fast_mode_state", "usage.detail fields (output_tokens_details, server_tool_use, service_tier, cache_creation, inference_geo, iterations, speed, fallback_credit)", "modelUsage per-model fields reduced to token counts and costUSD", "permission_denials[].tool_input (the denied real command text)"]
+    },
+    "values_kept_real": ["model names", "permissionMode", "apiKeySource", "claude_code_version", "mcp_servers (empty)", "num_turns", "duration_ms", "total_cost_usd", "usage token counts", "permission_denied tool_name and decision_reason_type", "event types and order"]
+  },
+  "files": {
+    "t3_live_smoke_redacted.jsonl": {
+      "run": "T3 live smoke, task B (bridge-run slugify task, 1 attempt, 7 turns, verification passed, SUCCEEDED)",
+      "operator_harness": "GLM (ZCode local session)"
+    },
+    "t4_live_smoke_redacted.jsonl": {
+      "run": "T4 single-run smoke, one bridge-run slugify task (1 attempt, 8 turns, verification passed, SUCCEEDED)",
+      "operator_harness": "Codex local session (model gpt-6-astra, per local turn-context metadata)"
+    }
+  },
+  "evidence_boundary": "Parser results on these files show the real captured stream shape parses and classifies as the runs did. They do not prove turn-limit enforcement, resume behaviour, or anything about other tasks or versions."
+}

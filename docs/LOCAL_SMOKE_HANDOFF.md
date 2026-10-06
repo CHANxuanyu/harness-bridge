@@ -127,3 +127,8 @@ installation (parse-level evidence — not an enforcement proof).** Consumed rea
 - Live gate in the test state dir: `enabled = false` after the run (diagnostics kept).
 - Matrix rows updated: T3 (initial smoke PASS), `--max-turns` (accepted locally, parse-level),
   A02 (real stream parsed once). Not marked: resume, repair, T4.
+- Later the same day: the T4 single-run smoke passed too (`docs/T4_SMOKE_RESULT.md`), and
+  field-level redacted stream logs from **both** runs were frozen as offline parser
+  regression samples in `tests/fixtures/claude_stream_live/` (provenance in that directory;
+  identifiers replaced with fictional ones, no conversation or thinking content, raw logs
+  never committed).
