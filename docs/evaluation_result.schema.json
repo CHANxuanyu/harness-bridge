@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Harness Bridge evaluation run record (format only; no runs recorded yet)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "task_ref", "arm", "base_sha", "outcome", "versions", "usage", "timing"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run_id": {"type": "string"},
+    "task_ref": {"type": "string", "description": "identifier of the benchmark task definition"},
+    "arm": {"enum": ["A_executor_only", "B_executor_self_review", "C_supervisor_bridge_executor"]},
+    "base_sha": {"type": "string"},
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completed", "independent_acceptance"],
+      "properties": {
+        "completed": {"type": "boolean"},
+        "independent_acceptance": {"enum": ["passed", "failed", "not_run"]},
+        "repair_cycles": {"type": ["integer", "null"]},
+        "human_interventions": {"type": ["integer", "null"]},
+        "notes": {"type": "string"}
+      }
+    },
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "executor_model": {"type": ["string", "null"]},
+        "executor_model_source": {"type": "string"},
+        "supervisor_model": {"type": ["string", "null"]},
+        "supervisor_model_source": {"type": "string"},
+        "claude_cli": {"type": ["string", "null"]},
+        "codex_cli": {"type": ["string", "null"]},
+        "bridge": {"type": ["string", "null"]}
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "executor_input_tokens": {"type": ["integer", "null"]},
+        "executor_output_tokens": {"type": ["integer", "null"]},
+        "executor_cache_read_tokens": {"type": ["integer", "null"]},
+        "executor_cost_estimate_usd_reported": {"type": ["number", "null"]},
+        "supervisor_usage_observed": {"type": ["string", "null"]},
+        "model_calls_total": {"type": ["integer", "null"]},
+        "artifact_bytes_read_by_supervisor": {"type": ["integer", "null"]},
+        "comparable": {"type": "boolean", "description": "false if resets/other usage make plan percentages non-comparable"}
+      }
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wall_seconds": {"type": ["number", "null"]},
+        "bridge_overhead_seconds": {"type": ["number", "null"]},
+        "verification_seconds": {"type": ["number", "null"]}
+      }
+    }
+  }
+}

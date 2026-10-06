@@ -1,0 +1,25 @@
+# Offline checks only. Manual trigger by design: no push/PR triggers, no secrets, no model
+# services, read-only token. Running it consumes the account's Actions minutes.
+name: offline-checks
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install (frozen lockfile)
+        run: uv sync --frozen
+      - name: Lint, types, tests (live tests excluded)
+        run: scripts/check.sh -q
+      - name: Offline demos
+        run: |
+          uv run --frozen hbridge demo --scenario success --cleanup
+          uv run --frozen hbridge demo --scenario bug-then-repair --cleanup
