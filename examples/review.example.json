@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "task_id": "TASK_ID_FROM_ARTIFACTS_REVIEW_TEMPLATE",
+  "attempt_id": "ATTEMPT_ID_FROM_ARTIFACTS_REVIEW_TEMPLATE",
+  "task_version": 1,
+  "snapshot_digest": "SNAPSHOT_DIGEST_FROM_ARTIFACTS_REVIEW_TEMPLATE",
+  "verdict": "changes_requested",
+  "findings": [
+    {
+      "severity": "blocking",
+      "location": "tagnorm/normalize.py",
+      "requirement": "Preserve the order of first occurrences",
+      "explanation": "The current implementation sorts the output",
+      "requested_change": "Preserve the order of first occurrences"
+    }
+  ],
+  "reviewer_label": "external-supervisor",
+  "idempotency_key": "UNIQUE_REVIEW_KEY"
+}

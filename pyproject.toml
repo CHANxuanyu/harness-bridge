@@ -36,6 +36,7 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
 ignore = [
+    "SIM105",  # explicit try/except/pass is clearer in process-cleanup code
     "S101",  # assert is fine in tests and internal invariants
     "S603",  # subprocess without shell is the intended pattern; argv is validated upstream
     "S607",  # git is resolved from PATH on purpose
