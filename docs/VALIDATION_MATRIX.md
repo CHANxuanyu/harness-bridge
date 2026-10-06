@@ -296,3 +296,49 @@ This milestone adds **43 cases** relative to 395: 42 integration/contract cases 
 historical migration rollback case. The final run includes the corrected CLI/hidden-edit fixtures,
 fresh-index ownership protection, existing cancellation/recovery/parallel-worker tests and all
 historical migration preservation checks. No additional source edits followed this passing run.
+
+
+## P4 integrated verification and Advisor review (2026-10-06, macOS)
+
+Pre-edit bounded baseline on candidate composition/conflict/replay/ownership/crash: **5 passed,
+49 deselected**, 16.79s, lint/format/mypy clean. The `-k` selection also filtered the supplied
+migration file; this was not a separate migration baseline. After schema 8 changes, migration
+checks passed **13/13**, 0.61s.
+
+New integration acceptance run: **18 passed, 3 failed**, 79.73s. Failures were fixture assumptions:
+a SUCCEEDED child refuses reverify before admission (so it could not test the new hold), and the
+store exposes transactions rather than a public `.conn` property. Corrected to use a same-project
+second goal's AWAITING_REVIEW child and the transaction interface. Expanded run: **24 passed,
+1 failed**, 108.45s. Heavy Git-backed status polling repeatedly held the SQLite writer lock and
+starved the checker reservation; the fixture now polls the small durable launch record. Both
+cancel variants then passed **2/2**, 7.75s. No tests were removed/skipped or timeout policies weakened.
+
+Coverage adds 25 offline integration cases and 10 contract cases, plus the v7 migration rollback
+case: total-goal interface mismatch despite approved children, exact successful review/replay,
+required failure/timeout/missing executable/cwd/mutation, optional warnings versus unknown exits,
+log/manifest/input/candidate tampering, takeover/new-run staleness, duplicate verify/review races,
+actual crashes at reservation/before spawn/after spawn/after confirmed checkpoint, same-project
+exclusion, cancellation/goal terminal gating, migration/CLI, evidence storage failure, environment
+isolation/capture bounds and the separate ten-run check ceiling. Direct harness/credential argv is
+refused before freeze and rechecked at launch for older frozen records. Strict decision contracts
+reject missing bindings, inconsistent findings and unknown fields.
+
+The final admission/strict-contract subset passed **11/11**, 2.96s (24 deselected), with
+lint/format/types clean. No tests invoke a real harness.
+
+The implementation uses real local Git/SQLite/finite checker processes and simulated Executors.
+Process lifecycle checks run with local process visibility because the macOS execution sandbox
+blocks `ps`; the existing isolated HOME/auth sentinels and network guard remain enabled. No real
+harness, provider auth, network request, live config or user-state migration was used. The test
+network guard covers the Python test process, not an OS-wide subprocess firewall.
+
+Final shared-core `scripts/check.sh` → **474 passed / 0 failed / 0 skipped**, 374.63s.
+Ruff and format are clean (105 files), strict mypy clean (33 source files). This adds **36 cases**
+relative to the prior 438: 25 integration, 10 strict contracts and one migration revision. Full
+regression was required by shared verifier, admission, termination and store changes; no live
+smoke was repeated. Source/tests were unchanged during that final run.
+
+P4 remains partial: conflict-repair task binding, exact delivery branch and ownership-safe cleanup
+are unimplemented. `APPROVED` is integration history plus a
+separate current-validity check, not `READY_TO_DELIVER`/`DELIVERED`. Installed-host and live
+multi-harness lifecycle acceptance are still later work. See `INTEGRATION_CHECKS.md`.

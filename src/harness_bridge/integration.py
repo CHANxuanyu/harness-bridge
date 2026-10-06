@@ -28,6 +28,7 @@ from harness_bridge.coordination import Contract, check_key, parse_contract
 from harness_bridge.dispatch import frozen_spec
 from harness_bridge.errors import BridgeError
 from harness_bridge.models import VerificationCommand, canonical_json, sha256_digest
+from harness_bridge.preparation import SetupCommand
 from harness_bridge.store import new_id
 from harness_bridge.workspace import (
     create_worktree,
@@ -55,6 +56,8 @@ class IntegrationSpec(Contract):
 
     @model_validator(mode="after")
     def checks(self) -> IntegrationSpec:
+        for command in self.verification:
+            SetupCommand.no_inference_command(command.argv)
         ids = [c.id for c in self.verification]
         if len(set(ids)) != len(ids) or not any(c.required for c in self.verification):
             raise ValueError("verification IDs must be unique with at least one required check")
@@ -337,6 +340,12 @@ class Integrations:
                 "workspace_status": "unchanged" if record["workspace"] else None,
             }
 
+    def save(self, cur: sqlite3.Cursor, record: dict[str, Any]) -> None:
+        cur.execute(
+            "UPDATE integrations SET record_json=?,record_digest=? WHERE integration_id=?",
+            (canonical_json(record), sha256_digest(record), record["integration_id"]),
+        )
+
     def status(self, integration_id: str) -> dict[str, Any]:
         with self.store.transaction() as cur:
             record = self.get(cur, integration_id)
@@ -346,4 +355,9 @@ class Integrations:
             except BridgeError as exc:
                 validity = {"valid": False, "error": {"code": exc.code, "message": exc.message}}
             workspace = self._workspace_check(record) if record["workspace"] else None
-            return {**record, "inputs_status": validity, "workspace_status": workspace}
+            return {
+                **record,
+                "inputs_status": validity,
+                "workspace_status": workspace,
+                **self.bridge.integration_checks.summary(cur, record),
+            }

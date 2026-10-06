@@ -288,6 +288,8 @@ def test_upgrade_v3_preserves_materialized_plan_and_batch_replay(fx: Fixture) ->
     path = b.store.db_path
     b.close()
     with sqlite3.connect(path) as old:
+        old.execute("DROP TABLE integration_reviews")
+        old.execute("DROP TABLE integration_verifications")
         old.execute("DROP TABLE integrations")
         old.execute("DROP TABLE worker_jobs")
         old.execute("DROP TABLE preparation_resources")

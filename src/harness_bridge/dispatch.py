@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from harness_bridge.baselines import read_record
 from harness_bridge.errors import BridgeError
 from harness_bridge.models import TaskSpec, parse_task_spec, sha256_digest
 
@@ -98,6 +99,39 @@ def occupied_tasks(cur: sqlite3.Cursor, project_id: str) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def integration_holds(cur: sqlite3.Cursor, project_id: str) -> list[dict[str, Any]]:
+    rows = cur.execute(
+        "SELECT v.* FROM integration_verifications v JOIN integrations i USING(integration_id) "
+        "JOIN goals g USING(goal_id) WHERE g.project_id=? "
+        "AND (v.status='running' OR COALESCE(v.exit_confirmed,0)<>1)",
+        (project_id,),
+    ).fetchall()
+    holds = []
+    for row in rows:
+        record = read_record(row)
+        if (
+            record is None
+            or record["status"] != row["status"]
+            or record["exit_confirmed"] != row["exit_confirmed"]
+        ):
+            raise BridgeError("INTEGRITY_ERROR", "integration process reservation changed")
+        holds.append(record)
+    return holds
+
+
+def guard_integration_hold(cur: sqlite3.Cursor, project_id: str) -> None:
+    holds = integration_holds(cur, project_id)
+    if holds:
+        raise BridgeError(
+            "STATE_CONFLICT",
+            "integration verification holds the project exclusively",
+            details={
+                "reason": "integration_verification_exclusive",
+                "run_ids": [r["run_id"] for r in holds],
+            },
+        )
+
+
 def guard_slot(
     cur: sqlite3.Cursor,
     project_id: str,
@@ -106,6 +140,7 @@ def guard_slot(
     *,
     preparation: bool = False,
 ) -> None:
+    guard_integration_hold(cur, project_id)
     active = occupied_tasks(cur, project_id)
     reason = None
     conflicts: list[str] = []
@@ -141,11 +176,14 @@ def guard_slot(
 
 
 def slot_status(cur: sqlite3.Cursor, project_id: str, max_parallel: int) -> dict[str, Any]:
+    holds = integration_holds(cur, project_id)
     active = occupied_tasks(cur, project_id)
     return {
         "max_parallel": max_parallel,
         "occupied_tasks": [r["task_id"] for r in active],
-        "occupied_slots": sum(r["slots_held"] for r in active),
+        "occupied_slots": sum(r["slots_held"] for r in active) + len(holds),
+        "integration_runs": [r["run_id"] for r in holds],
+        "integration_exclusive": bool(holds),
         "slots_by_task": {r["task_id"]: r["slots_held"] for r in active},
         "preparation_exclusive": any(r["preparation_held"] for r in active),
         "scope_policy": "disjoint_literal_roots",

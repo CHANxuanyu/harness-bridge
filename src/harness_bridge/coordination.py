@@ -318,6 +318,12 @@ class Coordinator:
                 (goal_id, int(paused), termination, request.reason),
             )
             if termination:
+                cur.execute(
+                    "UPDATE integration_verifications SET cancel_requested=1 "
+                    "WHERE status='running' AND integration_id IN "
+                    "(SELECT integration_id FROM integrations WHERE goal_id=?)",
+                    (goal_id,),
+                )
                 for row in cur.execute(
                     "SELECT task_id FROM goal_tasks WHERE goal_id=?", (goal_id,)
                 ).fetchall():
@@ -517,7 +523,10 @@ class Coordinator:
                 )
             ]
             attention = attention or bool(
-                integrations and integrations[-1] and integrations[-1]["phase"] == "CONFLICT"
+                integrations
+                and integrations[-1]
+                and integrations[-1]["phase"]
+                in ("CONFLICT", "AWAITING_REVIEW", "INTERRUPTED", "CHANGES_REQUESTED", "BLOCKED")
             )
             attention = attention or any(
                 p["state"] in ("WAITING_BASELINE", "BASELINE_CONFLICT") for p in plans
@@ -529,6 +538,15 @@ class Coordinator:
                 if attention
                 else "ACTIVE"
             )
+            pending_integrations = [
+                r[0]
+                for r in cur.execute(
+                    "SELECT v.run_id FROM integration_verifications v "
+                    "JOIN integrations i USING(integration_id) WHERE i.goal_id=? "
+                    "AND (v.status='running' OR COALESCE(v.exit_confirmed,0)<>1)",
+                    (goal_id,),
+                )
+            ]
             pending_stop = []
             if controls["termination"]:
                 pending_stop = [
@@ -546,7 +564,7 @@ class Coordinator:
                 ]
                 state = (
                     "NEEDS_ATTENTION"
-                    if pending_stop
+                    if pending_stop or pending_integrations
                     else "CANCELLED"
                     if controls["termination"] == "cancel"
                     else "FAILED"
@@ -568,6 +586,9 @@ class Coordinator:
                 "dispatch_paused": bool(controls["paused"]),
                 "termination_requested": controls["termination"],
                 "pending_stop_tasks": pending_stop,
+                "pending_stop_integrations": pending_integrations
+                if controls["termination"]
+                else [],
                 "delivery": "not_implemented",
                 "integrations": integrations,
                 "base_sha": goal["base_sha"],

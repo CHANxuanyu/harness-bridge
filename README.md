@@ -63,8 +63,9 @@ implemented. The [background worker reference](docs/WORKERS.md) covers durable d
 covers explicit two-slot admission, scope checks and goal wall-time/turn reservations. P3 local core
 is implemented. The [integration reference](docs/INTEGRATION.md) covers the first P4 slice:
 frozen approved inputs, owned candidate workspaces and durable conflict/crash handling. Total-goal
-verification/review/delivery, actual installed-host lifecycle acceptance and later milestones remain
-incomplete; a candidate is not a delivered goal.
+checks and exact Advisor approval are covered by the [verification/review reference](docs/INTEGRATION_CHECKS.md).
+Conflict-repair binding, branch delivery, actual installed-host lifecycle acceptance and later
+milestones remain incomplete; an approved integration is not a delivered goal.
 
 ## Quick start (offline, no model, no network needed after install)
 

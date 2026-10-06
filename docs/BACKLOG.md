@@ -30,10 +30,10 @@ Evidence: `docs/VALIDATION_MATRIX.md`, `docs/LIVE_REPAIR_RESULT.md`, `docs/PLUGI
    executor-ceiling reservations; see `WORKERS.md`, `CONCURRENCY.md`. Simulated host-session
    exit is tested; actual installed desktop-host survival and real harness limits remain later
    acceptance, not a promise of universal background operation.
-4. **P4 — Integration / delivery (first slice implemented).** Frozen approved input/order/check
-   records, owned candidate workspaces, conflict partial refs and crash/idempotency guards exist
-   (`INTEGRATION.md`). Total-goal check execution/recovery, exact approval, conflict-repair binding,
-   local delivery receipts and ownership-safe retention/cleanup remain.
+4. **P4 — Integration / delivery (candidate and review slices implemented).** Frozen input/order/check
+   records, owned candidates and conflict partial refs (`INTEGRATION.md`), durable total-goal
+   checking/cancel/recovery and exact current-Advisor review (`INTEGRATION_CHECKS.md`) exist.
+   Conflict-repair binding, local delivery receipts and ownership-safe retention/cleanup remain.
 5. **P5 — Codex executor adapter.** Stub/contract evidence first; capability-specific live
    validation only under new bounded authorization. ZCode executor remains exploratory.
 6. **P6 — Advisor host entrypoints.** Install/activate Codex and ZCode packages, stable project

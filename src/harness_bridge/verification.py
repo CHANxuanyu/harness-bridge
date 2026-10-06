@@ -45,6 +45,7 @@ class CheckResult:
     argv: list[str]
     cwd: str
     status: str  # passed | failed | timed_out | error | not_run | unconfirmed
+    exit_confirmed: bool = True  # not-started checks have no process to outlive them
     exit_code: int | None = None
     exit_signal: int | None = None
     duration_seconds: float | None = None
@@ -60,6 +61,7 @@ class CheckResult:
             "argv": self.argv,
             "cwd": self.cwd,
             "status": self.status,
+            "exit_confirmed": self.exit_confirmed,
             "exit_code": self.exit_code,
             "exit_signal": self.exit_signal,
             "duration_seconds": self.duration_seconds,
@@ -78,6 +80,7 @@ def run_checks(
     bytes_per_stream: int,
     kill_grace: float,
     should_stop: Callable[[], str | None] | None = None,
+    on_spawn: Callable[[int, int], None] | None = None,
 ) -> tuple[list[CheckResult], str | None]:
     results: list[CheckResult] = []
     stop_reason: str | None = None
@@ -110,7 +113,9 @@ def run_checks(
             ProcessSpec(argv=list(cmd.argv), cwd=str(cwd), env=env),
             limits,
             should_stop=should_stop,
+            on_spawn=on_spawn,
         )
+        res.exit_confirmed = bool(outcome.spawn_error or outcome.group_exit_confirmed)
         res.duration_seconds = round(outcome.duration, 3)
         res.exit_code = outcome.returncode
         res.exit_signal = outcome.exit_signal
@@ -126,6 +131,8 @@ def run_checks(
             res.status, res.detail = "unconfirmed", "verifier process exit could not be confirmed"
         elif outcome.timed_out:
             res.status, res.detail = "timed_out", f"exceeded {cmd.timeout_seconds}s"
+        elif outcome.background_killed:
+            res.status, res.detail = "error", "verifier left background processes"
         elif outcome.returncode == 0:
             res.status = "passed"
         else:

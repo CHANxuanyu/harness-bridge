@@ -48,6 +48,7 @@ from harness_bridge.config import BridgeConfig, evaluate_live_gate, load_config
 from harness_bridge.coordination import AdvisorClaim, Coordinator
 from harness_bridge.errors import BridgeError
 from harness_bridge.integration import Integrations
+from harness_bridge.integration_checks import IntegrationChecks
 from harness_bridge.jobs import WorkerJobs
 from harness_bridge.models import (
     TaskSpec,
@@ -126,6 +127,7 @@ class Bridge:
         self.preparations = Preparations(self)
         self.jobs = WorkerJobs(self)
         self.integrations = Integrations(self)
+        self.integration_checks = IntegrationChecks(self)
         self.advisor_claim = advisor_claim
         self.python = python_executable or sys.executable
         self.stop_flag = stop_flag or StopFlag()

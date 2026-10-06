@@ -151,6 +151,31 @@ CREATE TABLE integrations (
 CREATE INDEX integrations_by_goal ON integrations(goal_id,created_at);
 """
 
+INTEGRATION_CHECK_SCHEMA = """
+CREATE TABLE integration_verifications (
+    run_id TEXT PRIMARY KEY,
+    integration_id TEXT NOT NULL REFERENCES integrations(integration_id),
+    idempotency_key TEXT NOT NULL,
+    status TEXT NOT NULL,
+    exit_confirmed INTEGER CHECK(exit_confirmed IN (0,1)),
+    cancel_requested INTEGER NOT NULL DEFAULT 0 CHECK(cancel_requested IN (0,1)),
+    record_json TEXT NOT NULL,
+    record_digest TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(integration_id,idempotency_key)
+);
+CREATE TABLE integration_reviews (
+    review_id TEXT PRIMARY KEY,
+    integration_id TEXT NOT NULL REFERENCES integrations(integration_id),
+    idempotency_key TEXT NOT NULL,
+    request_digest TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    record_digest TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(integration_id,idempotency_key)
+);
+"""
+
 MIGRATIONS = {
     2: COORDINATION_SCHEMA,
     3: PLANNING_SCHEMA,
@@ -158,4 +183,5 @@ MIGRATIONS = {
     5: PREPARATION_SCHEMA,
     6: WORKER_SCHEMA,
     7: INTEGRATION_SCHEMA,
+    8: INTEGRATION_CHECK_SCHEMA,
 }

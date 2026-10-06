@@ -1,6 +1,6 @@
 # Handoff
 
-## Current state (2026-10-06, P4 candidate slice implemented)
+## Current state (2026-10-06, P4 candidate and review slices implemented)
 
 - **Canonical plan:** `docs/PROJECT_PLAN.md` consolidates the product, session relationships,
   contracts, V1 scope defaults, P0–P7 milestones and V01–V14 acceptance. P0 is complete;
@@ -12,7 +12,7 @@
   unknown exits retain reservations/slots; V1 targets managed workers and exact local-branch
   delivery with integrated acceptance. Epoch and initial aggregate guards now exist;
   managed workers, scoped parallel admission and frozen integration candidates now exist;
-  integrated verification/review/delivery remain pending.
+  integrated checking/review now exist; delivery remains pending.
 
 - **New P3 slice:** `jobs.py` + internal `worker.py` add idempotent `run --background`,
   atomic attempt/reservation/single claim and detached process sessions. Both foreground and
@@ -56,13 +56,34 @@
   Git composition reuses the custom-driver-refusing merge helper. Candidate/partial refs are
   immutable; worktrees are separate from the user checkout. A crash after Git but before DB commit
   can retry only the identical pin and an unchanged owned workspace. Existing candidate replay
-  never recreates/overwrites a changed/missing worktree. No execution, verifier, final approval,
-  delivery, auto conflict resolution or cleanup is exposed. Read `docs/INTEGRATION.md`.
+  never recreates/overwrites a changed/missing worktree. These two commands never execute checks;
+  the new explicit check/review commands are described below. No delivery, automatic conflict
+  resolution or cleanup is exposed. Read `docs/INTEGRATION.md`.
 - **Revision 7:** additive `integrations` table/index with existing WAL-aware backup and atomic
   v1–v6 upgrade/rollback. Older test fixtures now reconstruct their actual schema before upgrade.
   No real state migration, auth/network/model call or live config change. P4 is still partial.
 
-- **Current P4 checks:** final `scripts/check.sh` → **438 passed / 0 failed / 0 skipped**,
+- **P4 integrated verification/review:** explicit `integration verify/cancel/recover/review`,
+  durable run/checkpoint/log/manifest evidence, exact candidate/run/Advisor-bound review and
+  persisted rejected approvals. Same-key requests never execute again; a new explicit key may
+  recheck only an idle project with known exits. Goal-linked checks are project-exclusive even
+  with cap two; unknown exits retain the hold and keep goal termination pending. Checks consume
+  no Executor budget; maximum ten local runs per integration. Status exposes `verification_run`,
+  review/template and dynamic `approval_current`. See `docs/INTEGRATION_CHECKS.md`.
+- **Revision 8:** additive integration verification/review records, backed-up atomic v1–v7
+  upgrades preserving prior candidates. Isolated test state only; no actual user/live migration.
+  Checks use isolated environment and bounded logs, but remain trusted scripts, not OS sandboxed.
+  Changed candidates/evidence, unknown exits and stale Advisor epochs cannot yield current
+  approval. `APPROVED` is not goal delivery; conflict-repair binding, exact branch delivery and
+  ownership-safe retention/cleanup remain P4 work.
+- **Current P4 verification/review checks:** final `scripts/check.sh` → **474 passed / 0 failed /
+  0 skipped**, 374.63s; ruff/format clean (105 files), strict mypy clean (33 source files).
+  Adds 36 cases: 25 integration, 10 strict contracts and one migration revision. Real local
+  checker/fake processes use isolated HOME/auth sentinels. Targeted runs and fixture corrections
+  are in `docs/VALIDATION_MATRIX.md`. No new real harness/model/auth call or user-state migration;
+  no push or repository visibility change.
+
+- **Prior P4 candidate checks:** final `scripts/check.sh` → **438 passed / 0 failed / 0 skipped**,
   277.87s; ruff/format clean (101 files), strict mypy clean (32 source files). Adds 43 cases:
   42 integration/contract checks and one migration revision. A sandbox-limited run was stopped
   after process-visibility failures, then the unchanged process checks passed in the final local
@@ -215,9 +236,9 @@
 
 ## Next bounded work
 
-1. Continue P4 from `docs/PROJECT_PLAN.md`: frozen total-goal check execution/recovery, exact
-   integration review, budgeted conflict-repair child binding, local delivery and safe retention.
-   Fixed input records and owned candidate/partial workspaces now exist (`docs/INTEGRATION.md`).
+1. Continue P4 from `docs/PROJECT_PLAN.md`: budgeted conflict-repair child binding, exact local
+   delivery and safe retention. Fixed candidates/partial versions, total-goal checks, explicit
+   cancel/recover and exact review now exist (`docs/INTEGRATION.md`, `docs/INTEGRATION_CHECKS.md`).
    Reuse retained snapshots and current Advisor/worker/budget
    contracts; do not infer goal delivery from child success. Worker lifecycle and scoped 1/2-slot
    admission are implemented (`WORKERS.md`, `CONCURRENCY.md`). No real call/push authorization is

@@ -433,6 +433,8 @@ def test_v6_upgrade_preserves_worker_history_and_goal_budget(fx: Fixture) -> Non
     path = b.store.db_path
     b.close()
     with sqlite3.connect(path) as old:
+        old.execute("DROP TABLE integration_reviews")
+        old.execute("DROP TABLE integration_verifications")
         old.execute("DROP TABLE integrations")
         old.execute("UPDATE meta SET value='6' WHERE key='schema_revision'")
     b = Bridge(fx.state_dir)

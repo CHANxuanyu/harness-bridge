@@ -194,3 +194,18 @@ Each entry: decision — reason. Newest last.
 61. **P4 persistence/boundary:** schema 7 adds integrations with v1–v6 backup/rollback. Frozen
     verification is metadata until the next slice implements checks/review/delivery; no new model
     spend or real-state migration. Conflict-repair binding and cleanup remain explicit later work.
+
+62. **P4 verification admission:** explicit frozen foreground checks are project-exclusive across
+    goal-linked work, even with cap two; ten runs per integration, no Executor budget consumption.
+63. **P4 uncertain checker exits:** commit an uncertain launch window before spawn; recovery never
+    signals/reexecutes and only releases proven-exited checkpoints after owner death. Unknown holds
+    remain exclusive and prevent goal terminal projection; acknowledgements are not exit evidence.
+64. **P4 exact review:** approval binds current Advisor epoch, current run, unchanged composed
+    candidate and digested manifest/logs; takeover/new checks/evidence changes invalidate current
+    approval. Negative decisions record findings without dispatch; rejected approvals are durable.
+65. **P4 evidence/environment:** checks reuse finite process-group execution and bounded redaction
+    with isolated preparation environment; scripts remain trusted code, not sandboxed. Manual
+    candidate edits cannot be blessed by verification; approved inputs must be reintegrated.
+66. **P4 check persistence/boundary:** schema 8 preserves old candidates through backed-up v1–v7
+    upgrade; integration approval does not select READY_TO_DELIVER or create a delivery branch.
+    Conflict-repair binding, exact delivery and safe cleanup remain. No new real call/state migration.

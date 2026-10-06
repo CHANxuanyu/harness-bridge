@@ -1,9 +1,9 @@
 # Frozen integration candidates — first P4 slice
 
 Implemented 2026-10-06. The Advisor can freeze every required child's approved snapshot and an
-explicit integration order, then materialize a separate Bridge-owned candidate. This slice does
-**not** run the frozen total-goal checks, approve the integration or deliver a branch. Those remain
-P4 work. A `CANDIDATE` is not `READY_TO_DELIVER` and is not `DELIVERED`.
+explicit integration order, then materialize a separate Bridge-owned candidate. The subsequent
+[verification/review slice](INTEGRATION_CHECKS.md) runs those frozen checks and binds an Advisor
+review. Branch delivery remains P4 work. A `CANDIDATE` is not `READY_TO_DELIVER` or `DELIVERED`.
 
 ## Commands and contract
 
@@ -89,7 +89,7 @@ Worktrees share Git configuration/objects and are not an OS sandbox. Existing Gi
 file limitations remain in force. `workspace_status` checks HEAD, path/branch/common-dir ownership, Git status and an independent
 snapshot using a fresh index (including edits hidden by assume-unchanged). It is not total-goal
 verification or an approval fingerprint.
-The next verification/review stage must independently bind a fresh exact snapshot.
+The implemented verification/review stage independently binds a fresh exact snapshot.
 
 ## Retry, ownership and interruption
 
@@ -129,6 +129,6 @@ receipts, stale/unknown input refusal, Advisor takeover, source preservation, ra
 changed/foreign/symlink workspaces, actual process exit after Git materialization, and migration with
 real simulated-worker history. No real harness, auth or model usage was invoked.
 
-Next P4 work: run/recover the frozen total-goal checks, bind exact integration review, materialize
-budgeted conflict-repair children, create the exact idempotent local delivery branch and implement
+Total-goal checks and exact integration review are now implemented in [INTEGRATION_CHECKS.md](INTEGRATION_CHECKS.md).
+Next P4 work: materialize budgeted conflict-repair children, create the exact idempotent local delivery branch and implement
 ownership-safe retention/cleanup. Installed-host and real multi-harness acceptance remain later gates.

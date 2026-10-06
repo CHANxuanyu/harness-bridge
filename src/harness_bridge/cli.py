@@ -90,9 +90,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "integration", parents=[common], help="inspect or materialize an integration"
     )
     integration_sub = p.add_subparsers(dest="integration_command", required=True)
-    for operation in ("status", "materialize"):
+    for operation in ("status", "materialize", "cancel", "recover"):
         p = integration_sub.add_parser(operation, parents=[common])
         p.add_argument("integration_id")
+    p = integration_sub.add_parser("verify", parents=[common])
+    p.add_argument("integration_id")
+    p.add_argument("--idempotency-key", required=True)
+    p = integration_sub.add_parser("review", parents=[common])
+    p.add_argument("integration_id")
+    p.add_argument("--file", required=True, help="IntegrationReview JSON")
     p = sub.add_parser("child", parents=[common], help="inspect or materialize a planned child")
     child_sub = p.add_subparsers(dest="child_command", required=True)
     for operation in ("status", "materialize", "preflight"):
@@ -231,6 +237,17 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
         if cmd == "projects":
             return bridge.coordination.projects()
         if cmd == "integration":
+            if args.integration_command == "verify":
+                _install_signal_handlers(flag)
+                return bridge.integration_checks.verify(args.integration_id, args.idempotency_key)
+            if args.integration_command == "review":
+                return bridge.integration_checks.review(
+                    args.integration_id, _read_json_file(args.file)
+                )
+            if args.integration_command == "cancel":
+                return bridge.integration_checks.cancel(args.integration_id)
+            if args.integration_command == "recover":
+                return bridge.integration_checks.recover(args.integration_id)
             if args.integration_command == "materialize":
                 return bridge.integrations.materialize(args.integration_id)
             return bridge.integrations.status(args.integration_id)
