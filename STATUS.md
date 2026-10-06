@@ -14,7 +14,14 @@ _Last updated 2026-10-06 (local macOS validation session)._
   evidence: `docs/LOCAL_SMOKE_HANDOFF.md`; macOS rows added to `docs/VALIDATION_MATRIX.md`.
   No Claude/Codex inference was performed; `claude` is not even installed on that machine.
 - **Validation levels reached:** T0, T1, T2 (offline, simulated executor / stub binary).
-  **T3 live Claude: NOT_RUN. T4 live Codex→Claude: NOT_RUN. T5: NOT_RUN.**
+  **T3 live Claude: smoke run once (2026-10-06, single initial attempt; resume/repair not
+  covered — see `docs/LOCAL_SMOKE_HANDOFF.md`). T4 live Codex→Claude: NOT_RUN. T5: NOT_RUN.**
+- **T3 live smoke (2026-10-06): PASS.** Exactly 2 real invocations (one flag-acceptance probe,
+  one bridge-run task on a disposable slugify fixture in an isolated state dir): executor
+  `claude-opus-5-5` via CLI 2.1.291, bridge verification passed including the external
+  acceptance check (script hash unchanged), approve bound to the snapshot → SUCCEEDED,
+  re-read by a fresh process. Usage executor-reported; subscription remaining unknown.
+  Test state-dir live gate closed after the run; raw logs stay outside the repository.
 
 ## Implemented
 | Area | State |
@@ -69,6 +76,7 @@ _Last updated 2026-10-06 (local macOS validation session)._
 - Development budget remaining: **unknown** (not observable; no spend figures claimed).
 
 ## Next
-Local macOS offline reproduction is **done** (see `docs/LOCAL_SMOKE_HANDOFF.md`). Next:
-T3 live smoke per `docs/LOCAL_HANDOFF.md` §2, only with explicit user authorization, using
-the prepared materials in `qa/local/`.
+Local macOS offline reproduction is **done**, and the **T3 live smoke passed** (2026-10-06;
+`docs/LOCAL_SMOKE_HANDOFF.md`). Next: T4 (Codex/Astra → bridge → Claude) per
+`docs/LOCAL_HANDOFF.md` §3, only with explicit user authorization; resume/repair variants and
+a captured-live stream fixture remain open follow-ups.

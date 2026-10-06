@@ -77,3 +77,53 @@ Failures found: **none**. Nothing was skipped, weakened or marked expected.
 
 **This round invoked no Claude/Codex model and performed no live dispatch of
 any kind.**
+
+---
+
+## T3 execution record (2026-10-06, later the same day)
+
+**Real model invocations: exactly 2 (A + B). No retries. Resume/repair/T4 not exercised.**
+
+### Pre-flight (no inference)
+- `claude` 2.1.291 (Claude Code), official native install (`~/.local/bin/claude`).
+- `claude auth status`: loggedIn, `authMethod: claude.ai`, `apiProvider: firstParty`
+  (subscription; account identifiers redacted).
+- `--max-turns` absent from local `--help`; `hbridge doctor --json` marked it the only
+  `pending_local_confirmation` flag. No user/project/managed settings files, no MCP config,
+  no provider env vars; global bridge state dir untouched.
+
+### A — CLI flag-acceptance probe (1 real call, 60 s cap, used ~seconds)
+`claude -p "Reply with exactly: OK" --model claude-opus-5-5 --max-turns 1 --output-format
+stream-json --verbose --permission-mode plan --strict-mcp-config` → exit 0, result exactly
+`OK`, subtype success, num_turns 1, session id present. **`--max-turns` accepted by this
+installation (parse-level evidence — not an enforcement proof).** Consumed real quota.
+
+### B — one bridge-run live task (1 real call)
+- Fresh one-shot fixture via `qa/local/make_fixture.py`; isolated state dir with
+  `[live] enabled=true, hooks_and_permissions_reviewed=true, allow_unlisted_flags=["--max-turns"]`
+  (that directory only; gate switched off after the run; global state dir never live-enabled).
+- `hbridge create` → task READY; `hbridge run --mode live --allow-model-usage` → exit 0,
+  `evidence_level: live-executor`.
+- Attempt: initial, outcome succeeded, exit confirmed, **19.7 s** wall, **7 of 10 turns**,
+  requested = observed model `claude-opus-5-5`, model_pin satisfied, session recognized.
+- Bridge verification **passed**: `repo-tests` and **external acceptance** both exit 0;
+  acceptance script SHA-256 identical before and after the run.
+- Change: 2 files in scope (`slugkit/slugify.py` +5/−1, `tests/test_slugify.py` +9),
+  0 scope violations. Diff reviewed by the operator before approving.
+- `executor_reported.api_key_source: none` (subscription). Permission scoping worked:
+  2 Bash denials when the executor tried to run the out-of-repo acceptance script itself.
+- Review approve bound to the snapshot digest → **SUCCEEDED**, confirmed by a fresh process.
+
+### Usage and billing
+- Executor-reported for B: input 12 / output 1781 / cache-read 127 763 / cache-creation
+  14 686 tokens; CLI cost estimate ≈ USD 0.18 (**API-equivalent estimate, not a bill, not
+  subscription usage**). Probe A usage negligible (2 input tokens class).
+- **Subscription quota remaining: unknown** (not observable; no estimates claimed).
+
+### Hygiene
+- Raw stream logs, artifacts JSON, review file, run DB and the worktree live in a state
+  directory **outside this repository** (a `~/hbridge-t3-live/`-style scratch dir) and are
+  **not committed**; this file carries only the redacted summary above.
+- Live gate in the test state dir: `enabled = false` after the run (diagnostics kept).
+- Matrix rows updated: T3 (initial smoke PASS), `--max-turns` (accepted locally, parse-level),
+  A02 (real stream parsed once). Not marked: resume, repair, T4.

@@ -8,6 +8,10 @@
 > the branch **is pushed** (`origin/claude/new-repo-plan-dn1eac` == `fcbd21a`) — the
 > "not pushed / make it private" delivery notes elsewhere in this file are historical.
 > T3 materials are prepared under `qa/local/`; no model was invoked.
+>
+> **Later the same day: T3 live smoke PASSED** — 2 real invocations (flag-acceptance probe +
+> one bridge-run task), SUCCEEDED with all gates; see the T3 execution record in
+> `docs/LOCAL_SMOKE_HANDOFF.md`. Resume/repair and T4 remain NOT_RUN.
 
 ## Repo and revision
 - Actual repository / visibility: `CHANxuanyu/harness-bridge` / still **public** at close-out

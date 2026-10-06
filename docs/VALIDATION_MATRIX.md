@@ -17,8 +17,8 @@ via uv, git 2.50.1, SQLite 3.53.1/3.51.0, revision `fcbd21a` — no source chang
 0 failed**), `hbridge doctor --offline --json`, both demos (`demo_passed: true`), and the
 targeted `pytest tests/unit/test_runner.py tests/integration/test_recovery.py -v` run
 (28 passed) — the process-group tests ran the `ps` fallbacks, since macOS has no `/proc`.
-Per-command exit codes and evidence: `docs/LOCAL_SMOKE_HANDOFF.md`. Live rows (T3–T5)
-remain NOT_RUN; no macOS result below is copied from Linux.
+Live rows: T3 was executed on 2026-10-06 (see the T3 row and `docs/LOCAL_SMOKE_HANDOFF.md`);
+T4–T5 remain NOT_RUN. No macOS result below is copied from Linux.
 
 | ID | Feature | Status | Evidence | Test / command | Result | Remaining uncertainty |
 |---|---|---|---|---|---|---|
@@ -43,7 +43,7 @@ remain NOT_RUN; no macOS result below is copied from Linux.
 | R07 | Candidate change invalidates evidence/approve | implemented | T2 | `test_r07_candidate_change_after_evidence_invalidates_review`, `test_verify_rebinds_evidence_after_candidate_change` | PASS | — |
 | — | Crash during verification resumes without executor | implemented | T2 | `test_crash_during_verification_resumes_without_rerunning_executor` | PASS | — |
 | A01 | Claude command construction (pure, exact model, bounded turns, explicit resume, stdin prompt) | implemented | T1 | `test_a01_*` in `tests/contracts/test_claude_adapter.py` | PASS | flags verified against `--help` text only, not behaviour |
-| A02 | Docs-derived / synthetic Claude stream fixtures parse + classify; provenance recorded | implemented | T1 (synthetic) | `test_a02_*`, `tests/fixtures/claude_stream/PROVENANCE.json` | PASS | real CLI stream schema unverified (no captured-live fixtures) |
+| A02 | Docs-derived / synthetic Claude stream fixtures parse + classify; provenance recorded | implemented | T1 (synthetic) | `test_a02_*`, `tests/fixtures/claude_stream/PROVENANCE.json` | PASS | one live run (2026-10-06) parsed a real stream successfully, unknown event types tolerated; captured-live fixture still pending |
 | A03 | Unknown event types / missing usage → tolerated, usage null | implemented | T1 | `test_a03_unknown_events_and_missing_usage`, `test_unknown_events_are_tolerated` | PASS | — |
 | A04 | Permission / quota / provider errors → BLOCKED, no retry, no invented reset | implemented | T1/T2 | `test_a04_*` (Claude, structured vs heuristic), `test_a04_permission_and_quota_errors_block` (fake) | PASS | real Claude error shapes unverified |
 | A05 | Huge stdout/stderr drained and bounded | implemented | T1/T2 | `test_large_interleaved_output_does_not_deadlock`, `test_noisy_executor_output_is_bounded` | PASS | — |
@@ -53,8 +53,8 @@ remain NOT_RUN; no macOS result below is copied from Linux.
 | S03 | Verifier config / manifest tampering detected | implemented | T2 | `test_s03_tampered_verifier_config_is_detected`, `test_tampered_manifest_file_is_detected` | PASS | not tamper-proof against a same-UID attacker |
 | S04 | API/provider env, cloud/nested markers, unreviewed hooks, unlisted flags → no live dispatch | implemented | T1/T2 | `test_s04_*`, `test_live_gate_refuses_in_cloud_even_when_configured`, `test_live_code_path_with_stub_binary_is_not_a_real_run` | PASS | misuse prevention, not billing isolation |
 | — | Claude adapter through full pipeline with a stub binary (resume on repair, resume mismatch, model mismatch risk) | implemented | T2 (stub) | `tests/integration/test_claude_stub_flow.py` | PASS | stub replays synthetic streams; not Claude |
-| — | `--max-turns` capability evidence (docs vs local help vs local confirmation) | implemented | docs + captured help text | `test_help_absence_is_not_treated_as_unsupported`, `test_documentation_alone_never_marks_a_flag_usable`, `test_confirmation_is_per_flag_and_forbidden_flags_stay_forbidden`, `test_no_global_preflight_bypass_in_config`, `test_doctor_reports_flag_evidence_not_unsupported` | docs: declared; local help 2.1.291: not listed; local verification: none → **unknown (pending)** | needs a local check; never inferred from docs alone |
+| — | `--max-turns` capability evidence (docs vs local help vs local confirmation) | implemented | docs + captured help text | `test_help_absence_is_not_treated_as_unsupported`, `test_documentation_alone_never_marks_a_flag_usable`, `test_confirmation_is_per_flag_and_forbidden_flags_stay_forbidden`, `test_no_global_preflight_bypass_in_config`, `test_doctor_reports_flag_evidence_not_unsupported`; local probe 2026-10-06 | docs: declared; local help 2.1.291: not listed; local probe: **accepted (parse-level)** → confirmed locally for this installation | enforcement beyond argument acceptance still unproven; never inferred from docs alone |
 | — | CLI rejects an argument at run time → stop, no retry without it | implemented | T1/T2 (stub) | `test_cli_rejecting_a_flag_stops_the_attempt`, `test_cli_rejection_of_max_turns_stops_and_is_never_retried_without_it` | PASS | real CLI error text unverified (commander-style assumed) |
-| T3 | Real Claude CLI single-harness run | not run | — | — | **NOT_RUN** | requires local, explicitly authorized run |
+| T3 | Real Claude CLI single-harness run (initial smoke) | passed (initial smoke only) | T3 (live) | 2026-10-06, macOS: one CLI flag-acceptance probe + one bridge-run task (one-shot slugify fixture, isolated state dir; 1 attempt / 0 repair cycles / 10-turn cap, 7 used; 600 s wall, 19.7 s) with CLI 2.1.291, requested=observed model claude-opus-5-5; bridge verification passed incl. external acceptance (script hash unchanged before/after); approve → SUCCEEDED, state re-read by a fresh process | **PASS (macOS, live, single run)** | resume/repair not exercised; one run only; no captured-live fixture yet; `--max-turns` acceptance ≠ enforcement proof; usage executor-reported, subscription remaining unknown |
 | T4 | Real Codex/Astra → Claude loop | not run | — | — | **NOT_RUN** | requires local, explicitly authorized run |
 | T5 | Comparative evaluation | not run | — | — | **NOT_RUN** | format only (`docs/EVALUATION_PLAN.md`) |
