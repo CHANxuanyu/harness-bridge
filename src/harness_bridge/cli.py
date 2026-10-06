@@ -80,6 +80,19 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("goal_id")
     p.add_argument("--file", required=True, help="immutable child plan batch JSON")
     p.add_argument("--idempotency-key", required=True)
+    p = goal_sub.add_parser(
+        "integrate", parents=[common], help="freeze approved integration inputs"
+    )
+    p.add_argument("goal_id")
+    p.add_argument("--file", required=True, help="IntegrationSpec JSON")
+    p.add_argument("--idempotency-key", required=True)
+    p = sub.add_parser(
+        "integration", parents=[common], help="inspect or materialize an integration"
+    )
+    integration_sub = p.add_subparsers(dest="integration_command", required=True)
+    for operation in ("status", "materialize"):
+        p = integration_sub.add_parser(operation, parents=[common])
+        p.add_argument("integration_id")
     p = sub.add_parser("child", parents=[common], help="inspect or materialize a planned child")
     child_sub = p.add_subparsers(dest="child_command", required=True)
     for operation in ("status", "materialize", "preflight"):
@@ -217,6 +230,10 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
     try:
         if cmd == "projects":
             return bridge.coordination.projects()
+        if cmd == "integration":
+            if args.integration_command == "materialize":
+                return bridge.integrations.materialize(args.integration_id)
+            return bridge.integrations.status(args.integration_id)
         if cmd == "child":
             if args.child_command == "prepare":
                 _install_signal_handlers(flag)
@@ -229,6 +246,10 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
         if cmd == "retain-approved":
             return bridge.retain_approved(args.task_id)
         if cmd == "goal":
+            if args.goal_command == "integrate":
+                return bridge.integrations.freeze(
+                    args.goal_id, _read_json_file(args.file), args.idempotency_key
+                )
             if args.goal_command == "plan":
                 return bridge.plans.submit(
                     args.goal_id, _read_json_file(args.file), args.idempotency_key, claim

@@ -16,6 +16,7 @@ from typing import Any, Literal, TypeVar, cast
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from harness_bridge import __version__
+from harness_bridge.baselines import read_record
 from harness_bridge.config import load_config
 from harness_bridge.dispatch import budget_usage, frozen_spec, guard_slot, slot_status
 from harness_bridge.errors import BridgeError
@@ -508,6 +509,16 @@ class Coordinator:
             )
             controls = self.controls(cur, goal_id)
             plans = ChildPlans(self).list_in_transaction(cur, goal_id)
+            integrations = [
+                read_record(r)
+                for r in cur.execute(
+                    "SELECT * FROM integrations WHERE goal_id=? ORDER BY created_at,integration_id",
+                    (goal_id,),
+                )
+            ]
+            attention = attention or bool(
+                integrations and integrations[-1] and integrations[-1]["phase"] == "CONFLICT"
+            )
             attention = attention or any(
                 p["state"] in ("WAITING_BASELINE", "BASELINE_CONFLICT") for p in plans
             )
@@ -558,6 +569,7 @@ class Coordinator:
                 "termination_requested": controls["termination"],
                 "pending_stop_tasks": pending_stop,
                 "delivery": "not_implemented",
+                "integrations": integrations,
                 "base_sha": goal["base_sha"],
                 "repo_path": goal["repo_path"],
                 "advisor": json.loads(goal["advisor_json"]),

@@ -163,3 +163,7 @@ No placeholder CLI claims those features work.
 Offline evidence is in `tests/integration/test_coordination.py`,
 `tests/integration/test_goal_planning.py` and
 `tests/unit/test_migrations.py`; results are recorded in `VALIDATION_MATRIX.md`.
+
+The first P4 slice adds `goal integrate` and `integration materialize/status`; see
+[INTEGRATION.md](INTEGRATION.md). Goal status includes frozen integration records, while delivery
+remains `not_implemented`. A candidate or successful child does not imply goal delivery.

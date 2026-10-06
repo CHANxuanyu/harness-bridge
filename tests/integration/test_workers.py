@@ -424,6 +424,7 @@ def test_v5_migration_preserves_prepared_task_and_current_advisor(fx: Fixture) -
     path = b.store.db_path
     b.close()
     with sqlite3.connect(path) as old:
+        old.execute("DROP TABLE integrations")
         old.execute("DROP TABLE worker_jobs")
         old.execute("UPDATE meta SET value='5' WHERE key='schema_revision'")
     b = Bridge(fx.state_dir, advisor_claim=claim)

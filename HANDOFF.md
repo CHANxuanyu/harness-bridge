@@ -1,6 +1,6 @@
 # Handoff
 
-## Current state (2026-10-06, P3 local core implemented)
+## Current state (2026-10-06, P4 candidate slice implemented)
 
 - **Canonical plan:** `docs/PROJECT_PLAN.md` consolidates the product, session relationships,
   contracts, V1 scope defaults, P0–P7 milestones and V01–V14 acceptance. P0 is complete;
@@ -11,7 +11,8 @@
   task mutations cannot bypass goal budgets or the active Advisor epoch through old CLI paths;
   unknown exits retain reservations/slots; V1 targets managed workers and exact local-branch
   delivery with integrated acceptance. Epoch and initial aggregate guards now exist;
-  managed workers and scoped parallel admission/ceilings now exist; integration/delivery remain pending.
+  managed workers, scoped parallel admission and frozen integration candidates now exist;
+  integrated verification/review/delivery remain pending.
 
 - **New P3 slice:** `jobs.py` + internal `worker.py` add idempotent `run --background`,
   atomic attempt/reservation/single claim and detached process sessions. Both foreground and
@@ -49,7 +50,26 @@
   Actual Codex/ZCode desktop cleanup, logout/sleep/reboot, vendor turn enforcement and real two-harness
   behavior remain unverified. Goal-wide event cursors are not exposed. See `docs/CONCURRENCY.md`.
 
-- **Current checks:** final `scripts/check.sh` → **395 passed / 0 failures / 0 skipped**,
+- **P4 candidate slice:** `integration.py` implements `goal integrate` (freeze) and `integration
+  materialize/status`. Requires every planned/linked task approved and all exits confirmed;
+  binds input order, dependencies, retained approvals, goal/base/repo and verifier configuration.
+  Git composition reuses the custom-driver-refusing merge helper. Candidate/partial refs are
+  immutable; worktrees are separate from the user checkout. A crash after Git but before DB commit
+  can retry only the identical pin and an unchanged owned workspace. Existing candidate replay
+  never recreates/overwrites a changed/missing worktree. No execution, verifier, final approval,
+  delivery, auto conflict resolution or cleanup is exposed. Read `docs/INTEGRATION.md`.
+- **Revision 7:** additive `integrations` table/index with existing WAL-aware backup and atomic
+  v1–v6 upgrade/rollback. Older test fixtures now reconstruct their actual schema before upgrade.
+  No real state migration, auth/network/model call or live config change. P4 is still partial.
+
+- **Current P4 checks:** final `scripts/check.sh` → **438 passed / 0 failed / 0 skipped**,
+  277.87s; ruff/format clean (101 files), strict mypy clean (32 source files). Adds 43 cases:
+  42 integration/contract checks and one migration revision. A sandbox-limited run was stopped
+  after process-visibility failures, then the unchanged process checks passed in the final local
+  run. Fixtures retain isolated HOME/auth sentinels; no real model or user-state migration.
+  Detailed runs and corrected test-fixture expectations are in `docs/VALIDATION_MATRIX.md`.
+
+- **Prior P3 checks:** final `scripts/check.sh` → **395 passed / 0 failures / 0 skipped**,
   226.17s; ruff/format clean (98 files), mypy clean (31 source files). Adds 54 offline cases:
   29 unit and 25 integration. Before edits, affected coordination/migration baseline 35 passed;
   an intermediate full run passed 394 cases, then one additional historical unknown-slot case
@@ -142,7 +162,8 @@
   **pushed through `470f5b0`** at that check. Repair/evidence `94f7c4d`, product/plugin
   `7efd2bf`, product clarification `bab602a`, plan `24ee6ad`, first P1 slice `83f0793` and
   P1 completion `9d73e1c` and P2 first slice `72c73a8` precede the new preparation milestone;
-  preparation `591752b`, workers `934b6c2` and the new P3 concurrency milestone follow. All are local, not auto-pushed.
+  preparation `591752b`, workers `934b6c2`, P3 concurrency `8409f77` and the new P4 candidate
+  milestone follow. All are local, not auto-pushed.
   Remote was not re-queried during this offline implementation round;
   visibility remains public by instruction.
 - **Live-gate hygiene:** the global default state dir was never live-enabled; the T3/T4 test
@@ -194,9 +215,10 @@
 
 ## Next bounded work
 
-1. Continue P4 from `docs/PROJECT_PLAN.md`: fixed integration inputs from P2 approval refs,
-   an owned integration workspace, frozen total-goal verification/review, exact new local branch
-   delivery and replay receipts. Reuse retained snapshots and current Advisor/worker/budget
+1. Continue P4 from `docs/PROJECT_PLAN.md`: frozen total-goal check execution/recovery, exact
+   integration review, budgeted conflict-repair child binding, local delivery and safe retention.
+   Fixed input records and owned candidate/partial workspaces now exist (`docs/INTEGRATION.md`).
+   Reuse retained snapshots and current Advisor/worker/budget
    contracts; do not infer goal delivery from child success. Worker lifecycle and scoped 1/2-slot
    admission are implemented (`WORKERS.md`, `CONCURRENCY.md`). No real call/push authorization is
    renewed. Unknown preparation/attempt exits continue holding slots/resources; audited release

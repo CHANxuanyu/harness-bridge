@@ -136,10 +136,26 @@ CREATE TABLE worker_jobs (
 );
 """
 
+INTEGRATION_SCHEMA = """
+CREATE TABLE integrations (
+    integration_id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL REFERENCES goals(goal_id),
+    idempotency_key TEXT NOT NULL,
+    request_digest TEXT NOT NULL,
+    spec_json TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    record_digest TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(goal_id,idempotency_key)
+);
+CREATE INDEX integrations_by_goal ON integrations(goal_id,created_at);
+"""
+
 MIGRATIONS = {
     2: COORDINATION_SCHEMA,
     3: PLANNING_SCHEMA,
     4: BASELINE_SCHEMA,
     5: PREPARATION_SCHEMA,
     6: WORKER_SCHEMA,
+    7: INTEGRATION_SCHEMA,
 }

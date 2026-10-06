@@ -480,6 +480,7 @@ def test_v4_upgrade_preserves_old_environment_plan_digest(fx: Fixture) -> None:
     path, claim = b.store.db_path, b.advisor_claim
     b.close()
     with sqlite3.connect(path) as conn:
+        conn.execute("DROP TABLE integrations")
         conn.execute("DROP TABLE worker_jobs")
         conn.execute("DROP TABLE preparation_resources")
         conn.execute("DROP TABLE preparation_runs")

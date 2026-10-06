@@ -182,3 +182,15 @@ Each entry: decision — reason. Newest last.
 57. **P3 local acceptance boundary:** two fake workers, race-safe admission and simulated host
     session teardown meet the local core checks; installed-host cleanup, logout/reboot and real
     multi-harness/turn-limit acceptance remain later gates. Proceed to P4 without new live spend.
+
+58. **P4 separate freeze/materialize:** durable input/order/check records precede Git work; every
+    current planned/linked child is required, dependency order explicit and unknown exits refused.
+    No implicit selection, scope amendment or refresh of accepted input versions.
+59. **P4 deterministic candidates:** compose retained approved commits from the fixed goal base;
+    preserve partial refs on conflict. Private refs/worktree branches are not delivery branches.
+60. **P4 crash ownership:** Git work is serialized under the SQLite writer lock; retry adopts only
+    the identical pin and unchanged owned worktree. Existing candidates are never reset/recreated
+    by replay; source edits, foreign branches, symlink targets and unresolved resources survive.
+61. **P4 persistence/boundary:** schema 7 adds integrations with v1–v6 backup/rollback. Frozen
+    verification is metadata until the next slice implements checks/review/delivery; no new model
+    spend or real-state migration. Conflict-repair binding and cleanup remain explicit later work.

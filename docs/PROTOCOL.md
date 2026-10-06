@@ -2,7 +2,8 @@
 
 The task contracts below remain in force for foreground and background attempts.
 For durable background dispatch keys, worker handles, incremental task events and crash semantics,
-see [WORKERS.md](WORKERS.md). Project parallelism and aggregate ceiling accounting are in
+see [WORKERS.md](WORKERS.md). Frozen integration candidates are described in
+[INTEGRATION.md](INTEGRATION.md); they do not yet expose final verification/review/delivery. Project parallelism and aggregate ceiling accounting are in
 [CONCURRENCY.md](CONCURRENCY.md). Goal coordination and current Advisor checks apply to either mode.
 
 

@@ -61,7 +61,10 @@ covers `child prepare`, cancellation/recovery and shared-resource claims. P1/P2 
 implemented. The [background worker reference](docs/WORKERS.md) covers durable dispatch,
 `job`, incremental `events`, cancellation and recovery. The [concurrency reference](docs/CONCURRENCY.md)
 covers explicit two-slot admission, scope checks and goal wall-time/turn reservations. P3 local core
-is implemented; actual installed-host lifecycle acceptance and P4–P7 remain incomplete.
+is implemented. The [integration reference](docs/INTEGRATION.md) covers the first P4 slice:
+frozen approved inputs, owned candidate workspaces and durable conflict/crash handling. Total-goal
+verification/review/delivery, actual installed-host lifecycle acceptance and later milestones remain
+incomplete; a candidate is not a delivered goal.
 
 ## Quick start (offline, no model, no network needed after install)
 

@@ -242,3 +242,57 @@ Simulated host process-session teardown does **not** establish installed Codex/Z
 logout/sleep/reboot survival, vendor turn-limit enforcement or real concurrent harness behavior.
 P4 integrated delivery, P5 second executor, P6 installed entrypoints and P7 complete acceptance
 remain outstanding. Child success still does not mean the goal has been delivered.
+
+
+## P4 frozen integration candidates (2026-10-06, macOS)
+
+Affected pre-edit checks: `scripts/check.sh tests/integration/test_dependency_baselines.py
+ tests/unit/test_migrations.py` → **26 passed**, 33.27s; lint/format/types clean. Tests ran in an
+isolated local checkout at the P3 commit, using the existing installed Python dependencies with
+PYTHONPATH directed to that checkout. No package download, model invocation or live-state migration.
+
+The first expanded affected run passed **59/60**, 88.64s. The new CLI test incorrectly expected
+an invented nested `data` envelope; the existing CLI returns `ok` plus top-level receipt fields.
+The test was corrected to assert that actual established contract, without changing CLI output,
+deleting or skipping any test. Additional workspace-ownership/process-crash checks were then added.
+All **40 new integration/contract cases passed**, 66.72s, with lint/format/types clean.
+
+| Contract | Executed evidence |
+|---|---|
+| Fixed inputs and source safety | Two separately approved fake-executor tasks form a separate candidate; late child edits/GC/source commits/dirty source do not change frozen input trees or user files |
+| Complete Git result | Candidate preserves additions, deletion, rename, binary bytes and executable mode; dependency successor edits survive without reapplying the parent |
+| Conflict evidence | Conflict persists once with incoming task ID, prior applied IDs and a pinned last clean commit; no candidate worktree or fabricated approval, original approval records unchanged |
+| Required input closure | Unmaterialized, unapproved, omitted, foreign and unknown-exit attempt/preparation inputs refused; later plan additions invalidate old materialization without silently refreshing evidence |
+| Ownership / idempotency | Current Advisor required for freeze/replay/materialize; read-only inspection survives takeover; two concurrent freeze/materialize callers produce one record/event/worktree |
+| Git/DB interruption | Injected rollback and actual subprocess `os._exit(70)` after Git materialization leave FROZEN; explicit retry adopts identical commit and unchanged owned workspace |
+| User edits and foreign resources | Dirty/moved-HEAD/foreign/missing candidate replay never resets/recreates; symlink destinations and occupied branches refused; relocated repo identity refused |
+| Immutable evidence | Missing approval/candidate pins, altered record/spec and changed same-key check configuration fail closed |
+| No execution inference | Materialization never runs the frozen verifier or an Executor; custom merge-driver marker is not invoked; attempt/time/turn reservations unchanged |
+| Compatibility | Revision 6 upgrade preserves approved task, real fake-worker job and goal budget; v1–v6 all-stage rollback, WAL backup and older materialized/prepared fixtures covered |
+
+Schema revision 7 adds integration records only. The new cases are T1/T2 offline evidence, including
+synthetic unknown-exit records and real local Git/SQLite/process operations. There is no real harness
+call, actual user/live database upgrade, source checkout delivery or installed-host acceptance.
+Total-goal verification, final integration review, conflict-repair task binding, exact local delivery
+and ownership-safe cleanup remain unimplemented. P4 is partial; see `docs/INTEGRATION.md`.
+
+A restricted-environment full run was **interrupted** after 202 passes and 2 failures (228.99s).
+Both failures were existing `wait_steady` assertions: macOS `ps` was denied by the session sandbox,
+so the test could not see its owned fake process group. A direct own-process `ps` probe reproduced
+`operation not permitted`. Only the pytest PID verified to belong to this isolated checkout was
+interrupted. The full suite was then rerun with local process visibility; no tests were skipped,
+no live gate was changed, and isolated HOME/auth sentinels remained active.
+
+Final review also strengthened candidate ownership checks: a fresh temporary Git index compares
+the actual tracked/non-ignored tree, so `assume-unchanged` cannot hide a user edit during crash
+adoption or replay. Two regressions cover these cases. The targeted 8-case run first hit one test
+expectation-map omission for the new `hidden` case (7 passed, 1 fixture KeyError); the mapping was
+corrected before the final full run. No production check was relaxed.
+
+
+Final complete offline run with process visibility: `scripts/check.sh` → **438 passed / 0 failed /
+0 skipped**, **277.87s**; ruff/format clean (101 files), strict mypy clean (32 source files).
+This milestone adds **43 cases** relative to 395: 42 integration/contract cases plus the sixth
+historical migration rollback case. The final run includes the corrected CLI/hidden-edit fixtures,
+fresh-index ownership protection, existing cancellation/recovery/parallel-worker tests and all
+historical migration preservation checks. No additional source edits followed this passing run.

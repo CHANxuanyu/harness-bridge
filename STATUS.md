@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-10-06 (P3 local worker/concurrency/ceiling core implemented)._
+_Last updated 2026-10-06 (P4 frozen integration candidates implemented; verification/delivery pending)._
 
 ## Current state
 
@@ -48,7 +48,20 @@ _Last updated 2026-10-06 (P3 local worker/concurrency/ceiling core implemented).
   events expose the accounting and cap; old GoalSpec digests/replays remain valid. No schema
   migration: revision 6's immutable task/attempt history is the ledger. `docs/CONCURRENCY.md`
   specifies conservative scope proof, historical unknown holds and evidence limitations.
-- **Current checks:** final `scripts/check.sh` → **395 passed / 0 failed / 0 skipped**, 226.17s;
+- **P4 first slice:** freeze all required approved inputs in explicit dependency-respecting order,
+  with immutable total-goal verification commands. Materialization composes retained Git trees into
+  a separate owned worktree or records a conflict and last clean partial commit. Same-key replay,
+  current-Advisor guards, crash retry and changed-workspace preservation are implemented. Revision 7
+  adds integration records with backed-up v1–v6 upgrades. No total-goal check/approval/delivery runs
+  yet; `CANDIDATE` is not delivered. See `docs/INTEGRATION.md`. No real user state was migrated.
+- **Current P4 checks:** final `scripts/check.sh` → **438 passed / 0 failed / 0 skipped**,
+  277.87s; ruff/format clean (101 files), strict mypy clean (32 source files). Adds 43 cases:
+  42 integration/contract checks and one migration revision. A sandbox-limited run was stopped
+  after process-visibility failures, then the unchanged process checks passed in the final local
+  run. Fixtures retain isolated HOME/auth sentinels; no real model or user-state migration.
+  Detailed runs and corrected test-fixture expectations are in `docs/VALIDATION_MATRIX.md`.
+
+- **Prior P3 checks:** final `scripts/check.sh` → **395 passed / 0 failed / 0 skipped**, 226.17s;
   ruff/format clean (98 files), strict mypy clean (31 source files). Adds 54 offline cases:
   29 scope/config/limit unit cases and 25 parallel/budget/lifecycle integration cases. Includes
   simulated host process-session teardown, not actual desktop-app lifecycle acceptance.
@@ -121,8 +134,9 @@ _Last updated 2026-10-06 (P3 local worker/concurrency/ceiling core implemented).
 | Immutable child plans / DAG validation / explicit root and dependent materialization | implemented; fixed approved inputs and conflict refusal |
 | Retained approval snapshots / goal-child context / presence preflight | implemented, offline-validated |
 | Explicit finite preparation / output-cache inventory / resource claims / cancel-recover | implemented; unknown exits stay reserved; no persistent services or cross-state locks |
-| SQLite revision 1/2/3/4/5→6 upgrade + WAL-consistent backup/rollback | implemented; isolated fixtures only, real user state not migrated |
+| SQLite revision 1/2/3/4/5/6→7 upgrade + WAL-consistent backup/rollback | implemented; isolated fixtures only, real user state not migrated |
 | Durable background dispatch / task event cursors and bounded wait | implemented first P3 slice; offline worker lifecycle checks |
+| Frozen integration inputs / owned candidate / conflict and crash retry | implemented first P4 slice; total verification/review/delivery pending |
 | Offline demos `success`, `bug-then-repair` | pass |
 | Manual offline CI workflow (`workflow_dispatch`) | written, never run |
 | Codex / ZCode plugin source package, shared supervisor Skill, host catalogs | alpha; static/copy/CLI-contract checks pass; Codex catalog discovery pass; installed activation and ZCode loading NOT_RUN |
@@ -211,8 +225,9 @@ _Last updated 2026-10-06 (P3 local worker/concurrency/ceiling core implemented).
 
 ## Next
 
-Continue P4 in `docs/PROJECT_PLAN.md`: an owned integration workspace over retained approved
-snapshots, frozen integrated verification/review and an exact idempotent local delivery branch.
+Continue P4 in `docs/PROJECT_PLAN.md`: execute/recover the frozen total-goal checks, exact
+integration review, budgeted conflict-repair binding, idempotent local delivery and safe retention.
+Frozen inputs and owned candidate workspaces are implemented in `docs/INTEGRATION.md`; reuse them.
 P3 local worker/concurrency/ceiling checks are implemented; actual installed-host lifecycle and
 real multi-harness validation remain later acceptance. Reuse `docs/WORKERS.md` and
 `docs/CONCURRENCY.md`; no live authorization is renewed.

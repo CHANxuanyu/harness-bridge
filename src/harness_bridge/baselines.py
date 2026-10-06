@@ -142,41 +142,47 @@ def retain_approval(
     return record
 
 
+def merge_tree(repo: str, current: str, incoming: str) -> str | None:
+    """Return the merged tree or a conflict; external merge drivers are never executed."""
+    current, incoming = object_id(current), object_id(incoming)
+    # merge-tree honors custom drivers from shared configuration. Refuse those
+    # configurations instead of executing a repo/user-provided shell command.
+    configured = git(
+        ["config", "--null", "--name-only", "--get-regexp", r"^merge\..*\.driver$"],
+        cwd=repo,
+        check=False,
+    )
+    if configured.returncode not in (0, 1) or configured.stdout:
+        raise BridgeError("PREFLIGHT_FAILED", "custom Git merge drivers require explicit handling")
+    result = git(
+        [
+            "-c",
+            "merge.renormalize=false",
+            "merge-tree",
+            "--write-tree",
+            "-z",
+            current,
+            incoming,
+        ],
+        cwd=repo,
+        check=False,
+    )
+    if result.returncode == 1:
+        return None
+    if result.returncode:
+        raise BridgeError("PREFLIGHT_FAILED", "Git could not compose dependency baseline")
+    return object_id(result.stdout.split(b"\0", 1)[0].decode().strip())
+
+
 def compose(repo: str, child_id: str, base: str, inputs: list[dict[str, Any]]) -> dict[str, Any]:
     """Merge approved commits in stable child-key order; never run external merge drivers."""
     current = object_id(base)
     for dependency in inputs:
         validate_pin(repo, dependency)
         incoming = object_id(dependency["commit_sha"])
-        # merge-tree honors custom drivers from shared configuration. Refuse those
-        # configurations instead of executing a repo/user-provided shell command.
-        configured = git(
-            ["config", "--null", "--name-only", "--get-regexp", r"^merge\..*\.driver$"],
-            cwd=repo,
-            check=False,
-        )
-        if configured.returncode not in (0, 1) or configured.stdout:
-            raise BridgeError(
-                "PREFLIGHT_FAILED", "custom Git merge drivers require explicit handling"
-            )
-        result = git(
-            [
-                "-c",
-                "merge.renormalize=false",
-                "merge-tree",
-                "--write-tree",
-                "-z",
-                current,
-                incoming,
-            ],
-            cwd=repo,
-            check=False,
-        )
-        if result.returncode == 1:
+        tree = merge_tree(repo, current, incoming)
+        if tree is None:
             return {"status": "conflict", "dependency_child_id": dependency["child_id"]}
-        if result.returncode:
-            raise BridgeError("PREFLIGHT_FAILED", "Git could not compose dependency baseline")
-        tree = object_id(result.stdout.split(b"\0", 1)[0].decode().strip())
         current = commit_tree(
             repo,
             tree,
