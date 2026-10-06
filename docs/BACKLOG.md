@@ -8,6 +8,20 @@ T3/T4 bounded live smokes and one controlled live repair/resume (same session an
 
 Open:
 
+- Product acceptance follows `docs/PRODUCT_FORM.md` (multi-subscription developers;
+  independent runtime with host plugins). Local plugin alpha packaging is complete; it is
+  not yet the installed end-to-end experience.
+- Codex / ZCode installed-host activation and offline entrypoint checks; persistent runtime
+  and project/state discovery so another conversation finds the same task without manual
+  instruction transfer. Then separately authorized live entrypoint acceptance.
+- Delivery of the approved candidate: export/apply the exact reviewed snapshot, detect source
+  changes/conflicts, preserve user edits and record delivery separately from `SUCCEEDED`.
+- Host-independent worker lifecycle if promising work continues after the host closes;
+  stop at review when no active supervisor, with no hidden model calls or automatic wake-up claim.
+- Codex executor adapter as the next execution direction; separately establish a usable
+  ZCode execution interface. Host plugin compatibility does not imply executor compatibility.
+- Developer installation → guided compatible runtime/plugin setup, update, uninstall with
+  state retained; choose a license before distributable release. No package publication yet.
 - Live interruption / timeout behaviour with a real executor (offline tests exist; live
   behaviour unverified) — needs explicit user authorization.
 - Evaluation harness implementing `docs/EVALUATION_PLAN.md` (T5) — the only place where

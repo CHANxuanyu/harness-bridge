@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-10-06 (controlled live repair/resume and evidence diagnostics)._
+_Last updated 2026-10-06 (multi-subscription product definition and local plugin alpha)._
 
 ## Current state
 
@@ -35,6 +35,10 @@ _Last updated 2026-10-06 (controlled live repair/resume and evidence diagnostics
   the live gate (`--mode live --allow-model-usage` + local config opt-in + clean environment)
   unchanged; repository **public** by the user's explicit choice — do not change visibility,
   no license added yet.
+- **Product direction:** developers with multiple coding-agent subscriptions; independent
+  local runtime, shared task evidence, host-specific plugin entrypoints. The user confirmed
+  this audience (ZCode/GLM + Claude Code + Codex). Final use and delivery boundaries are in
+  `docs/PRODUCT_FORM.md`; the runtime still has only a Claude Code live executor.
 
 ## Implemented
 
@@ -53,6 +57,7 @@ _Last updated 2026-10-06 (controlled live repair/resume and evidence diagnostics
 | CLI: doctor, create, run, status, list, artifacts, verify, review, recover, cancel, demo | done |
 | Offline demos `success`, `bug-then-repair` | pass |
 | Manual offline CI workflow (`workflow_dispatch`) | written, never run |
+| Codex / ZCode plugin source package, shared supervisor Skill, host catalogs | alpha; static/copy/CLI-contract checks pass; Codex catalog discovery pass; installed activation and ZCode loading NOT_RUN |
 
 ## Tests actually executed (chronological, by environment)
 
@@ -73,6 +78,11 @@ _Last updated 2026-10-06 (controlled live repair/resume and evidence diagnostics
   tests/integration/test_claude_stub_flow.py::test_doctor_reports_flag_evidence_not_unsupported`
   → 12 passed; ruff, format and mypy clean. Two new regression cases are included.
   The earlier 192-test full suite was not repeated; no claim of a new 194-test full-suite run.
+- **Plugin alpha checks (no model):** skill-creator validator passed; copied package has
+  internally resolving references and matching manifests/catalogs; bundled task validates
+  against the runtime model; 16 documented command forms parse without dispatch. Codex
+  0.160.0 recognized the temporarily registered catalog and version; source removed after
+  inspection, no plugin installed. See `docs/PLUGIN_ALPHA_RESULT.md`.
 
 ## Findings worth knowing
 
@@ -100,8 +110,12 @@ _Last updated 2026-10-06 (controlled live repair/resume and evidence diagnostics
 
 ## Next
 
-Each of these needs explicit user authorization before any real call:
-1. interruption / timeout behaviour with a live executor;
-2. T5 evaluation per `docs/EVALUATION_PLAN.md`.
+Product work now follows `docs/PRODUCT_FORM.md`: installed-host entrypoint/continuation
+acceptance, delivery of approved changes back to a project, lifecycle robustness, then a
+second execution adapter and distributable installation. Plugin activation/offline setup
+checks do not need another model call. Do not claim the prototype is the final product.
+
+Real interruption/timeout validation and T5 evaluation (`docs/EVALUATION_PLAN.md`) still
+need explicit bounded authorization before any real call. The prior repair allowance is used.
 Controlled repair/resume is complete for one bounded task; do not rerun it merely to hand off.
 Engineering backlog (no model needed): `docs/BACKLOG.md`.

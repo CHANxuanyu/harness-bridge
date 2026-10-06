@@ -1,0 +1,12 @@
+{
+  "name": "harness-bridge-local",
+  "interface": { "displayName": "Harness Bridge Local Alpha" },
+  "plugins": [
+    {
+      "name": "harness-bridge",
+      "source": { "source": "local", "path": "./plugins/harness-bridge" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -27,6 +27,19 @@ Harness Bridge  ── SQLite state + events ── bridge-owned git worktree
 executor: fake subprocess (offline)  |  claude -p … (live, explicitly gated; smoke-verified)
 ```
 
+## Product and user entrypoints
+
+The target user already subscribes to multiple coding agents (for example ZCode/GLM,
+Claude Code and Codex). The intended product is an independent local runtime with plugins
+in the user's existing hosts: delegate, review, repair, and continue without carrying
+instructions between conversations. See the [product definition](docs/PRODUCT_FORM.md).
+
+A [local plugin alpha](plugins/harness-bridge/README.md) now packages one shared supervisor
+Skill with Codex and ZCode manifests. It requires a separately installed runtime. Package
+checks and Codex marketplace discovery passed; installed-host activation and ZCode loading
+have not been verified. This does **not** add Codex/ZCode executor adapters, background
+workers, or a delivery/merge command. See [plugin validation](docs/PLUGIN_ALPHA_RESULT.md).
+
 ## Quick start (offline, no model, no network needed after install)
 
 Requires Python ≥ 3.11 (developed on 3.11.17), git, and [uv](https://docs.astral.sh/uv/).
@@ -83,6 +96,7 @@ better or cheaper than one (see [`docs/EVALUATION_PLAN.md`](docs/EVALUATION_PLAN
 `STATUS.md` (current state) · `HANDOFF.md` (next work package) ·
 `docs/VALIDATION_MATRIX.md` · `docs/ARCHITECTURE.md` · `docs/TESTING.md` ·
 `docs/DECISIONS.md` · `docs/ENVIRONMENT.md` · `docs/LOCAL_HANDOFF.md` · `docs/BACKLOG.md` ·
+`docs/PRODUCT_FORM.md` · `docs/PLUGIN_ALPHA_RESULT.md` ·
 `docs/CLOUD_EXECUTION_PLAN.md` (original requirements).
 
 No license has been chosen yet (public repository, all rights reserved by the author until a

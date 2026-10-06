@@ -71,3 +71,11 @@ Each entry: decision — reason. Newest last.
 23. **Doctor evidence scope:** report historical project validation separately from installed-host
     live readiness. A non-inference doctor never upgrades live readiness to supported based on
     past smoke success elsewhere; Linux/macOS process support cites offline validation.
+24. **Product audience and form (2026-10-06):** user confirmed developers with multiple coding-agent
+    subscriptions (ZCode/GLM, Claude Code, Codex); use an independent local runtime with host
+    plugin entrypoints, not a permanent dependency on one supervisor brand. `docs/PRODUCT_FORM.md`.
+25. **Thin plugin alpha:** one self-contained Skill, per-host manifests/catalogs, existing CLI;
+    no new MCP/state machine/worker or model calls merely to package the workflow. Static
+    compatibility, host discovery, installed activation and live execution are separate evidence.
+26. **Review success is not delivery:** current `SUCCEEDED` approves an isolated candidate;
+    explicit export/apply and delivery recording are required product work, not an implied merge.

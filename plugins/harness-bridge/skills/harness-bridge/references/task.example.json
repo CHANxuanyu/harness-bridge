@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "goal": "Implement tagnorm.normalize.normalize_tags per the requirements.",
+  "repo": {
+    "path": "/absolute/path/to/target-repo",
+    "base_ref": "HEAD"
+  },
+  "requirements": [
+    "Strip surrounding whitespace from each tag",
+    "Lowercase each tag",
+    "Drop empty strings",
+    "Remove duplicates",
+    "Preserve the order of first occurrences"
+  ],
+  "allowed_paths": [
+    "tagnorm/**",
+    "tests/**"
+  ],
+  "forbidden_paths": [
+    ".github/**",
+    ".env",
+    ".env.*",
+    "**/.env",
+    "**/.env.*"
+  ],
+  "verification": [
+    {
+      "id": "repo-tests",
+      "argv": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-t",
+        "."
+      ],
+      "cwd": ".",
+      "timeout_seconds": 120,
+      "required": true,
+      "trust": "repository-tests"
+    },
+    {
+      "id": "acceptance",
+      "argv": [
+        "python3",
+        "-B",
+        "/absolute/path/outside/repo/check_normalize.py"
+      ],
+      "cwd": ".",
+      "timeout_seconds": 120,
+      "required": true,
+      "trust": "external-acceptance"
+    }
+  ],
+  "limits": {
+    "max_attempts": 2,
+    "max_repair_cycles": 1,
+    "wall_timeout_seconds": 900,
+    "max_turns_per_attempt": 20,
+    "max_artifact_bytes": 10485760,
+    "kill_grace_seconds": 5
+  },
+  "executor": {
+    "kind": "fake",
+    "requested_model": null,
+    "scenario": "bug-then-repair"
+  }
+}

@@ -65,11 +65,13 @@ interrupted, outcome_unknown, spawn_failed`.
 JSON lines: `start{session_id, model}`, `progress`, `child{pid}`,
 `result{status: success|error, summary, tests_reported, error{category, message, reset_at}}`.
 
-## Claude Code stream (`--output-format stream-json`), as assumed from docs
+## Claude Code stream (`--output-format stream-json`)
 `system/init{session_id, model, permissionMode, apiKeySource, tools, mcp_servers}`,
 `assistant`/`user` messages (content not stored), `result{subtype, is_error, result,
-num_turns, total_cost_usd, usage, permission_denials, session_id}`. Unverified against a real
-run; see `tests/fixtures/claude_stream/PROVENANCE.json`.
+num_turns, total_cost_usd, usage, permission_denials, session_id}`. Docs-derived/synthetic
+fixtures remain in `tests/fixtures/claude_stream/`. Captured-redacted initial and controlled
+repair/resume streams are in `tests/fixtures/claude_stream_live/`; each set has its own
+`PROVENANCE.json`. These live samples do not validate all possible error/limit behaviours.
 
 ## CLI
 Global: `--state-dir DIR` (default `$HBRIDGE_STATE_DIR` or `$XDG_STATE_HOME/harness-bridge` or

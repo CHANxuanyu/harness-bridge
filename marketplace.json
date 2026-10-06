@@ -1,0 +1,13 @@
+{
+  "name": "harness-bridge-local",
+  "description": "Local alpha workflow for multi-agent coding subscriptions; requires the hbridge runtime.",
+  "plugins": [
+    {
+      "name": "harness-bridge",
+      "source": "./plugins/harness-bridge",
+      "version": "0.1.0-alpha.1",
+      "description": "Delegate coding work and review evidence through the local Bridge.",
+      "category": "Developer Tools"
+    }
+  ]
+}

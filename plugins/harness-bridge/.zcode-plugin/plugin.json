@@ -1,0 +1,7 @@
+{
+  "name": "harness-bridge",
+  "version": "0.1.0-alpha.1",
+  "description": "Delegate and review bounded coding tasks through an independently installed local Harness Bridge runtime.",
+  "author": { "name": "Xuanyu CHAN" },
+  "skills": "./skills/"
+}

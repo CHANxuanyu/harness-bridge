@@ -1,0 +1,13 @@
+{
+  "name": "harness-bridge",
+  "version": "0.1.0-alpha.1",
+  "description": "Delegate and review bounded coding tasks through an independently installed local Harness Bridge runtime.",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Harness Bridge",
+    "shortDescription": "Delegate coding work and review the evidence",
+    "longDescription": "Experimental local workflow for developers using multiple coding agents. Requires a separately installed hbridge runtime. The current live executor is Claude Code; Codex and ZCode executor adapters are not included.",
+    "developerName": "Xuanyu CHAN",
+    "category": "Developer Tools"
+  }
+}

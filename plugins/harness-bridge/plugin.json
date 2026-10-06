@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "harness-bridge",
+  "version": "0.1.0-alpha.1",
+  "description": "Delegate and review bounded coding tasks through an independently installed local Harness Bridge runtime."
+}
