@@ -15,6 +15,7 @@ _CODES: dict[str, tuple[int, bool]] = {
     "INVALID_INPUT": (2, False),
     "NOT_FOUND": (5, False),
     "STATE_CONFLICT": (3, True),
+    "DELIVERY_CONFLICT": (3, False),
     "IDEMPOTENCY_CONFLICT": (3, False),
     "ADVISOR_REQUIRED": (3, False),
     "STALE_ADVISOR": (3, False),

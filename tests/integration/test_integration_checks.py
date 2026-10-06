@@ -86,7 +86,7 @@ def test_complete_acceptance_review_replay_keeps_source_and_executor_budget(fx: 
     assert checkout_fingerprint(str(fx.repo)) == source
     goal = b.coordination.status(g["goal_id"])
     assert goal["budget"] == budget
-    assert goal["delivery"] == "not_implemented" and goal["state"] == "ACTIVE"
+    assert goal["delivery"]["status"] == "ready" and goal["state"] == "READY_TO_DELIVER"
     b.close()
 
 
@@ -363,6 +363,7 @@ def test_v7_migration_preserves_frozen_candidate_and_cli_can_verify_review(fx: F
     db = b.store.db_path
     b.close()
     with sqlite3.connect(db) as old:
+        old.execute("DROP TABLE deliveries")
         old.execute("DROP TABLE integration_reviews")
         old.execute("DROP TABLE integration_verifications")
         old.execute("UPDATE meta SET value='7' WHERE key='schema_revision'")

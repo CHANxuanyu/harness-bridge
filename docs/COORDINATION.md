@@ -120,24 +120,28 @@ durable dispatch keys are in [WORKERS.md](WORKERS.md); scope checks, optional to
 ceilings and their conservative accounting are in [CONCURRENCY.md](CONCURRENCY.md).
 Limits apply within one state root; this is not a cross-installation quota broker.
 
-Goal status is a transactional projection of child facts, not a persisted delivery verdict:
+Goal status combines child facts, integrated readiness and durable delivery receipts:
 
 | Child facts | Goal view |
 |---|---|
 | No child plan or task | `DRAFT` |
 | Any awaiting review, blocked, interrupted, failed or cancelled child | `NEEDS_ATTENTION` |
-| Otherwise, including all children approved | `ACTIVE` |
+| Otherwise, including all children approved but without integrated approval | `ACTIVE` |
+| Latest integration has current exact approval and project is idle | `READY_TO_DELIVER` |
+| Completed delivery has intact retained bindings and matching refs | `DELIVERED` |
+| Delivery pending, changed, or integrated approval stale | `NEEDS_ATTENTION` |
 | Cancel/fail requested, stop pending | `NEEDS_ATTENTION` |
 | Cancel/fail requested, all tasks terminal and attempt exits confirmed | `CANCELLED` / `FAILED` |
 
-`delivery` explicitly remains `not_implemented`. Child `SUCCEEDED` does not mean integrated
-goal success. Goal controls and confirmed-stop terminal states are now available; the complete state table
-and child-plan views are in [PLANNING.md](PLANNING.md). Integrated approval/delivery gates belong to P4. Recent goal events
+`delivery` is now a structured readiness/receipt view; valid current integrated approval projects
+`READY_TO_DELIVER`, and confirmed exact branch publication projects `DELIVERED`. See [DELIVERY.md](DELIVERY.md).
+Child `SUCCEEDED` does not mean integrated goal success. Goal controls and confirmed-stop terminal states are now available; the complete state table
+and child-plan views are in [PLANNING.md](PLANNING.md). Integrated approval/delivery gates are now implemented within the partial P4 scope. Recent goal events
 include sequence, epoch and associated task IDs; the view is limited to 50 events. Incremental
 task cursor/wait APIs are now implemented in `events`; goal-wide incremental streams remain
 pending. Existing task events/manifests retain detailed evidence.
 
-## Storage upgrade
+## Storage upgrade (original P1 slice; current upgrades in [DELIVERY.md](DELIVERY.md))
 
 SQLite schema revisions 1 and 2 now upgrade additively to 3. Before DDL, while holding the writer lock,
 SQLite's backup API saves committed data including WAL to `backups/pre-v3-<id>.sqlite3`
@@ -165,5 +169,8 @@ Offline evidence is in `tests/integration/test_coordination.py`,
 `tests/unit/test_migrations.py`; results are recorded in `VALIDATION_MATRIX.md`.
 
 The first P4 slice adds `goal integrate` and `integration materialize/status`; see
-[INTEGRATION.md](INTEGRATION.md). Goal status includes frozen integration records, while delivery
-remains `not_implemented`. A candidate or successful child does not imply goal delivery.
+[INTEGRATION.md](INTEGRATION.md). Goal status includes frozen integration records. Subsequent
+[verification/review](INTEGRATION_CHECKS.md) and [local delivery](DELIVERY.md) slices add exact
+integrated acceptance and explicit branch publication. A candidate or successful child does not
+imply goal delivery. Pending/completed delivery intents fence further goal mutations; status and
+Advisor takeover remain available, and only an unproved pending intent may be explicitly aborted.

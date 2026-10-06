@@ -2,9 +2,10 @@
 
 Implemented 2026-10-06. After [freezing and materializing](INTEGRATION.md) the approved child
 versions, the current Advisor explicitly runs the frozen total-goal checks and reviews that exact
-candidate. Passing checks alone is not approval. Integration approval is not delivery: goal status
-still reports `delivery: not_implemented`; branch delivery and `READY_TO_DELIVER` selection remain
-future P4 work. Neither checking nor reviewing dispatches an Executor.
+candidate. Passing checks alone is not approval. Integration approval is not delivery: the later
+[local delivery slice](DELIVERY.md) projects `READY_TO_DELIVER` for the current valid selection and
+creates a local branch only on an explicit delivery request. Neither checking nor reviewing
+dispatches an Executor.
 
 ## Explicit commands
 

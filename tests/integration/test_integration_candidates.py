@@ -77,7 +77,7 @@ def test_full_two_child_candidate_uses_retained_inputs_not_current_workspaces(fx
     assert checkout_fingerprint(str(fx.repo)) == source
     assert (fx.repo / "keep.txt").read_text() == "user work"
     status = b.coordination.status(g["goal_id"])
-    assert status["state"] == "ACTIVE" and status["delivery"] == "not_implemented"
+    assert status["state"] == "ACTIVE" and status["delivery"]["status"] == "not_ready"
     assert status["budget"] == before_budget
     assert status["integrations"][0]["integration_id"] == ready["integration_id"]
     assert b.integrations.status(ready["integration_id"])["inputs_status"]["valid"]
@@ -433,6 +433,7 @@ def test_v6_upgrade_preserves_worker_history_and_goal_budget(fx: Fixture) -> Non
     path = b.store.db_path
     b.close()
     with sqlite3.connect(path) as old:
+        old.execute("DROP TABLE deliveries")
         old.execute("DROP TABLE integration_reviews")
         old.execute("DROP TABLE integration_verifications")
         old.execute("DROP TABLE integrations")

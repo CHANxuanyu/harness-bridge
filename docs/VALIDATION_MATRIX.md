@@ -342,3 +342,45 @@ P4 remains partial: conflict-repair task binding, exact delivery branch and owne
 are unimplemented. `APPROVED` is integration history plus a
 separate current-validity check, not `READY_TO_DELIVER`/`DELIVERED`. Installed-host and live
 multi-harness lifecycle acceptance are still later work. See `INTEGRATION_CHECKS.md`.
+
+
+## P4 exact local delivery (2026-10-06, macOS)
+
+Affected pre-edit approval/evidence/takeover baseline: **6 passed, 19 deselected**, 27.32s,
+ruff/format/types clean. Prior 474-case regression was not repeated solely for handoff. After the
+schema 9 change, historical migration checks passed **14/14**, 0.55s.
+
+First new delivery/contract run: **32 passed, 7 failed**, 118.79s. The new refusal paths correctly
+stopped ref mutation, but `DELIVERY_CONFLICT` was missing from the central error-code registry,
+producing ValueError instead of the intended structured BridgeError. A one-case diagnostic
+confirmed this (1 failed, 26 deselected, 6.89s). Registered the stable exit-3/nonretryable code;
+kept every refusal case. Added bare internal-namespace rejection and missing-proof/metadata,
+unverified/failed-check and CLI-abort cases. Final expanded delivery/contract subset: **44 passed**,
+131.96s, ruff/format/types clean (108 files, 34 source files). No tests skipped or acceptance weakened.
+
+New coverage: 31 offline integration cases, 13 input-contract cases, plus one migration revision.
+Includes exact commit/tree delivery, preservation of advanced/dirty/staged/untracked source work,
+source/base difference receipts, readiness invalidation by code/evidence/selection/Advisor changes,
+unverified/failed total acceptance refusal, existing identical/different/case-alias/symbolic/dangling
+and selected unborn branch refusal, three real CLI crash windows, atomic external ref race, same-key
+concurrent dispatch, takeover before/after publication, explicit abort without ref deletion,
+completed replay after changed/missing refs, retained review loss, other-goal unknown execution,
+v8 approval preservation and CLI round trips. No real user state was migrated.
+
+Full shared-core `scripts/check.sh` collected all 519 cases: **518 passed, 1 failed**, 509.18s.
+The only failure was the old diamond-dependency assertion expecting the literal `not_implemented`;
+the new return value correctly reports structured `not_ready`. Updated only that assertion to also
+require goal ACTIVE, preserving the rule that approved child dependencies do not imply delivery.
+Exact-test `scripts/check.sh` then **1 passed**, 5.92s; ruff/format clean (109 files), strict mypy
+clean (34 source files). The full run used the already-collected old assertion; runtime source was
+unchanged throughout and after this full run. No broad rerun was needed for the corrected return-shape
+assertion. **All 519 current cases have passed across these runs**, not a claimed single green
+519-case full run. This milestone adds **45 cases** relative to 474: 31 integration, 13 contracts,
+one migration revision. No failed test was deleted or skipped.
+
+Evidence remains T0/T1/T2: isolated HOME/auth sentinels,
+local Git/SQLite/checker processes and simulated Executors only. Process tests run with local
+process visibility because the macOS execution sandbox blocks `ps`; the existing test network guard
+is process-level, not an OS subprocess firewall. No real harness/model/auth/network call or remote
+push occurred. Conflict-repair task binding and ownership-safe cleanup remain P4 work; installed
+host lifecycle and real multi-harness acceptance remain later milestones. See `DELIVERY.md`.

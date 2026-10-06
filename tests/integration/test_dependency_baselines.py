@@ -79,7 +79,8 @@ def test_diamond_dependencies_preserve_descendant_edits_and_disjoint_changes(fx:
     b = Bridge(fx.state_dir, advisor_claim=claim)
     assert b.materialize(ids["d"])["task_id"] == d["task_id"]
     assert b.materialize(ids["d"])["base_sha"] == d["base_sha"]
-    assert b.coordination.status(g["goal_id"])["delivery"] == "not_implemented"
+    goal = b.coordination.status(g["goal_id"])
+    assert goal["delivery"]["status"] == "not_ready" and goal["state"] == "ACTIVE"
     b.close()
 
 
@@ -288,6 +289,7 @@ def test_upgrade_v3_preserves_materialized_plan_and_batch_replay(fx: Fixture) ->
     path = b.store.db_path
     b.close()
     with sqlite3.connect(path) as old:
+        old.execute("DROP TABLE deliveries")
         old.execute("DROP TABLE integration_reviews")
         old.execute("DROP TABLE integration_verifications")
         old.execute("DROP TABLE integrations")

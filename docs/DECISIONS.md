@@ -209,3 +209,20 @@ Each entry: decision — reason. Newest last.
 66. **P4 check persistence/boundary:** schema 8 preserves old candidates through backed-up v1–v7
     upgrade; integration approval does not select READY_TO_DELIVER or create a delivery branch.
     Conflict-repair binding, exact delivery and safe cleanup remain. No new real call/state migration.
+
+67. **P4 current selection:** latest frozen integration supersedes previous readiness; never fall
+    back to an older passing candidate while newer work is unapproved. Current exact approval and
+    idle project project READY_TO_DELIVER; child success never does.
+68. **P4 branch publication:** persist a frozen delivery intent, then create the requested local
+    branch and private proof ref atomically with Git create-only/no-deref operations. Existing
+    branches, even matching unowned ones, symbolic refs, case aliases and selected unborn branches
+    are refused; no checkout/source edits/push/PR or rebase.
+69. **P4 retry/history:** a matching ref pair plus retained bindings permits crash finalization;
+    completed replay only observes, never recreates/reset refs. Historical publication can be
+    confirmed after takeover without applying later workspace changes to the delivered commit.
+70. **P4 terminal scope:** pending/completed delivery fences new goal mutations; current Advisor
+    may abandon an unproved prepared intent without deleting any refs. Completed goals need a new
+    goal for new work; missing/changed delivery evidence needs attention rather than reopening.
+71. **P4 delivery persistence:** schema 9 adds intents/receipts and goal/branch uniqueness, with
+    backed-up v1–v8 upgrade/rollback. Local delivery spends no Executor budget; conflict-repair
+    binding and cleanup remain. No real user-state migration or model/remote publication calls.

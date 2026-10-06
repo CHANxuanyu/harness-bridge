@@ -86,6 +86,18 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("goal_id")
     p.add_argument("--file", required=True, help="IntegrationSpec JSON")
     p.add_argument("--idempotency-key", required=True)
+    p = goal_sub.add_parser("deliver", parents=[common])
+    p.add_argument("goal_id")
+    p.add_argument("--integration", required=True)
+    p.add_argument("--branch", required=True)
+    p.add_argument("--idempotency-key", required=True)
+    p = sub.add_parser("delivery", parents=[common], help="inspect or abort a local delivery")
+    delivery_sub = p.add_subparsers(dest="delivery_command", required=True)
+    for operation in ("status", "abort"):
+        p = delivery_sub.add_parser(operation, parents=[common])
+        p.add_argument("delivery_id")
+        if operation == "abort":
+            p.add_argument("--reason", required=True)
     p = sub.add_parser(
         "integration", parents=[common], help="inspect or materialize an integration"
     )
@@ -236,6 +248,16 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
     try:
         if cmd == "projects":
             return bridge.coordination.projects()
+        if cmd == "delivery":
+            if args.delivery_command == "abort":
+                return bridge.deliveries.abort(args.delivery_id, args.reason)
+            return bridge.deliveries.status(args.delivery_id)
+        if cmd == "goal" and args.goal_command == "deliver":
+            return bridge.deliveries.deliver(
+                args.goal_id,
+                {"integration_id": args.integration, "branch": args.branch},
+                args.idempotency_key,
+            )
         if cmd == "integration":
             if args.integration_command == "verify":
                 _install_signal_handlers(flag)

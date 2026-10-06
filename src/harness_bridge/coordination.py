@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal, TypeVar, cast
@@ -113,6 +114,7 @@ def check_key(key: str) -> None:
 class Coordinator:
     def __init__(self, store: Store) -> None:
         self.store = store
+        self.delivery_view: Callable[[sqlite3.Cursor, sqlite3.Row], dict[str, Any]] | None = None
 
     def _goal(self, cur: sqlite3.Cursor, goal_id: str) -> sqlite3.Row:
         row = cur.execute(
@@ -263,6 +265,7 @@ class Coordinator:
         claim: AdvisorClaim | None,
         *,
         allow_stopping: bool = False,
+        allow_delivery: bool = False,
     ) -> sqlite3.Row:
         goal = self._goal(cur, goal_id)
         if claim is None:
@@ -275,7 +278,18 @@ class Coordinator:
             )
         if not allow_stopping and self.controls(cur, goal_id)["termination"]:
             raise BridgeError("STATE_CONFLICT", "goal termination has been requested")
+        if not allow_delivery:
+            self.guard_delivery(cur, goal_id)
         return goal
+
+    @staticmethod
+    def guard_delivery(cur: sqlite3.Cursor, goal_id: str) -> None:
+        if cur.execute(
+            "SELECT 1 FROM deliveries WHERE goal_id=? AND status<>'aborted'", (goal_id,)
+        ).fetchone():
+            raise BridgeError(
+                "STATE_CONFLICT", "goal has a pending or completed delivery; inspect its receipt"
+            )
 
     @staticmethod
     def controls(cur: sqlite3.Cursor, goal_id: str) -> dict[str, Any]:
@@ -305,6 +319,7 @@ class Coordinator:
                         "IDEMPOTENCY_CONFLICT", "key already used for another control request"
                     )
                 return {**json.loads(replay["receipt_json"]), "replayed": True}
+            self.guard_delivery(cur, goal_id)
             before = self.controls(cur, goal_id)
             if before["termination"]:
                 raise BridgeError(
@@ -569,6 +584,20 @@ class Coordinator:
                     if controls["termination"] == "cancel"
                     else "FAILED"
                 )
+            delivery = (
+                self.delivery_view(cur, goal) if self.delivery_view else {"status": "not_ready"}
+            )
+            if delivery["status"] == "ready":
+                state = "READY_TO_DELIVER"
+            elif delivery["status"] == "delivered":
+                state = "DELIVERED"
+            elif delivery["status"] in ("pending", "changed") or (
+                not controls["termination"]
+                and integrations
+                and integrations[-1]
+                and integrations[-1]["phase"] == "APPROVED"
+            ):
+                state = "NEEDS_ATTENTION"
             events = [
                 {**dict(r), "payload": json.loads(r["payload"])}
                 for r in cur.execute(
@@ -589,7 +618,7 @@ class Coordinator:
                 "pending_stop_integrations": pending_integrations
                 if controls["termination"]
                 else [],
-                "delivery": "not_implemented",
+                "delivery": delivery,
                 "integrations": integrations,
                 "base_sha": goal["base_sha"],
                 "repo_path": goal["repo_path"],

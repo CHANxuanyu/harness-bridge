@@ -3,7 +3,7 @@
 Implemented 2026-10-06. The Advisor can freeze every required child's approved snapshot and an
 explicit integration order, then materialize a separate Bridge-owned candidate. The subsequent
 [verification/review slice](INTEGRATION_CHECKS.md) runs those frozen checks and binds an Advisor
-review. Branch delivery remains P4 work. A `CANDIDATE` is not `READY_TO_DELIVER` or `DELIVERED`.
+review. Exact local branch delivery is now implemented in [DELIVERY.md](DELIVERY.md). A `CANDIDATE` is not `READY_TO_DELIVER` or `DELIVERED`.
 
 ## Commands and contract
 
@@ -130,5 +130,5 @@ changed/foreign/symlink workspaces, actual process exit after Git materializatio
 real simulated-worker history. No real harness, auth or model usage was invoked.
 
 Total-goal checks and exact integration review are now implemented in [INTEGRATION_CHECKS.md](INTEGRATION_CHECKS.md).
-Next P4 work: materialize budgeted conflict-repair children, create the exact idempotent local delivery branch and implement
-ownership-safe retention/cleanup. Installed-host and real multi-harness acceptance remain later gates.
+Exact local branch delivery is implemented in [DELIVERY.md](DELIVERY.md). Next P4 work:
+materialize budgeted conflict-repair children and implement ownership-safe retention/cleanup. Installed-host and real multi-harness acceptance remain later gates.

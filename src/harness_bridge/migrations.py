@@ -176,6 +176,25 @@ CREATE TABLE integration_reviews (
 );
 """
 
+DELIVERY_SCHEMA = """
+CREATE TABLE deliveries (
+    delivery_id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL REFERENCES goals(goal_id),
+    project_id TEXT NOT NULL REFERENCES projects(project_id),
+    idempotency_key TEXT NOT NULL,
+    request_digest TEXT NOT NULL,
+    branch TEXT NOT NULL COLLATE NOCASE,
+    status TEXT NOT NULL CHECK(status IN ('prepared','delivered','aborted')),
+    record_json TEXT NOT NULL,
+    record_digest TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(goal_id,idempotency_key)
+);
+CREATE UNIQUE INDEX active_delivery_per_goal ON deliveries(goal_id) WHERE status<>'aborted';
+CREATE UNIQUE INDEX reserved_delivery_branch ON deliveries(project_id,branch)
+    WHERE status<>'aborted';
+"""
+
 MIGRATIONS = {
     2: COORDINATION_SCHEMA,
     3: PLANNING_SCHEMA,
@@ -184,4 +203,5 @@ MIGRATIONS = {
     6: WORKER_SCHEMA,
     7: INTEGRATION_SCHEMA,
     8: INTEGRATION_CHECK_SCHEMA,
+    9: DELIVERY_SCHEMA,
 }

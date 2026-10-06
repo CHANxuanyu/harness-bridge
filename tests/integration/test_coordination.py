@@ -69,7 +69,7 @@ def test_goal_two_children_and_takeover_preserve_workspaces(fx: Fixture) -> None
     new.review(c["task_id"], review_for(new.artifacts(c["task_id"]), "approve", "c-ok"))
     status = new.coordination.status(g["goal_id"])
     assert status["state"] == "ACTIVE"  # child approvals do not imply integrated delivery
-    assert status["delivery"] == "not_implemented"
+    assert status["delivery"]["status"] == "not_ready"
     assert status["budget"]["attempts"] == 2
     assert [t["worktree_path"] for t in status["children"]] == [a["worktree"], c["worktree"]]
     assert new.coordination.projects()["projects"][0]["goal_ids"] == [g["goal_id"]]

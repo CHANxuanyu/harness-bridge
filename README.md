@@ -18,7 +18,8 @@ The current implementation includes the task execution/review core and a first g
 coordination core: child plans/ownership, Advisor takeover, goal pause/cancel, aggregate attempt
 limits, fixed approved dependency baselines, workspace readiness checks and state-root project
 discovery. Explicit bounded environment setup, managed background attempts and up to two scoped
-concurrent executors with goal ceiling reservations are supported; integrated delivery remains pending. It is a
+concurrent executors with goal ceiling reservations are supported, along with integrated acceptance,
+exact Advisor review and explicit local branch delivery. Conflict repair and cleanup remain pending. It is a
 deterministic local CLI (`hbridge`). **It never calls a model API itself.** The supervisor is
 whoever runs the CLI (the Advisor, e.g. the user's existing Codex session); the executor is Claude Code
 (live, gated, local only) or a bundled fake executor (offline).
@@ -64,8 +65,9 @@ covers explicit two-slot admission, scope checks and goal wall-time/turn reserva
 is implemented. The [integration reference](docs/INTEGRATION.md) covers the first P4 slice:
 frozen approved inputs, owned candidate workspaces and durable conflict/crash handling. Total-goal
 checks and exact Advisor approval are covered by the [verification/review reference](docs/INTEGRATION_CHECKS.md).
-Conflict-repair binding, branch delivery, actual installed-host lifecycle acceptance and later
-milestones remain incomplete; an approved integration is not a delivered goal.
+The [local delivery reference](docs/DELIVERY.md) covers exact branch delivery, crash recovery and
+READY_TO_DELIVER/DELIVERED projections. Conflict-repair binding, cleanup, actual installed-host
+lifecycle acceptance and later milestones remain incomplete; approval alone does not deliver a goal.
 
 ## Quick start (offline, no model, no network needed after install)
 

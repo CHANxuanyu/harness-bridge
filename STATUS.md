@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-10-06 (P4 integrated verification/review implemented; delivery pending)._
+_Last updated 2026-10-06 (P4 exact local delivery implemented; conflict repair/cleanup pending)._
 
 ## Current state
 
@@ -29,7 +29,7 @@ _Last updated 2026-10-06 (P4 integrated verification/review implemented; deliver
   same-key replay never re-executes, unknown exits retain slots/resources. No persistent service
   hosting or cross-state coordination is claimed. Schema revision 5 upgrades v1–v4 atomically
   with backup, preserving old plan digests. See `docs/PREPARATION.md`.
-  P4 integrated delivery and P6 installed entrypoints remain future work.
+  P4 conflict repair/cleanup and P6 installed entrypoints remain future work.
 - **P3 first worker slice:** `run --background --idempotency-key` atomically reserves an
   attempt/worker handle before a detached process claims it once. It reuses the foreground
   executor/verification path; current Advisor, preparation, project-slot and aggregate-attempt
@@ -65,9 +65,32 @@ _Last updated 2026-10-06 (P4 integrated verification/review implemented; deliver
   upgrades preserving prior candidates. Isolated test state only; no actual user/live migration.
   Checks use isolated environment and bounded logs, but remain trusted scripts, not OS sandboxed.
   Changed candidates/evidence, unknown exits and stale Advisor epochs cannot yield current
-  approval. `APPROVED` is not goal delivery; conflict-repair binding, exact branch delivery and
-  ownership-safe retention/cleanup remain P4 work.
-- **Current P4 verification/review checks:** final `scripts/check.sh` → **474 passed / 0 failed /
+  approval. `APPROVED` alone is not goal delivery; explicit exact branch delivery is implemented
+  below. Conflict-repair binding and ownership-safe retention/cleanup remain P4 work.
+- **P4 exact local delivery:** `goal deliver` freezes an intent and creates a new named local
+  branch at the exact approved commit/tree, paired atomically with a private publication proof.
+  READY_TO_DELIVER requires the latest frozen integration's current exact approval and an idle
+  project; DELIVERED requires a confirmed receipt/ref pair. Existing/unowned/symbolic/selected
+  branches and case aliases are refused. Source checkout/index/user edits remain untouched;
+  advanced source/base differences are reported, never silently rebased. No push/PR/model call.
+- **Delivery lifecycle:** same-key recovery can finalize the proven prior publication; completed
+  replay never recreates/reset changed refs. Pending/completed delivery fences new goal mutations.
+  Current Advisor may abort an unproved pending intent without deleting any refs; completed goals
+  need new goals for new work. Reads/takeover remain available. Receipt/ref/evidence changes need
+  attention rather than reopening the goal. See `docs/DELIVERY.md`.
+- **Revision 9:** additive delivery records and goal/branch reservations, backed-up atomic v1–v8
+  migrations retaining old approved integration digests. All workspaces and evidence remain;
+  conflict-repair child binding and cleanup still pending. No real user/live state migrated.
+- **Current delivery checks:** full `scripts/check.sh` ran all 519 cases: **518 passed, 1 failed**
+  (509.18s). The sole failure expected the retired `delivery: not_implemented` string. Updated
+  that assertion to require structured `not_ready` plus ACTIVE (child approvals still cannot
+  imply delivery); its exact-test `scripts/check.sh` then **passed**, 5.92s. Runtime code was
+  unchanged. All **519 current cases passed across these runs**, not a claimed single green
+  519-case suite. Ruff/format clean (109 files), strict mypy clean (34 source files).
+  Adds 45 cases: 31 integration, 13 contract, one migration revision. No new real model/auth/network
+  call or user-state migration. Details and earlier corrections: `docs/VALIDATION_MATRIX.md`.
+
+- **Prior P4 verification/review checks:** final `scripts/check.sh` → **474 passed / 0 failed /
   0 skipped**, 374.63s; ruff/format clean (105 files), strict mypy clean (33 source files).
   Adds 36 cases: 25 integration, 10 strict contracts and one migration revision. Real local
   checker/fake processes use isolated HOME/auth sentinels. Targeted runs and fixture corrections
@@ -130,7 +153,7 @@ _Last updated 2026-10-06 (P4 integrated verification/review implemented; deliver
   Bridge prepares workspaces and runs/records tasks. `supervisor` is the existing name for
   Advisor. Parent goals, child ownership, takeover fencing and initial aggregate
   attempt/repair limits, fixed child dependencies and controlled finite preparation are implemented.
-  Background/concurrent workers now exist in the local core; integrated delivery and installed
+  Background/concurrent workers and exact local delivery now exist in the local core; conflict repair/cleanup and installed
   host experience remain pending. This is not the full product behavior.
 
 ## Implemented
@@ -154,10 +177,11 @@ _Last updated 2026-10-06 (P4 integrated verification/review implemented; deliver
 | Immutable child plans / DAG validation / explicit root and dependent materialization | implemented; fixed approved inputs and conflict refusal |
 | Retained approval snapshots / goal-child context / presence preflight | implemented, offline-validated |
 | Explicit finite preparation / output-cache inventory / resource claims / cancel-recover | implemented; unknown exits stay reserved; no persistent services or cross-state locks |
-| SQLite revision 1/2/3/4/5/6/7→8 upgrade + WAL-consistent backup/rollback | implemented; isolated fixtures only, real user state not migrated |
+| SQLite revision 1/2/3/4/5/6/7/8→9 upgrade + WAL-consistent backup/rollback | implemented; isolated fixtures only, real user state not migrated |
 | Durable background dispatch / task event cursors and bounded wait | implemented first P3 slice; offline worker lifecycle checks |
-| Frozen integration inputs / owned candidate / conflict and crash retry | implemented P4 candidate slice; exact total verification/review now available, delivery pending |
+| Frozen integration inputs / owned candidate / conflict and crash retry | implemented P4 candidate slice; exact verification/review and local delivery now available |
 | Durable total-goal verification / cancellation / crash recovery / exact Advisor review | implemented, offline-tested; no automatic repair/delivery |
+| Exact local branch delivery / durable intent / atomic proof / current goal readiness | implemented; no automatic checkout, push, merge or cleanup |
 | Offline demos `success`, `bug-then-repair` | pass |
 | Manual offline CI workflow (`workflow_dispatch`) | written, never run |
 | Codex / ZCode plugin source package, shared supervisor Skill, host catalogs | alpha; static/copy/CLI-contract checks pass; Codex catalog discovery pass; installed activation and ZCode loading NOT_RUN |
@@ -246,9 +270,9 @@ _Last updated 2026-10-06 (P4 integrated verification/review implemented; deliver
 
 ## Next
 
-Continue P4 in `docs/PROJECT_PLAN.md`: budgeted conflict-repair binding, idempotent exact local
-delivery and safe retention. Frozen inputs/candidates and explicit total checks/exact Advisor review
-are implemented in `docs/INTEGRATION.md` and `docs/INTEGRATION_CHECKS.md`; reuse them.
+Continue P4 in `docs/PROJECT_PLAN.md`: budgeted conflict-repair binding and safe retention/cleanup.
+Frozen candidates, total checks/exact Advisor review and idempotent exact local delivery are
+implemented in `docs/INTEGRATION.md`, `docs/INTEGRATION_CHECKS.md` and `docs/DELIVERY.md`; reuse them.
 P3 local worker/concurrency/ceiling checks are implemented; actual installed-host lifecycle and
 real multi-harness validation remain later acceptance. Reuse `docs/WORKERS.md` and
 `docs/CONCURRENCY.md`; no live authorization is renewed.

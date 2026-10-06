@@ -112,7 +112,7 @@ With `--json`, stdout is one object: `{"ok": true, ...}` or
 | 0 | success |
 | 1 | `INTERNAL_ERROR` |
 | 2 | `USAGE_ERROR`, `INVALID_INPUT` |
-| 3 | `STATE_CONFLICT`, `IDEMPOTENCY_CONFLICT`, `STALE_REVIEW`, `APPROVAL_GATE_FAILED`, `BUDGET_EXHAUSTED` |
+| 3 | `STATE_CONFLICT`, `DELIVERY_CONFLICT`, `IDEMPOTENCY_CONFLICT`, `STALE_REVIEW`, `APPROVAL_GATE_FAILED`, `BUDGET_EXHAUSTED` |
 | 4 | `LIVE_GATE_CLOSED`, `PREFLIGHT_FAILED` |
 | 5 | `NOT_FOUND` |
 | 6 | `SOURCE_REPO_DIRTY`, `REPO_ERROR`, `WORKSPACE_ERROR`, `PATH_POLICY_VIOLATION` |
@@ -140,3 +140,8 @@ claude_binary = "/absolute/path/to/claude"   # optional; default: `claude` on PA
 allow_unlisted_flags = []               # exact flag names you confirmed locally, e.g. ["--max-turns"];
                                         # no wildcards; forbidden flags can never be allowed
 ```
+
+
+Local goal delivery is specified in [DELIVERY.md](DELIVERY.md): `goal deliver`, `delivery status`,
+`delivery abort`, and structured `goal status.delivery`. `DELIVERY_CONFLICT` uses exit status 3
+with `retryable: false`; callers must inspect refs/receipts rather than automatically overwrite.
