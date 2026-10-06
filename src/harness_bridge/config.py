@@ -14,12 +14,15 @@ These checks reduce accidental model usage; they are not a proof of billing isol
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from harness_bridge.errors import BridgeError
+
+_FLAG_NAME = re.compile(r"--?[A-Za-z][A-Za-z0-9-]*")
 
 # Variables whose presence means a live Claude run might bill an API account or route elsewhere.
 API_PROVIDER_ENV = (
@@ -81,6 +84,13 @@ def load_config(state_dir: Path) -> BridgeConfig:
     flags = live.get("allow_unlisted_flags", [])
     if not isinstance(flags, list) or not all(isinstance(f, str) for f in flags):
         raise BridgeError("INVALID_INPUT", "[live] allow_unlisted_flags must be a list of strings")
+    bad = [f for f in flags if not _FLAG_NAME.fullmatch(f)]
+    if bad:
+        raise BridgeError(
+            "INVALID_INPUT",
+            "[live] allow_unlisted_flags takes exact flag names you confirmed locally (e.g. "
+            f"'--max-turns'); wildcards or other values are not accepted: {bad}",
+        )
     reviewed = live.get("hooks_and_permissions_reviewed", False)
     if not isinstance(reviewed, bool):
         raise BridgeError("INVALID_INPUT", "[live] hooks_and_permissions_reviewed must be a bool")

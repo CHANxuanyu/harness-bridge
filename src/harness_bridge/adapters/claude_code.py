@@ -52,6 +52,34 @@ FORBIDDEN_FLAGS = (
 )
 FORBIDDEN_VALUES = ("bypassPermissions",)
 
+# Official documentation evidence for the flags this adapter uses. The CLI reference states:
+# "`claude --help` does not list every flag, so a flag's absence from `--help` does not mean it
+# is unavailable." Documentation is a declaration, not proof for a given installation; local
+# confirmation (or the CLI rejecting a flag at run time) is separate evidence.
+CLI_REFERENCE_URL = "https://code.claude.com/docs/en/cli-reference"
+CLI_REFERENCE_CHECKED = "2026-10-06"
+DOCUMENTED_FLAGS = frozenset(
+    {
+        "-p",
+        "--print",
+        "--output-format",
+        "--verbose",
+        "--model",
+        "--max-turns",
+        "--permission-mode",
+        "--allowedTools",
+        "--allowed-tools",
+        "--strict-mcp-config",
+        "--resume",
+        "-r",
+    }
+)
+_REJECTED_ARGUMENT = (
+    re.compile(r"(?i)unknown option:?\s*['\"`]?(-{1,2}[A-Za-z][\w-]*)"),
+    re.compile(r"(?i)unrecognized (?:option|argument)s?:?\s*['\"`]?(-{1,2}[A-Za-z][\w-]*)"),
+    re.compile(r"(?i)invalid option:?\s*['\"`]?(-{1,2}[A-Za-z][\w-]*)"),
+)
+
 # Text patterns that *suggest* a provider-side problem. Matching them only yields a heuristic
 # classification; reset times are never inferred from text.
 _PROVIDER_PATTERNS = (
@@ -269,6 +297,26 @@ class ClaudeCodeAdapter:
                 "session id changed between init and result",
                 **common,
             )
+        rejected = (
+            _rejected_argument(stderr_text)
+            if init is None and not results and process.returncode not in (0, None)
+            else None
+        )
+        if rejected is not None:
+            return ExecutorResult(
+                AttemptOutcome.BLOCKED,
+                f"the claude CLI rejected a command-line argument ({rejected})",
+                blocked={
+                    "category": "cli_rejected_argument",
+                    "classification": "cli_stderr",
+                    "flag": rejected,
+                    "reset_at": None,
+                    "evidence": redact_text(stderr_text[-600:])[0],
+                    "next_step": "stopped. The bridge never removes a limit flag and retries; "
+                    "decide locally (e.g. update the CLI) before any further attempt",
+                },
+                **common,
+            )
         resume_id = self._resume_requested
         if resume_id is not None and (init is None or init.session_id != resume_id):
             hint = _provider_hint(stderr_text + " " + ((final or {}).get("result") or ""))
@@ -452,6 +500,55 @@ def help_flags(binary: str, env: dict[str, str]) -> tuple[set[str], str | None]:
     return flags, (ver[0][:200] if ver else None)
 
 
+def _rejected_argument(stderr_text: str) -> str | None:
+    for pattern in _REJECTED_ARGUMENT:
+        m = pattern.search(stderr_text)
+        if m:
+            return m.group(1)
+    return None
+
+
+def flag_evidence(
+    used: Sequence[str], *, listed_flags: set[str] | None, confirmed: Sequence[str]
+) -> dict[str, dict[str, Any]]:
+    """Per-flag evidence from three separate sources; never infers "supported" from docs alone.
+
+    status:
+      listed_in_local_help                  this CLI's --help lists it (parse support indicated)
+      confirmed_locally_by_user             user recorded a local check in config.toml
+      documented_pending_local_confirmation documented officially, not in local --help: unknown
+      undocumented_and_unlisted             neither source: unknown
+    Runtime behaviour is per attempt (a CLI rejection blocks that attempt); it is not stored here.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for flag in used:
+        documented = flag in DOCUMENTED_FLAGS
+        listed = None if listed_flags is None else flag in listed_flags
+        is_confirmed = flag in confirmed
+        if is_confirmed:
+            status = "confirmed_locally_by_user"
+        elif listed:
+            status = "listed_in_local_help"
+        elif documented:
+            status = "documented_pending_local_confirmation"
+        else:
+            status = "undocumented_and_unlisted"
+        out[flag] = {
+            "official_docs": {
+                "declared": documented,
+                "source": CLI_REFERENCE_URL if documented else None,
+                "checked": CLI_REFERENCE_CHECKED,
+            },
+            "local_help": "not_checked"
+            if listed is None
+            else ("listed" if listed else "not_listed"),
+            "local_confirmation": "user_confirmed_in_config" if is_confirmed else "none",
+            "status": status,
+            "usable_for_live": status in ("listed_in_local_help", "confirmed_locally_by_user"),
+        }
+    return out
+
+
 def preflight(
     adapter: ClaudeCodeAdapter,
     argv: Sequence[str],
@@ -459,19 +556,39 @@ def preflight(
     listed_flags: set[str],
     allow_unlisted: Sequence[str],
 ) -> dict[str, Any]:
+    """Hold live dispatch until every flag is listed by local --help or confirmed locally.
+
+    Missing from --help is not treated as "unsupported" (the docs say --help is incomplete); it
+    is "unknown, pending local confirmation". There is no global bypass: confirmation is per flag.
+    """
     check_forbidden(argv)
     used = [a for a in argv[1:] if a.startswith("-") and not a.startswith("---")]
-    missing = [f for f in used if f not in listed_flags and f not in allow_unlisted]
-    if missing:
+    evidence = flag_evidence(used, listed_flags=listed_flags, confirmed=allow_unlisted)
+    pending = [f for f, e in evidence.items() if not e["usable_for_live"]]
+    if pending:
+        documented = [f for f in pending if evidence[f]["official_docs"]["declared"]]
+        undocumented = [f for f in pending if f not in documented]
+        parts = []
+        if documented:
+            parts.append(
+                ", ".join(documented)
+                + f": declared in the official CLI reference ({CLI_REFERENCE_URL}, checked "
+                f"{CLI_REFERENCE_CHECKED}) but not listed by this installation's --help. --help "
+                "does not list every flag, so this is not evidence of absence; status on this "
+                "installation: unknown (pending local confirmation)."
+            )
+        if undocumented:
+            parts.append(
+                ", ".join(undocumented)
+                + ": neither documented nor listed by --help; status unknown."
+            )
         raise BridgeError(
             "PREFLIGHT_FAILED",
-            "the installed claude CLI does not list these flags in --help: "
-            + ", ".join(missing)
-            + ". Verify them locally; if they work, add them to [live] allow_unlisted_flags in "
-            "config.toml. The bridge does not try alternative flag combinations.",
-            details={"unlisted_flags": missing},
+            "live dispatch held until these flags are confirmed on this machine: "
+            + " ".join(parts)
+            + " After confirming locally, list each flag in [live] allow_unlisted_flags. If the "
+            "CLI then rejects a flag at run time the attempt stops as BLOCKED; the bridge never "
+            "drops a limit flag and retries.",
+            details={"pending_local_confirmation": pending, "flag_evidence": evidence},
         )
-    return {
-        "flags_checked": used,
-        "unlisted_but_allowed": [f for f in used if f not in listed_flags],
-    }
+    return {"flags_checked": used, "flag_evidence": evidence}

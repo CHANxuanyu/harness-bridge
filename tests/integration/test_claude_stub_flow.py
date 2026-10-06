@@ -144,7 +144,11 @@ def test_live_code_path_with_stub_binary_is_not_a_real_run(
     with pytest.raises(BridgeError) as exc:
         b.run(task_id, mode="live", allow_model_usage=True)
     assert exc.value.code == "PREFLIGHT_FAILED"
-    assert exc.value.details["unlisted_flags"] == ["--max-turns"]
+    assert exc.value.details["pending_local_confirmation"] == ["--max-turns"]
+    assert (
+        exc.value.details["flag_evidence"]["--max-turns"]["status"]
+        == "documented_pending_local_confirmation"
+    )
     assert not log.exists() and b.store.list_attempts(task_id) == []
     _live_config(fx, stub, 'allow_unlisted_flags = ["--max-turns"]\n')
     b = bridge(fx, **env)
@@ -174,3 +178,46 @@ def test_model_mismatch_surfaces_as_risk(fx: Fixture, stub: Path) -> None:
     summary = b.artifacts(task_id)
     assert "observed model differs from the requested model pin" in summary["risks"]
     assert summary["executor_reported"]["model_pin"] == "mismatch"
+
+
+def test_cli_rejection_of_max_turns_stops_and_is_never_retried_without_it(
+    fx: Fixture, stub: Path, tmp_path: Path
+) -> None:
+    """A CLI that refuses --max-turns blocks the attempt; no retry drops the limit flag."""
+    log = tmp_path / "argv.jsonl"
+    b = bridge(
+        fx,
+        HBRIDGE_STUB_REJECT_FLAG="--max-turns",
+        HBRIDGE_STUB_ARGV_LOG=str(log),
+        HBRIDGE_STUB_FIXTURE=str(STREAM / "success.jsonl"),
+    )
+    task_id = b.create(claude_spec(fx), "k")["task_id"]
+    first = b.run(task_id, mode="mock", executor_binary=str(stub))
+    assert first["state"] == "BLOCKED" and first["executor_outcome"] == "blocked"
+    details = b.status(task_id)["state_details"]
+    assert details["category"] == "cli_rejected_argument" and details["flag"] == "--max-turns"
+    calls = argv_log(log)
+    assert len(calls) == 1 and "--max-turns" in calls[0]["argv"]  # stopped after one launch
+    with pytest.raises(BridgeError):
+        b.run(task_id, mode="mock", executor_binary=str(stub))  # no automatic re-dispatch
+    assert len(argv_log(log)) == 1
+    # Only an explicit human decision allows another attempt, and it keeps the limit flag.
+    b.recover(task_id, resolve="retry")
+    b.run(task_id, mode="mock", executor_binary=str(stub))
+    calls = argv_log(log)
+    assert len(calls) == 2 and "--max-turns" in calls[1]["argv"]
+    assert b.status(task_id)["state"] == "BLOCKED"
+
+
+def test_doctor_reports_flag_evidence_not_unsupported(stub: Path) -> None:
+    from harness_bridge.doctor import _claude_flag_check
+
+    env = {**os.environ, "HBRIDGE_STUB_HELP": str(HELP)}
+    report = _claude_flag_check(str(stub), env, ())
+    assert report["status"] == "pending_local_confirmation"
+    assert report["pending_local_confirmation"] == ["--max-turns"]
+    ev = report["flag_evidence"]["--max-turns"]
+    assert ev["official_docs"]["declared"] is True and ev["local_help"] == "not_listed"
+    assert "unsupported" not in json.dumps(report).lower()
+    confirmed = _claude_flag_check(str(stub), env, ("--max-turns",))
+    assert confirmed["status"] == "all_listed_or_confirmed"

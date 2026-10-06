@@ -15,7 +15,12 @@ from pathlib import Path
 from typing import Any
 
 from harness_bridge import SCHEMA_VERSION, __version__
-from harness_bridge.adapters.claude_code import ClaudeCodeAdapter, ClaudeSettings, help_flags
+from harness_bridge.adapters.claude_code import (
+    ClaudeCodeAdapter,
+    ClaudeSettings,
+    flag_evidence,
+    help_flags,
+)
 from harness_bridge.config import (
     API_PROVIDER_ENV,
     CLOUD_ENV_MARKERS,
@@ -28,8 +33,14 @@ from harness_bridge.errors import BridgeError
 from harness_bridge.models import DEFAULT_MODEL
 
 
-def _claude_flag_check(binary: str, env: dict[str, str]) -> dict[str, Any]:
-    """Compare the flags the adapter would use with ``claude --help`` (no inference)."""
+def _claude_flag_check(
+    binary: str, env: dict[str, str], confirmed: tuple[str, ...]
+) -> dict[str, Any]:
+    """Per-flag evidence: official docs, local ``claude --help``, local confirmation (no inference).
+
+    A flag missing from --help is reported as unknown/pending, never as unsupported: the official
+    CLI reference states that --help does not list every flag.
+    """
     adapter = ClaudeCodeAdapter(
         ClaudeSettings(DEFAULT_MODEL, 20, "acceptEdits", ("Read", "Edit"), True)
     )
@@ -37,15 +48,17 @@ def _claude_flag_check(binary: str, env: dict[str, str]) -> dict[str, Any]:
         listed, version = help_flags(binary, env)
     except BridgeError as exc:
         return {"status": "unknown", "error": exc.message}
-    used = adapter.flags_used(resume=True)
-    missing = [f for f in used if f not in listed]
+    evidence = flag_evidence(
+        adapter.flags_used(resume=True), listed_flags=listed, confirmed=confirmed
+    )
+    pending = [f for f, e in evidence.items() if not e["usable_for_live"]]
     return {
-        "status": "all_listed" if not missing else "some_flags_not_listed",
+        "status": "pending_local_confirmation" if pending else "all_listed_or_confirmed",
         "cli_version": version,
-        "flags_used_by_adapter": used,
-        "flags_not_listed_in_help": missing,
-        "note": "help-text check only; flag behaviour, auth and stream schema are unverified "
-        "until a local, authorized live run",
+        "pending_local_confirmation": pending,
+        "flag_evidence": evidence,
+        "note": "help-text and documentation evidence only; flag behaviour, auth and stream "
+        "schema stay unverified until a local, authorized live run",
     }
 
 
@@ -116,7 +129,7 @@ def run_doctor(state_dir: Path, *, offline: bool) -> dict[str, Any]:
         },
     ]
     claude_check = (
-        _claude_flag_check(claude_path, env)
+        _claude_flag_check(claude_path, env, config.allow_unlisted_flags if config else ())
         if claude_path and not offline
         else {"status": "skipped", "reason": "offline" if offline else "claude not found"}
     )

@@ -301,9 +301,102 @@ def test_s04_preflight_reports_unlisted_max_turns_for_cli_2_1_291() -> None:
     inv = adapter().build_invocation(packet(), ctx())
     with pytest.raises(BridgeError) as exc:
         preflight(adapter(), inv.argv, listed_flags=flags, allow_unlisted=())
-    assert exc.value.details["unlisted_flags"] == ["--max-turns"]
+    assert exc.value.details["pending_local_confirmation"] == ["--max-turns"]
     ok = preflight(adapter(), inv.argv, listed_flags=flags, allow_unlisted=("--max-turns",))
-    assert ok["unlisted_but_allowed"] == ["--max-turns"]
+    assert ok["flag_evidence"]["--max-turns"]["status"] == "confirmed_locally_by_user"
+
+
+# --- --max-turns capability judgement: docs vs local help vs local confirmation ---------------
+
+
+def test_help_absence_is_not_treated_as_unsupported() -> None:
+    """CLI reference: --help does not list every flag; absence there is not evidence of absence."""
+    inv = adapter().build_invocation(packet(), ctx())
+    with pytest.raises(BridgeError) as exc:
+        preflight(adapter(), inv.argv, listed_flags=listed_flags(), allow_unlisted=())
+    ev = exc.value.details["flag_evidence"]["--max-turns"]
+    assert ev["official_docs"] == {
+        "declared": True,
+        "source": "https://code.claude.com/docs/en/cli-reference",
+        "checked": "2026-10-06",
+    }
+    assert ev["local_help"] == "not_listed"
+    assert ev["local_confirmation"] == "none"
+    assert ev["status"] == "documented_pending_local_confirmation"  # unknown, not unsupported
+    assert ev["usable_for_live"] is False  # existing protection kept: held until confirmed
+    msg = exc.value.message
+    assert "not evidence of absence" in msg and "unknown" in msg
+    assert "unsupported" not in msg.lower()
+    # every other adapter flag is listed by the captured 2.1.291 help text
+    others = {f: e["status"] for f, e in exc.value.details["flag_evidence"].items()}
+    others.pop("--max-turns")
+    assert set(others.values()) == {"listed_in_local_help"}
+
+
+def test_documentation_alone_never_marks_a_flag_usable() -> None:
+    from harness_bridge.adapters.claude_code import flag_evidence
+
+    ev = flag_evidence(["--max-turns"], listed_flags=set(), confirmed=())
+    assert ev["--max-turns"]["official_docs"]["declared"] is True
+    assert ev["--max-turns"]["usable_for_live"] is False
+    unchecked = flag_evidence(["--max-turns"], listed_flags=None, confirmed=())
+    assert unchecked["--max-turns"]["local_help"] == "not_checked"
+    assert unchecked["--max-turns"]["usable_for_live"] is False
+
+
+def test_undocumented_unlisted_flag_is_unknown_and_held() -> None:
+    argv = ["/opt/claude", "-p", "--some-future-flag", "x"]
+    with pytest.raises(BridgeError) as exc:
+        preflight(adapter(), argv, listed_flags=listed_flags(), allow_unlisted=())
+    ev = exc.value.details["flag_evidence"]["--some-future-flag"]
+    assert ev["status"] == "undocumented_and_unlisted" and ev["official_docs"]["declared"] is False
+    assert exc.value.details["pending_local_confirmation"] == ["--some-future-flag"]
+
+
+def test_confirmation_is_per_flag_and_forbidden_flags_stay_forbidden() -> None:
+    inv = adapter().build_invocation(packet(), ctx())
+    with pytest.raises(BridgeError) as exc:  # confirming a different flag does not help
+        preflight(adapter(), inv.argv, listed_flags=listed_flags(), allow_unlisted=("--model",))
+    assert exc.value.details["pending_local_confirmation"] == ["--max-turns"]
+    with pytest.raises(BridgeError) as exc:  # a confirmation cannot whitelist a forbidden flag
+        preflight(
+            adapter(),
+            [*inv.argv, "--bare"],
+            listed_flags=listed_flags(),
+            allow_unlisted=("--max-turns", "--bare"),
+        )
+    assert "forbidden" in exc.value.message
+
+
+@pytest.mark.parametrize("entry", ["*", "--*", "all", "", "--max-turns=5", "max-turns"])
+def test_no_global_preflight_bypass_in_config(tmp_path: Path, entry: str) -> None:
+    from harness_bridge.config import load_config
+
+    (tmp_path / "config.toml").write_text(f'[live]\nallow_unlisted_flags = ["{entry}"]\n')
+    with pytest.raises(BridgeError) as exc:
+        load_config(tmp_path)
+    assert exc.value.code == "INVALID_INPUT"
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        b"error: unknown option '--max-turns'\n",
+        b"Error: Unknown option: --max-turns",
+        b"unrecognized arguments: --max-turns",
+    ],
+)
+def test_cli_rejecting_a_flag_stops_the_attempt(stderr: bytes) -> None:
+    a = adapter()
+    a.build_invocation(packet(), ctx())
+    err = StreamCapture(4096, 4096)
+    err.feed(stderr)
+    proc = ProcessOutcome(pid=1, pgid=1, returncode=1, group_exit_confirmed=True, stderr=err)
+    r = a.classify_completion(proc, [])
+    assert r.outcome is AttemptOutcome.BLOCKED and r.blocked is not None
+    assert r.blocked["category"] == "cli_rejected_argument"
+    assert r.blocked["flag"] == "--max-turns"
+    assert "never removes a limit flag" in r.blocked["next_step"]
 
 
 def test_s04_api_env_closes_live_gate_without_echoing_values() -> None:

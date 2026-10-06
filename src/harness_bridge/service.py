@@ -388,13 +388,17 @@ class Bridge:
         if mode == "live":
             assert isinstance(adapter, ClaudeCodeAdapter) and binary is not None
             listed, version = help_flags(binary, self.env)
-            preflight(
+            checked = preflight(
                 adapter,
                 invocation.argv,
                 listed_flags=listed,
                 allow_unlisted=self.config.allow_unlisted_flags,
             )
             invocation.notes.append(f"claude --version: {version}")
+            invocation.notes.append(
+                "flag evidence: "
+                + ", ".join(f"{f}={e['status']}" for f, e in checked["flag_evidence"].items())
+            )
         launch_token = uuid.uuid4().hex
         evidence = _evidence_level(spec.executor.kind, mode)
         with self.store.transaction() as cur:

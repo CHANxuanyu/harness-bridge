@@ -8,6 +8,8 @@ Behaviour is driven by environment variables set by the test:
   HBRIDGE_STUB_STDERR    text written to stderr
   HBRIDGE_STUB_TRICKLE   if "1", write stdout one byte at a time (chunk-boundary test)
   HBRIDGE_STUB_HELP      file whose content is printed for --help (captured help text)
+  HBRIDGE_STUB_REJECT_FLAG  if this flag is in argv, behave like a CLI that does not know it:
+                         commander-style "error: unknown option" on stderr, exit 1, no stdout
 """
 
 from __future__ import annotations
@@ -50,6 +52,7 @@ def main() -> int:
         sys.stdout.write("0.0.0-stub (not Claude Code)\n")
         return 0
     stdin = sys.stdin.buffer.read()
+    reject = os.environ.get("HBRIDGE_STUB_REJECT_FLAG")
     log = os.environ.get("HBRIDGE_STUB_ARGV_LOG")
     if log:
         with open(log, "a", encoding="utf-8") as fh:
@@ -64,6 +67,9 @@ def main() -> int:
                 )
                 + "\n"
             )
+    if reject and reject in argv:
+        sys.stderr.write(f"error: unknown option '{reject}'\n")
+        return 1
     edit = os.environ.get("HBRIDGE_STUB_EDIT")
     if edit in ("correct", "buggy"):
         with open(os.path.join("tagnorm", "normalize.py"), "w", encoding="utf-8") as fh:
