@@ -85,6 +85,9 @@ def _build_parser() -> argparse.ArgumentParser:
     for operation in ("status", "materialize", "preflight"):
         p = child_sub.add_parser(operation, parents=[common])
         p.add_argument("child_id")
+    p = child_sub.add_parser("prepare", parents=[common], help="run frozen workspace preparation")
+    p.add_argument("child_id")
+    p.add_argument("--idempotency-key", required=True)
 
     p = sub.add_parser("retain-approved", parents=[common], help="pin an unchanged older approval")
     p.add_argument("task_id")
@@ -205,6 +208,9 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
         if cmd == "projects":
             return bridge.coordination.projects()
         if cmd == "child":
+            if args.child_command == "prepare":
+                _install_signal_handlers(flag)
+                return bridge.preparations.prepare(args.child_id, args.idempotency_key)
             if args.child_command == "materialize":
                 return bridge.materialize(args.child_id)
             if args.child_command == "preflight":

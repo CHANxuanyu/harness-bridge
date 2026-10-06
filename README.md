@@ -17,7 +17,8 @@ integration. The Bridge prepares each executor's workspace and records execution
 The current implementation includes the task execution/review core and a first goal/session
 coordination core: child plans/ownership, Advisor takeover, goal pause/cancel, aggregate attempt
 limits, fixed approved dependency baselines, workspace readiness checks and state-root project
-discovery. Environment setup, background workers and integrated delivery remain pending. It is a
+discovery. Explicit bounded environment setup is supported; background workers and integrated
+delivery remain pending. It is a
 deterministic local CLI (`hbridge`). **It never calls a model API itself.** The supervisor is
 whoever runs the CLI (the Advisor, e.g. the user's existing Codex session); the executor is Claude Code
 (live, gated, local only) or a bundled fake executor (offline).
@@ -55,8 +56,9 @@ The [goal coordination reference](docs/COORDINATION.md) documents the implemente
 the current Advisor binding/epoch on mutations; original standalone tasks remain compatible.
 The [planning/control reference](docs/PLANNING.md) covers `goal plan/control` and
 `child status/materialize`. The [execution context reference](docs/EXECUTION_CONTEXT.md) covers
-fixed dependency versions, `retain-approved` and `child preflight`. P1 is complete; P2 is
-partially implemented. Controlled environment setup and the remaining V1 milestones are pending.
+fixed dependency versions, `retain-approved` and `child preflight`. The [preparation reference](docs/PREPARATION.md)
+covers `child prepare`, cancellation/recovery and shared-resource claims. P1/P2 local cores are
+implemented; P3–P7 remain pending, including managed workers and integrated delivery.
 
 ## Quick start (offline, no model, no network needed after install)
 

@@ -6,7 +6,11 @@
     any non-terminal -> CANCELLED (only once no owned process can still be running)
     uncertain launch/execution -> INTERRUPTED; external condition -> BLOCKED; budget -> FAILED
 
-Distinctions that must stay visible: executing (STARTING/RUNNING/VERIFYING), waiting for review
+READY may enter PREPARING for an explicit bounded environment run, then return to READY
+or block/interrupt/cancel. Preparation has its own ledger, not an executor attempt.
+
+Distinctions that must stay visible: executing (PREPARING/STARTING/RUNNING/VERIFYING),
+waiting for review
 (AWAITING_REVIEW, which may show failing verification), blocked by permission/quota/supervisor
 (BLOCKED), outcome uncertain (INTERRUPTED), and real success (SUCCEEDED).
 """
@@ -21,6 +25,7 @@ from harness_bridge.errors import BridgeError
 class TaskState(StrEnum):
     CREATED = "CREATED"
     READY = "READY"
+    PREPARING = "PREPARING"
     STARTING = "STARTING"
     RUNNING = "RUNNING"
     VERIFYING = "VERIFYING"
@@ -35,11 +40,12 @@ class TaskState(StrEnum):
 S = TaskState
 
 TERMINAL: frozenset[TaskState] = frozenset({S.SUCCEEDED, S.FAILED, S.CANCELLED})
-EXECUTING: frozenset[TaskState] = frozenset({S.STARTING, S.RUNNING, S.VERIFYING})
+EXECUTING: frozenset[TaskState] = frozenset({S.PREPARING, S.STARTING, S.RUNNING, S.VERIFYING})
 
 TRANSITIONS: dict[TaskState, frozenset[TaskState]] = {
     S.CREATED: frozenset({S.READY, S.BLOCKED, S.CANCELLED}),
-    S.READY: frozenset({S.STARTING, S.FAILED, S.CANCELLED}),
+    S.READY: frozenset({S.PREPARING, S.STARTING, S.FAILED, S.CANCELLED}),
+    S.PREPARING: frozenset({S.READY, S.BLOCKED, S.INTERRUPTED, S.CANCELLED}),
     S.STARTING: frozenset({S.RUNNING, S.BLOCKED, S.INTERRUPTED, S.CANCELLED}),
     S.RUNNING: frozenset({S.VERIFYING, S.BLOCKED, S.INTERRUPTED, S.CANCELLED}),
     S.VERIFYING: frozenset({S.AWAITING_REVIEW, S.INTERRUPTED, S.CANCELLED}),

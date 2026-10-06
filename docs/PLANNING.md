@@ -113,8 +113,8 @@ stays cancelled and any successfully created workspace remains recorded under th
 
 The P2 first slice preserves approved dependency snapshots, composes fixed baselines and
 checks workspace readiness before successors run. `WAITING_BASELINE` now means an older approval
-has no retained snapshot; `BASELINE_CONFLICT` records a failed composition. Controlled setup
-commands remain pending. Do not create a substitute standalone task to bypass dependency checks.
+has no retained snapshot; `BASELINE_CONFLICT` records a failed composition. Explicit bounded
+setup commands and resource claims are now implemented; see [PREPARATION.md](PREPARATION.md). Do not create a substitute standalone task to bypass dependency checks.
 
 ## Goal state projection
 
@@ -139,7 +139,8 @@ the final migration rolls back every stage. Existing v2 goals/bindings/tasks rem
 Backup files are owner-readable/writable from creation. No live/user state directory was used
 for validation. Recovery guidance remains in [COORDINATION.md](COORDINATION.md).
 
-Revision 4 adds the retained snapshot/baseline records; see the execution context reference.
+Revision 4 adds retained snapshot/baseline records; revision 5 adds preparation/resource
+records. See the execution context and preparation references.
 
 Evidence: `tests/integration/test_goal_planning.py`, the prior coordination suite, and
 `tests/unit/test_migrations.py`. These are offline simulated executors with real subprocesses,

@@ -130,3 +130,20 @@ Each entry: decision — reason. Newest last.
 41. **Schema revision 4 compatibility:** additive retained-record tables; preserve old child-plan
     canonical JSON by omitting absent environment configuration. Old approvals require explicit,
     unchanged-candidate retention; no state migration invents an approved snapshot.
+
+42. **Explicit finite preparation (P2):** immutable child-plan argv/cwd/deadlines/outputs;
+    `child prepare` is separately idempotent and bounded, never auto-run by dispatch/recovery.
+    Preparation records and executor attempts remain separate; preparation does not spend model
+    budgets and successful evidence must match the current candidate before every child run.
+43. **Preparation stop proof:** PREPARING occupies the project slot; accepted observations may
+    finish after takeover. Cancel is rechecked transactionally before completion. Crashes and
+    unconfirmed exits retain reservations even after logical failure/cancellation; no auto retry.
+44. **Resource claims:** explicit names are exclusive across all projects in one state root,
+    retained through execution/review and reclaimed only for terminal confirmed-stopped owners.
+    Declared output/cache metadata is an inventory, not a complete audit of ignored/external files;
+    no persistent service management, automatic allocation or cross-state locks are promised.
+45. **Preparation environment:** isolated HOME/XDG, small inherited env, redacted bounded logs,
+    no credential copying; direct harness commands rejected. Reviewed scripts remain trusted code,
+    so this is not an OS/billing sandbox. Existing live executor gates are unchanged.
+46. **Schema revision 5:** additive preparation/claim tables with atomic backed-up migration;
+    omit absent preparation from canonical old plans so existing replay digests stay stable.

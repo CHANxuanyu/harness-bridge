@@ -96,4 +96,27 @@ CREATE TABLE child_baselines (
 );
 """
 
-MIGRATIONS = {2: COORDINATION_SCHEMA, 3: PLANNING_SCHEMA, 4: BASELINE_SCHEMA}
+PREPARATION_SCHEMA = """
+CREATE TABLE preparation_runs (
+    preparation_id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(task_id),
+    idempotency_key TEXT NOT NULL,
+    status TEXT NOT NULL,
+    exit_confirmed INTEGER CHECK(exit_confirmed IN (0,1)),
+    record_json TEXT NOT NULL,
+    record_digest TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(task_id,idempotency_key)
+);
+CREATE INDEX preparation_by_task ON preparation_runs(task_id,created_at);
+CREATE TABLE preparation_resources (
+    project_id TEXT NOT NULL REFERENCES projects(project_id),
+    name TEXT NOT NULL,
+    task_id TEXT NOT NULL REFERENCES tasks(task_id),
+    preparation_id TEXT NOT NULL REFERENCES preparation_runs(preparation_id),
+    PRIMARY KEY(project_id,name),
+    UNIQUE(name)
+);
+"""
+
+MIGRATIONS = {2: COORDINATION_SCHEMA, 3: PLANNING_SCHEMA, 4: BASELINE_SCHEMA, 5: PREPARATION_SCHEMA}

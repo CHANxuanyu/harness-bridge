@@ -1,11 +1,10 @@
 # Handoff
 
-## Current state (2026-10-06, P2 first slice implemented)
+## Current state (2026-10-06, P2 local core complete)
 
 - **Canonical plan:** `docs/PROJECT_PLAN.md` consolidates the product, session relationships,
   contracts, V1 scope defaults, P0–P7 milestones and V01–V14 acceptance. P0 is complete;
-  P1 is complete; P2 dependency/context/readiness presence checks are implemented.
-  P2 environment setup and P3–P7 are pending. Advisor is
+  P1/P2 local cores are implemented and offline-validated. P3–P7 are pending. Advisor is
   explicitly an existing agent session; Bridge does not create its own planning model. `PRODUCT_FORM.md` is now a short summary, and the
   original cloud execution plan is clearly historical, not renewed authorization.
 - Key plan choices: dependencies are fixed before child execution-task/worktree materialization;
@@ -33,16 +32,28 @@
   `child preflight` checks presence, branch/repo/base ownership and required verifier cwd/binaries,
   without executing located tools. `run` checks twice, including the reservation transaction;
   failures consume no attempt. Presence checks do not install dependencies or prove tool/service
-  functionality. Controlled setup/resource management remain P2 work.
-- **Migration:** revision 1/2/3→4 adds approval/baseline records with one WAL-aware backup and
+  functionality by themselves. `child prepare` now executes explicitly frozen finite commands,
+  stores PREPARING/process/step evidence and output/cache inventory, and binds success to the
+  current candidate. Same-key replay never runs again; retry requires explicit recovery/new key.
+  It preserves task feedback/session binding across preparation before repair.
+- **Resources and stop:** preparation shares the project execution slot and holds named exclusive
+  resources across all projects in one state root. Unknown exits retain claims even after task
+  failure/cancellation and keep goal termination pending. Confirmed failed preparation releases
+  claims; successful owners retain them through execution/review until terminal and stopped.
+  Late cancel is checked inside the completion transaction. Stale Advisors cannot reserve more
+  work, but accepted observations finish. No persistent services/cross-state coordination.
+- **Migration:** revision 1/2/3/4→5 adds preparation/resource records (v4 retains snapshots)
+  with one WAL-aware backup and
   all-stage rollback. Old plan digests and replay keys are preserved. Older approved tasks need
   explicit `retain-approved` with matching unchanged evidence/candidate; no silent resnapshot.
   No actual live/user state directory was migrated. Preserve Git refs/objects and state/artifacts.
-- **Checks:** final `scripts/check.sh`: **278 passed**, 157.26s; ruff/format clean (87 files),
-  strict mypy clean (27 source files). 29 new cases; affected 60-case checks also passed.
-  No real model, auth/network calls or user-state migration. Current runtime contracts:
-  `docs/EXECUTION_CONTEXT.md`, `docs/COORDINATION.md`, `docs/PLANNING.md`. P2 remains incomplete;
-  no goal-level integrated delivery, worker survival or installed-host activation claim.
+- **Checks:** full shared-core `scripts/check.sh`: **307 passed**, 163.10s; lint/format/mypy
+  clean (28 source files). One later added preparation→repair/session regression also passed
+  via exact-test `scripts/check.sh`, 4.95s. **308 current cases were executed across these runs**;
+  do not report a single 308-case full run. 30 new cases in this milestone; affected 72-case
+  checks passed before adding cross-project resource/session cases. No real model/auth/network
+  calls or user-state migration. `docs/PREPARATION.md` defines completed P2 finite-command scope;
+  no integrated delivery, worker survival or installed-host activation claim.
 
 - **Latest user clarification:** target developers who already use several coding-agent
   subscriptions, such as ZCode/GLM, Claude Code and Codex. This is not a Codex-only product.
@@ -81,7 +92,8 @@
   `local/glm-macos-validation` (contains cloud head `fcbd21a`); remote queried at takeover:
   **pushed through `470f5b0`** at that check. Repair/evidence `94f7c4d`, product/plugin
   `7efd2bf`, product clarification `bab602a`, plan `24ee6ad`, first P1 slice `83f0793` and
-  P1 completion `9d73e1c` precede the new P2 first-slice milestone; all are local, not auto-pushed.
+  P1 completion `9d73e1c` and P2 first slice `72c73a8` precede the new preparation milestone;
+  all are local, not auto-pushed.
   Remote was not re-queried during this offline implementation round;
   visibility remains public by instruction.
 - **Live-gate hygiene:** the global default state dir was never live-enabled; the T3/T4 test
@@ -133,11 +145,12 @@
 
 ## Next bounded work
 
-1. Continue P2 from `docs/PROJECT_PLAN.md`: explicit bounded setup commands with durable
-   preparation records, cancellation/recovery, artifact/cache/resource attribution and shared
-   resource conflicts. Baselines, context and presence preflight are done; see
-   `docs/EXECUTION_CONTEXT.md`. Do not rerun past smokes or replan merely for handoff.
-   No live budget is renewed; new code is covered by offline fake/stub checks only.
+1. Continue P3 from `docs/PROJECT_PLAN.md`: managed workers, incremental events/wait,
+   concurrency/aggregate reservations and host-lifecycle recovery. Reuse P2 baselines/context/
+   preparation, not a second setup runner. Unknown preparation outcomes currently hold slots
+   and resources indefinitely; any audited release must require actual evidence, not an ack.
+   P2 finite-command/local-core contract: `docs/PREPARATION.md`; persistent services and
+   cross-state resource locks remain unsupported. No live budget is renewed.
 2. Interruption / timeout behaviour with a live executor (SIGTERM to the runner, wall
    timeout) — offline tests exist; live behaviour does not.
 3. T5 evaluation per `docs/EVALUATION_PLAN.md` — the only place where "cheaper/better than

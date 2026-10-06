@@ -13,6 +13,7 @@ from harness_bridge.baselines import approved, compose, read_record, validate_pi
 from harness_bridge.coordination import AdvisorClaim, Contract, check_key, parse_contract
 from harness_bridge.errors import BridgeError
 from harness_bridge.models import TaskDefinition, canonical_json, sha256_digest
+from harness_bridge.preparation import PreparationSpec
 from harness_bridge.readiness import EnvironmentRequirements
 from harness_bridge.store import new_id
 
@@ -25,11 +26,14 @@ class ChildPlan(Contract):
     task: TaskDefinition
     depends_on: list[str] = Field(default_factory=list, max_length=100)
     environment: EnvironmentRequirements | None = None
+    preparation: PreparationSpec | None = None
 
     def normalized(self) -> dict[str, Any]:
         value = self.model_dump(mode="json")
         if self.environment is None:
             value.pop("environment")  # Preserve pre-v4 immutable plan/replay digests.
+        if self.preparation is None:
+            value.pop("preparation")
         return value
 
     @field_validator("depends_on")

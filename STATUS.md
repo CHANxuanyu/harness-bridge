@@ -1,13 +1,13 @@
 # Status
 
-_Last updated 2026-10-06 (P2 first slice implemented; 278 offline tests passed)._
+_Last updated 2026-10-06 (P2 local core complete; 307 full-suite + 1 added targeted check passed)._
 
 ## Current state
 
 - **Planning milestone P0 complete:** `docs/PROJECT_PLAN.md` is the canonical product and
   engineering plan. Advisor is the user's existing agent session; Executor is a bound child
-  agent session. P1 is complete; the P2 dependency/context/presence-check slice is implemented.
-  P2 environment setup and P3–P7 remain incomplete. Scope defaults,
+  agent session. P1/P2 local cores are implemented and offline-validated.
+  P3–P7 remain incomplete. Scope defaults,
   dependency materialization, budget/ownership checks, worker lifecycle, integration and
   local-branch delivery are specified with V01–V14 acceptance criteria.
 - **P1 first vertical slice implemented:** project/goal registration, independent child links,
@@ -22,9 +22,14 @@ _Last updated 2026-10-06 (P2 first slice implemented; 278 offline tests passed).
   pinned baselines before successor task/worktree creation. Conflicts block materialization;
   old approvals require explicit unchanged-candidate retention. Child packets carry goal/base/
   dependency attribution. Read-only presence/ownership checks run before child dispatch and
-  consume no attempt on failure. See `docs/EXECUTION_CONTEXT.md`. Controlled environment setup,
-  resource lifecycle, host discovery wiring, workers and integrated delivery remain pending.
-  Schema revision 4 adds retained records with atomic v1/v2/v3 migration and backup.
+  consume no attempt on failure. See `docs/EXECUTION_CONTEXT.md`. Revision 4 adds retained records.
+- **P2 preparation completion:** explicit bounded setup/check commands, PREPARING lifecycle,
+  redacted logs, candidate-bound readiness, cancellation/crash recovery, declared output/cache
+  inventory and state-wide resource claims. Existing child `run` cannot bypass preparation;
+  same-key replay never re-executes, unknown exits retain slots/resources. No persistent service
+  hosting or cross-state coordination is claimed. Schema revision 5 upgrades v1–v4 atomically
+  with backup, preserving old plan digests. See `docs/PREPARATION.md`.
+  P3 workers, P4 integrated delivery and P6 installed entrypoints remain future work.
 - **Experimental prototype (V0.1, milestones M0–M4).** The live path has now been exercised
   for real in bounded initial smokes and one controlled repair/resume task on 2026-10-06.
 - **Verified so far**
@@ -64,8 +69,8 @@ _Last updated 2026-10-06 (P2 first slice implemented; 278 offline tests passed).
   or more Executors (cross-harness subagents). The Advisor inspects/plans/reviews/integrates;
   Bridge prepares workspaces and runs/records tasks. `supervisor` is the existing name for
   Advisor. Parent goals, child ownership, takeover fencing and initial aggregate
-  attempt/repair limits and fixed child dependencies are implemented. Controlled environment setup,
-  background/concurrent workers and integrated delivery remain pending; this is not the full product behavior.
+  attempt/repair limits, fixed child dependencies and controlled finite preparation are implemented.
+  Background/concurrent workers and integrated delivery remain pending; this is not the full product behavior.
 
 ## Implemented
 
@@ -86,8 +91,9 @@ _Last updated 2026-10-06 (P2 first slice implemented; 278 offline tests passed).
 | Goal attempt/repair ceilings; one project execution slot; unknown exit holds reservation | implemented initial guards; P3 worker/concurrency/time accounting pending |
 | Goal controls and confirmed-stop terminal projections | implemented; offline active fake-process cancellation and unknown-exit checks pass |
 | Immutable child plans / DAG validation / explicit root and dependent materialization | implemented; fixed approved inputs and conflict refusal |
-| Retained approval snapshots / goal-child context / presence preflight | P2 first slice implemented; controlled setup commands remain pending |
-| SQLite revision 1/2/3→4 upgrade + WAL-consistent backup/rollback | implemented; isolated fixtures only, real user state not migrated |
+| Retained approval snapshots / goal-child context / presence preflight | implemented, offline-validated |
+| Explicit finite preparation / output-cache inventory / resource claims / cancel-recover | implemented; unknown exits stay reserved; no persistent services or cross-state locks |
+| SQLite revision 1/2/3/4→5 upgrade + WAL-consistent backup/rollback | implemented; isolated fixtures only, real user state not migrated |
 | Offline demos `success`, `bug-then-repair` | pass |
 | Manual offline CI workflow (`workflow_dispatch`) | written, never run |
 | Codex / ZCode plugin source package, shared supervisor Skill, host catalogs | alpha; static/copy/CLI-contract checks pass; Codex catalog discovery pass; installed activation and ZCode loading NOT_RUN |
@@ -139,6 +145,17 @@ _Last updated 2026-10-06 (P2 first slice implemented; 278 offline tests passed).
   calls or user-state migration. Full regression was required by shared approval/store/run
   changes; previous live smokes/repair were not repeated. P2 remains incomplete.
 
+- **P2 preparation completion (macOS, 2026-10-06):** affected pre-edit baseline 22 passed;
+  preparation/readiness/planning/migration checks 72 passed (50.58s). Final shared-core
+  `scripts/check.sh` → **307 passed**, 163.10s, ruff/format/mypy clean (28 source files).
+  After that run, one additional preparation→repair/session-binding regression was added and
+  passed via `scripts/check.sh <exact test>` (4.95s, lint/format/types clean). Total current
+  coverage is **308 cases, all executed successfully across those runs**, not a claimed
+  308-case single suite run. Adds 30 cases: 29 preparation and one migration revision case.
+  The added session check uses the Claude adapter's offline stub because the fake executor
+  deliberately creates new synthetic sessions. No real model, auth/network calls or user state
+  migration. P2 local core is complete within the finite-command scope in `PREPARATION.md`.
+
 ## Findings worth knowing
 
 - `--max-turns`: official docs declare it; `--help` of CLI 2.1.291 does not list it; on this
@@ -165,11 +182,13 @@ _Last updated 2026-10-06 (P2 first slice implemented; 278 offline tests passed).
 
 ## Next
 
-Continue P2 in `docs/PROJECT_PLAN.md`: explicit bounded environment preparation with durable
-lifecycle/cancellation/recovery and artifact/cache/resource records. Fixed approved dependency
-baselines, successor workspaces, context and presence preflight are implemented; do not redo them.
-Presence does not prove tool versions or services work. Contracts: `docs/EXECUTION_CONTEXT.md`,
-`docs/COORDINATION.md` and `docs/PLANNING.md`. P3–P7 retain their dependency order.
+Continue P3 in `docs/PROJECT_PLAN.md`: managed background workers, incremental wait/query,
+aggregate concurrency/time/turn reservations, cancellation/recovery and host teardown behavior.
+P2 fixed baselines/context and explicit preparation are implemented; reuse them. Unknown
+preparation exits retain project slots/resource claims even after manual task failure;
+future audited release must not treat acknowledgement as proof of exit. Persistent service
+management and cross-state resource coordination are unsupported. Contracts:
+`docs/PREPARATION.md`, `docs/EXECUTION_CONTEXT.md`, `docs/COORDINATION.md`, `docs/PLANNING.md`.
 `docs/PRODUCT_FORM.md` is an overview only. The plan is documentation, not execution evidence.
 
 Real interruption/timeout validation and T5 evaluation (`docs/EVALUATION_PLAN.md`) still

@@ -425,14 +425,27 @@ class Coordinator:
             raise BridgeError(
                 "BUDGET_EXHAUSTED", "goal attempt or repair budget exhausted", task_id=task_id
             )
+        self.guard_project_slot(cur, goal["project_id"])
+        self.event(
+            cur,
+            goal["goal_id"],
+            goal["advisor_epoch"],
+            "dispatch_reserved",
+            {"task_id": task_id, "kind": kind},
+        )
+
+    @staticmethod
+    def guard_project_slot(cur: sqlite3.Cursor, project_id: str) -> None:
         # Until managed workers/concurrency arrive, serialize across this project's goals.
         # Unknown exits remain occupied even after manual task cancellation/resolution.
         occupied = cur.execute(
             "SELECT DISTINCT t.task_id FROM tasks t JOIN goal_tasks gt USING(task_id) "
             "JOIN goals g USING(goal_id) LEFT JOIN attempts a USING(task_id) "
-            "WHERE g.project_id=? AND (t.state IN ('STARTING','RUNNING','VERIFYING') "
-            "OR (a.attempt_id IS NOT NULL AND COALESCE(a.exit_confirmed,0)<>1))",
-            (goal["project_id"],),
+            "LEFT JOIN preparation_runs p USING(task_id) "
+            "WHERE g.project_id=? AND (t.state IN ('PREPARING','STARTING','RUNNING','VERIFYING') "
+            "OR (a.attempt_id IS NOT NULL AND COALESCE(a.exit_confirmed,0)<>1) "
+            "OR (p.preparation_id IS NOT NULL AND COALESCE(p.exit_confirmed,0)<>1))",
+            (project_id,),
         ).fetchall()
         if occupied:
             raise BridgeError(
@@ -442,13 +455,6 @@ class Coordinator:
                     "occupied_tasks": [r["task_id"] for r in occupied],
                 },
             )
-        self.event(
-            cur,
-            goal["goal_id"],
-            goal["advisor_epoch"],
-            "dispatch_reserved",
-            {"task_id": task_id, "kind": kind},
-        )
 
     def status(self, goal_id: str) -> dict[str, Any]:
         from harness_bridge.planning import ChildPlans
@@ -487,9 +493,12 @@ class Coordinator:
                     r[0]
                     for r in cur.execute(
                         "SELECT DISTINCT t.task_id FROM tasks t JOIN goal_tasks gt USING(task_id) "
-                        "LEFT JOIN attempts a USING(task_id) WHERE gt.goal_id=? AND "
+                        "LEFT JOIN attempts a USING(task_id) "
+                        "LEFT JOIN preparation_runs p USING(task_id) "
+                        "WHERE gt.goal_id=? AND "
                         "(t.state NOT IN ('SUCCEEDED','FAILED','CANCELLED') OR "
-                        "(a.attempt_id IS NOT NULL AND COALESCE(a.exit_confirmed,0)<>1))",
+                        "(a.attempt_id IS NOT NULL AND COALESCE(a.exit_confirmed,0)<>1) OR "
+                        "(p.preparation_id IS NOT NULL AND COALESCE(p.exit_confirmed,0)<>1))",
                         (goal_id,),
                     )
                 ]

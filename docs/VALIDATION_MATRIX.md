@@ -145,3 +145,33 @@ Final shared-core regression for this slice: `scripts/check.sh` → **278 passed
 0 failed**, 157.26s on macOS, Python 3.11.16; ruff/format clean (87 files), strict mypy clean
 (27 source files). Required because approval retention, store migration and planned-child
 run paths changed. Historical live smokes/repair were not rerun.
+
+## P2 explicit preparation completion — 2026-10-06
+
+| Scope | Evidence | Result | Boundary |
+|---|---|---|---|
+| Explicit bounded preparation | Separate durable run/key, CLI replay, finite retry allowance; no executor attempt charged; successful setup then fake executor | PASS, offline | Trusted finite commands, not arbitrary-code sandboxing |
+| Failure/readiness gates | Failed step, timeout, missing executable/cwd/output, changed candidate; remaining steps not run; deleted output or changed source invalidates readiness | PASS, offline | Output inventory does not hash all ignored cache contents |
+| Cancellation and crashes | Real local setup subprocess stopped by task/goal cancel or runner SIGTERM; late cancellation at completion; injected CLI death before/after spawn, conservative recovery | PASS, offline real subprocess/fault injection | No real coding harness or host teardown evidence; unknown exits stay reserved |
+| Shared resources | Concurrent same-key requests reserve one run; conflicting owner consumes no run; terminal confirmed owner reclaimed; conflicts also cross projects, including unknown terminal owner | PASS, offline | One explicit state root, logical declared keys; no OS port allocation/cross-state locking |
+| Ownership / confidentiality | Accepted work finishes after takeover; stale Advisor cannot start more; HOME/environment isolation, redacted bounded logs, invalid/model-command plans refused | PASS, offline | Scripts/wrappers remain trusted; direct-command checks do not prove arbitrary scripts cannot invoke models |
+| Revision 5 | Final-stage rollback from v1/v2/v3/v4, v4 environment-plan digest/identity/replay preserved; existing migration snapshots/rollback tests retained | PASS, isolated fixtures | No real user state migrated |
+| Preparation before repair | Additional Claude-adapter **stub** test: preparation → failed verification → feedback → stale preparation blocks dispatch → explicit reprepare → same `--resume` session and feedback → passed verification/approval | PASS, offline synthetic stub | Fake executor does not emulate resume; this is not another real repair authorization/run |
+
+Executed: pre-edit affected baseline **22 passed** (8.68s); preparation/readiness/planning/
+migration checks **72 passed** (50.58s); full shared-core `scripts/check.sh` **307 passed /
+0 skipped / 0 failed** (163.10s), ruff/format and strict mypy clean (28 source files).
+One additional repair/session regression was added after full-suite collection and passed
+via exact-test `scripts/check.sh` (4.95s), including lint/format/types. Current coverage is
+**308 distinct cases, all successfully executed across those runs**, not a single 308-case
+full-suite claim. This milestone adds 30 cases (29 preparation + one migration revision).
+
+The added session test initially used the generic fake executor, which intentionally creates
+new synthetic sessions. It now uses the existing Claude adapter stub and retains the same-session
+assertion, additionally verifying the actual `--resume` argv and feedback/context stdin.
+No assertion was removed or weakened to report success. No new real model, auth/network calls,
+smokes, live repair or actual user-state migration occurred.
+
+P2 local core is complete for finite, explicitly configured preparation, as defined in
+`PREPARATION.md`. Persistent service hosting, cross-state resource coordination and audited
+release of unknown reservations remain outside this completion claim. P3–P7 are unfinished.

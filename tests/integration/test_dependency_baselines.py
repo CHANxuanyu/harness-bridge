@@ -288,6 +288,8 @@ def test_upgrade_v3_preserves_materialized_plan_and_batch_replay(fx: Fixture) ->
     path = b.store.db_path
     b.close()
     with sqlite3.connect(path) as old:
+        old.execute("DROP TABLE preparation_resources")
+        old.execute("DROP TABLE preparation_runs")
         old.execute("DROP TABLE approved_snapshots")
         old.execute("DROP TABLE child_baselines")
         old.execute("UPDATE meta SET value='3' WHERE key='schema_revision'")
@@ -295,7 +297,7 @@ def test_upgrade_v3_preserves_materialized_plan_and_batch_replay(fx: Fixture) ->
     assert submit(b, g, p) == {**batch, "replayed": True}
     assert b.child_preflight(child)["ready"]
     assert b.materialize(child)["task_id"] == task
-    assert list((fx.state_dir / "backups").glob("pre-v4-*.sqlite3"))
+    assert list((fx.state_dir / "backups").glob("pre-v*-*.sqlite3"))
     b.close()
 
 

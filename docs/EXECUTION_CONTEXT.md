@@ -1,7 +1,7 @@
-# Fixed dependency baselines and workspace readiness (P2 first slice)
+# Fixed dependency baselines and workspace readiness (P2 local core)
 
-Implemented locally on 2026-10-06. This extends [child planning](PLANNING.md); P2 remains
-in progress because controlled setup commands and shared-resource accounting are not implemented.
+Implemented locally on 2026-10-06. This extends [child planning](PLANNING.md). Explicit bounded
+setup commands and resource claims are now covered by [PREPARATION.md](PREPARATION.md).
 All tests for this slice use isolated repositories and fake executors. No real harness was called.
 
 ## What the Advisor and Executor receive
@@ -102,7 +102,9 @@ or services actually work. No successful report is cached as a lasting guarantee
 
 Every planned child `run` repeats these checks before invocation construction and inside the
 dispatch transaction. Missing requirements return `PREFLIGHT_FAILED`, leave the task `READY`,
-and consume no attempt/budget. An explicit local environment fix can unblock the same task.
+and consume no attempt/budget. An explicit local environment fix can unblock a presence-only task. If the plan also has
+`preparation`, its latest successful preparation must match the current candidate and outputs;
+see `child prepare` in the preparation reference.
 Standalone/unplanned legacy tasks retain their prior preflight behavior. Emergency cancellation,
 Advisor takeover, live gating and verification/review rules remain in force.
 
@@ -110,15 +112,16 @@ The transaction coordinates bridge actors, not arbitrary external filesystem wri
 cannot prevent another same-user process changing files immediately afterward. Worktrees are
 not a sandbox, and ignored preparation artifacts are outside Git snapshot evidence.
 
-## Storage and remaining P2 work
+## Storage and following milestones
 
 Revision 4 adds approved-snapshot and child-baseline tables. Upgrades from v1/v2/v3 run under
 the existing writer lock with one WAL-consistent, owner-only pre-upgrade backup. Failed upgrades
 roll back all stages. Old task/spec/plan digests and task identity remain intact. No real user
 state was migrated in this implementation round.
 
-Still required for P2 completion: explicit bounded preparation commands with durable lifecycle,
-cancellation/recovery and no-model gates; preparation artifact/cache/resource records; shared
-resource conflicts and environment readiness beyond presence. P3 workers/concurrency, P4
-integration/delivery, a second live executor adapter and installed host entrypoints remain later
-milestones. This slice does not claim a finished V1 product.
+Revision 5 subsequently adds preparation/resource records and preserves old plan digests.
+Explicit bounded preparation, cancellation/recovery, output/cache inventory and named resource
+claims complete the local P2 core; see [PREPARATION.md](PREPARATION.md) for its finite-command
+scope and remaining lifecycle limits. P3 workers/concurrency, P4 integration/delivery, a second
+live executor adapter and installed host entrypoints remain later milestones. This is not a
+finished V1 product.

@@ -61,6 +61,7 @@ from harness_bridge.policy import (
     redact_text,
     symlink_escapes,
 )
+from harness_bridge.preparation import Preparations
 from harness_bridge.readiness import EnvironmentRequirements, inspect_readiness
 from harness_bridge.runner import ProcessSpec, RunLimits, run_process, runner_identity
 from harness_bridge.runner import group_alive as _group_alive
@@ -119,6 +120,7 @@ class Bridge:
         self.store = Store(self.state_dir / "bridge.sqlite3")
         self.coordination = Coordinator(self.store)
         self.plans = ChildPlans(self.coordination)
+        self.preparations = Preparations(self)
         self.advisor_claim = advisor_claim
         self.python = python_executable or sys.executable
         self.stop_flag = stop_flag or StopFlag()
@@ -298,7 +300,12 @@ class Bridge:
             return dict(context["readiness"])
 
     def _child_context(
-        self, cur: sqlite3.Cursor, task_id: str, *, require_ready: bool = True
+        self,
+        cur: sqlite3.Cursor,
+        task_id: str,
+        *,
+        require_ready: bool = True,
+        check_preparation: bool = True,
     ) -> dict[str, Any] | None:
         row = cur.execute("SELECT child_id FROM child_plans WHERE task_id=?", (task_id,)).fetchone()
         if row is None:
@@ -318,10 +325,15 @@ class Bridge:
         data = json.loads(child["spec_json"]).get("environment") or {}
         requirements = EnvironmentRequirements.model_validate(data)
         readiness = inspect_readiness(task, self._spec(task), requirements, self.env)
+        setup = json.loads(child["spec_json"]).get("preparation")
+        if setup and check_preparation:
+            prepared = self.preparations.readiness(cur, task_id, setup)
+            readiness["preparation"] = prepared
+            readiness["ready"] = readiness["ready"] and prepared["ready"]
         if require_ready and not readiness["ready"]:
             raise BridgeError(
                 "PREFLIGHT_FAILED",
-                "child workspace requirements are missing",
+                "child workspace requirements or preparation evidence are missing/stale",
                 task_id=task_id,
                 details=readiness,
             )
@@ -334,8 +346,21 @@ class Bridge:
             "worktree": task.worktree_path,
             "dependencies": baseline["inputs"] if baseline else [],
             "environment": data,
+            "preparation_id": readiness.get("preparation", {})
+            .get("latest", {})
+            .get("preparation_id")
+            if readiness.get("preparation", {}).get("latest")
+            else None,
             "readiness": readiness,
         }
+
+    def _child_context_for_preparation(self, task_id: str) -> dict[str, Any]:
+        with self.store.transaction() as cur:
+            context = self._child_context(
+                cur, task_id, require_ready=False, check_preparation=False
+            )
+            assert context is not None
+            return dict(context["readiness"])
 
     def retain_approved(self, task_id: str) -> dict[str, Any]:
         """Explicitly retain an older approval only if its candidate/evidence still match."""
@@ -877,7 +902,7 @@ class Bridge:
             )
         if stopping and resolve == "retry":
             raise BridgeError("STATE_CONFLICT", "cannot retry after goal termination is requested")
-        if stopping and resolve is None and task.state not in (S.STARTING, S.RUNNING):
+        if stopping and resolve is None and task.state not in (S.PREPARING, S.STARTING, S.RUNNING):
             return {
                 **report,
                 "state_after": task.state.value,
@@ -894,6 +919,11 @@ class Bridge:
                     task_id=task_id,
                 )
             unknown = task.state == S.INTERRUPTED and not details.get("outcome_known", False)
+            with self.store.transaction() as cur:
+                if resolve == "retry" and self.preparations.unresolved(cur, task_id):
+                    raise BridgeError(
+                        "CANNOT_CONFIRM_EXIT", "preparation exit remains unknown; retry is held"
+                    )
             if resolve == "retry" and unknown:
                 pg = attempt.pgid if attempt else None
                 if pg is not None and _group_alive(pg):
@@ -936,8 +966,8 @@ class Bridge:
                 self.store.add_event(cur, task_id, "workspace_recovery_requested", {})
             self._prepare_workspace(task_id)
             actions.append("workspace prepared (no model involved): CREATED -> READY")
-        elif task.state in (S.STARTING, S.RUNNING, S.VERIFYING):
-            runner = details.get("runner") if task.state == S.VERIFYING else None
+        elif task.state in (S.PREPARING, S.STARTING, S.RUNNING, S.VERIFYING):
+            runner = details.get("runner") if task.state in (S.PREPARING, S.VERIFYING) else None
             runner = runner or (attempt.runner if attempt else None)
             alive = _runner_alive(runner)
             report["runner_alive"] = alive
@@ -947,6 +977,28 @@ class Bridge:
                 actions.append(
                     "runner liveness cannot be determined; no change (fail closed). Re-run with "
                     "--acknowledge-unknown after checking that no hbridge run is active"
+                )
+            elif task.state == S.PREPARING:
+                with self._advisor_transaction(task_id, allow_stopping=True) as cur:
+                    record = self.preparations.latest(cur, task_id)
+                    assert record is not None
+                    record.update(status="unknown", exit_confirmed=False, ended_at=utc_now())
+                    self.preparations.save(cur, record)
+                    self.store.transition(
+                        cur,
+                        task_id,
+                        S.PREPARING,
+                        S.INTERRUPTED,
+                        reason="preparation_outcome_unknown",
+                        details={
+                            "phase": "preparation",
+                            "outcome_known": False,
+                            "preparation_id": record["preparation_id"],
+                            "signalled": False,
+                        },
+                    )
+                actions.append(
+                    "preparation runner gone; outcome unknown; no signals or automatic restart"
                 )
             elif task.state == S.VERIFYING:
                 self._claim_verification(task, "recover")
@@ -1053,11 +1105,11 @@ class Bridge:
                 "--acknowledge-unknown (or use recover --resolve fail)",
                 task_id=task_id,
             )
-        if task.state in (S.STARTING, S.RUNNING, S.VERIFYING):
+        if task.state in (S.PREPARING, S.STARTING, S.RUNNING, S.VERIFYING):
             with self.store.transaction() as cur:
                 self.store.update_task(cur, task_id, cancel_requested=1)
                 self.store.add_event(cur, task_id, "cancel_requested", {})
-            runner = details.get("runner") if task.state == S.VERIFYING else None
+            runner = details.get("runner") if task.state in (S.PREPARING, S.VERIFYING) else None
             attempt = (
                 self.store.get_attempt(task.current_attempt_id) if task.current_attempt_id else None
             )
@@ -1065,7 +1117,12 @@ class Bridge:
             alive = _runner_alive(runner)
             deadline = time.monotonic() + max(0.0, wait_seconds)
             while alive is True and time.monotonic() < deadline:
-                if self.store.get_task(task_id).state not in (S.STARTING, S.RUNNING, S.VERIFYING):
+                if self.store.get_task(task_id).state not in (
+                    S.PREPARING,
+                    S.STARTING,
+                    S.RUNNING,
+                    S.VERIFYING,
+                ):
                     break
                 time.sleep(0.1)
             now = self.store.get_task(task_id)
@@ -1414,6 +1471,7 @@ class Bridge:
         spec = self._spec(task)
         with self.store.transaction() as cur:
             retained = approved(cur, task_id)
+            preparation = self.preparations.latest(cur, task_id)
         attempts = self.store.list_attempts(task_id)
         current = next((a for a in attempts if a.attempt_id == task.current_attempt_id), None)
         gate: dict[str, Any] | None = None
@@ -1441,6 +1499,7 @@ class Bridge:
             "attempts": [_attempt_brief(a) for a in attempts],
             "approval_gate": gate,
             "approved_snapshot": retained,
+            "preparation": preparation,
             "reviews": self.store.list_reviews(task_id),
             "recent_events": [
                 {k: e[k] for k in ("seq", "type", "from_state", "to_state", "created_at")}
@@ -1835,6 +1894,7 @@ def _next_actions(state: TaskState) -> list[str]:
     return {
         S.CREATED: ["hbridge recover TASK_ID  (prepares the workspace)"],
         S.READY: ["hbridge run TASK_ID --mode mock"],
+        S.PREPARING: ["wait; hbridge cancel TASK_ID to stop; recover if preparation runner died"],
         S.STARTING: ["wait; if the runner died: hbridge recover TASK_ID"],
         S.RUNNING: ["wait; hbridge cancel TASK_ID to stop", "if the runner died: hbridge recover"],
         S.VERIFYING: ["wait; if the runner died: hbridge recover TASK_ID"],

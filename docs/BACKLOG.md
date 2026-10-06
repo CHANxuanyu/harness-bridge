@@ -20,10 +20,11 @@ Evidence: `docs/VALIDATION_MATRIX.md`, `docs/LIVE_REPAIR_RESULT.md`, `docs/PLUGI
    Advisor fencing, control/confirmed-stop states, immutable child plans/DAGs, root task
    materialization, project registration within explicit state and backed-up migration.
    Installed-host discovery wiring remains P6; references: `COORDINATION.md`, `PLANNING.md`.
-2. **P2 — Execution context (in progress).** Approved snapshots, deterministic dependency
-   baselines, successor workspaces, context attribution and presence preflight are implemented.
-   Continue controlled setup commands, durable preparation lifecycle/cancellation/recovery,
-   artifact/cache/resource records and shared-resource conflicts. See `EXECUTION_CONTEXT.md`.
+2. **P2 — Execution context (local core implemented).** Fixed approved baselines, successor
+   workspaces/context, presence checks and explicit bounded preparation with cancellation,
+   crash recovery, candidate binding, output/cache inventory and state-wide resource claims.
+   References: `EXECUTION_CONTEXT.md`, `PREPARATION.md`. No persistent service management or
+   automatic resource discovery; unknown exits remain reserved until future audited resolution.
 3. **P3 — Managed worker and aggregate limits.** Bounded concurrent attempts, goal budgets,
    reservations held for unknown exits, incremental events, cancel/recover and host teardown.
    Validate the actual macOS worker lifecycle before claiming detached operation.
