@@ -1,5 +1,12 @@
 # Handoff
 
+> **Latest: local Codex T4 single-run smoke PASS (2026-10-06).** Supervisor model
+> `gpt-6-astra` is recorded in local turn context. One real Opus 5.5 executor
+> attempt, independent acceptance and diff review, snapshot-bound approve, fresh
+> CLI SUCCEEDED confirmation; live gate closed. `docs/T4_SMOKE_RESULT.md` is the
+> current evidence. Repair/resume remain unverified; no further live call in this
+> authorization. This supersedes the historical T4 NOT_RUN statements below.
+
 > **Local macOS update (2026-10-06).** The "Next bounded work package" below is **complete**:
 > the offline suite (184 passed / 0 skipped / 0 failed), both demos and the targeted
 > runner/recovery `-v` run (28 passed) were reproduced on macOS 26.6.2 arm64 at `fcbd21a`

@@ -18,7 +18,8 @@ via uv, git 2.50.1, SQLite 3.53.1/3.51.0, revision `fcbd21a` — no source chang
 targeted `pytest tests/unit/test_runner.py tests/integration/test_recovery.py -v` run
 (28 passed) — the process-group tests ran the `ps` fallbacks, since macOS has no `/proc`.
 Live rows: T3 was executed on 2026-10-06 (see the T3 row and `docs/LOCAL_SMOKE_HANDOFF.md`);
-T4–T5 remain NOT_RUN. No macOS result below is copied from Linux.
+T4 initial smoke passed later the same day (`docs/T4_SMOKE_RESULT.md`); T5 remains
+NOT_RUN. No macOS result below is copied from Linux.
 
 | ID | Feature | Status | Evidence | Test / command | Result | Remaining uncertainty |
 |---|---|---|---|---|---|---|
@@ -56,5 +57,5 @@ T4–T5 remain NOT_RUN. No macOS result below is copied from Linux.
 | — | `--max-turns` capability evidence (docs vs local help vs local confirmation) | implemented | docs + captured help text | `test_help_absence_is_not_treated_as_unsupported`, `test_documentation_alone_never_marks_a_flag_usable`, `test_confirmation_is_per_flag_and_forbidden_flags_stay_forbidden`, `test_no_global_preflight_bypass_in_config`, `test_doctor_reports_flag_evidence_not_unsupported`; local probe 2026-10-06 | docs: declared; local help 2.1.291: not listed; local probe: **accepted (parse-level)** → confirmed locally for this installation | enforcement beyond argument acceptance still unproven; never inferred from docs alone |
 | — | CLI rejects an argument at run time → stop, no retry without it | implemented | T1/T2 (stub) | `test_cli_rejecting_a_flag_stops_the_attempt`, `test_cli_rejection_of_max_turns_stops_and_is_never_retried_without_it` | PASS | real CLI error text unverified (commander-style assumed) |
 | T3 | Real Claude CLI single-harness run (initial smoke) | passed (initial smoke only) | T3 (live) | 2026-10-06, macOS: one CLI flag-acceptance probe + one bridge-run task (one-shot slugify fixture, isolated state dir; 1 attempt / 0 repair cycles / 10-turn cap, 7 used; 600 s wall, 19.7 s) with CLI 2.1.291, requested=observed model claude-opus-5-5; bridge verification passed incl. external acceptance (script hash unchanged before/after); approve → SUCCEEDED, state re-read by a fresh process | **PASS (macOS, live, single run)** | resume/repair not exercised; one run only; no captured-live fixture yet; `--max-turns` acceptance ≠ enforcement proof; usage executor-reported, subscription remaining unknown |
-| T4 | Real Codex/Astra → Claude loop | not run | — | — | **NOT_RUN** | requires local, explicitly authorized run |
+| T4 | Real Codex/Astra → Claude loop | passed (initial smoke only) | T4 (live) | 2026-10-06, current local Codex gpt-6-astra (turn-context evidence) → bridge 096238e → Claude CLI 2.1.291 / claude-opus-5-5; one fresh task, one run/spawn/attempt, 0 repair, 8/10 turns, 23.249 s; 7 repo tests + 9 external cases pass; acceptance hash unchanged; diff reviewed, snapshot-bound approve, fresh CLI confirms SUCCEEDED; gate closed; docs/T4_SMOKE_RESULT.md | **T4 single-run smoke PASS** | repair/resume not verified; subscription remaining unknown; initial read-only --help omitted state-dir (all later commands explicit); no external human execution |
 | T5 | Comparative evaluation | not run | — | — | **NOT_RUN** | format only (`docs/EVALUATION_PLAN.md`) |
