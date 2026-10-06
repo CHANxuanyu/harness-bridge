@@ -82,9 +82,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--idempotency-key", required=True)
     p = sub.add_parser("child", parents=[common], help="inspect or materialize a planned child")
     child_sub = p.add_subparsers(dest="child_command", required=True)
-    for operation in ("status", "materialize"):
+    for operation in ("status", "materialize", "preflight"):
         p = child_sub.add_parser(operation, parents=[common])
         p.add_argument("child_id")
+
+    p = sub.add_parser("retain-approved", parents=[common], help="pin an unchanged older approval")
+    p.add_argument("task_id")
 
     p = sub.add_parser("run", parents=[common], help="run one executor attempt (foreground)")
     p.add_argument("task_id")
@@ -204,7 +207,11 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
         if cmd == "child":
             if args.child_command == "materialize":
                 return bridge.materialize(args.child_id)
+            if args.child_command == "preflight":
+                return bridge.child_preflight(args.child_id)
             return bridge.plans.status(args.child_id)
+        if cmd == "retain-approved":
+            return bridge.retain_approved(args.task_id)
         if cmd == "goal":
             if args.goal_command == "plan":
                 return bridge.plans.submit(

@@ -1,10 +1,11 @@
 # Handoff
 
-## Current state (2026-10-06, P1 local coordination complete)
+## Current state (2026-10-06, P2 first slice implemented)
 
 - **Canonical plan:** `docs/PROJECT_PLAN.md` consolidates the product, session relationships,
   contracts, V1 scope defaults, P0–P7 milestones and V01–V14 acceptance. P0 is complete;
-  P1 local coordination is implemented and offline-validated; P2–P7 are pending. Advisor is
+  P1 is complete; P2 dependency/context/readiness presence checks are implemented.
+  P2 environment setup and P3–P7 are pending. Advisor is
   explicitly an existing agent session; Bridge does not create its own planning model. `PRODUCT_FORM.md` is now a short summary, and the
   original cloud execution plan is clearly historical, not renewed authorization.
 - Key plan choices: dependencies are fixed before child execution-task/worktree materialization;
@@ -23,15 +24,25 @@
   request permanent cancel/fail; goal terminal states require all children terminal and every
   attempt exit confirmed. Emergency cancel remains possible without an Advisor. A cancelled
   preparation keeps any resulting workspace attributed to its cancelled task.
-- **Migration:** schema revision 1/2→3, additive tables only, WAL-aware backup before migration,
-  atomic rollback and concurrent-upgrade tests. No actual live/user state directory was opened
-  for migration in this implementation round. Keep backups/artifacts/worktrees for recovery.
-- **Checks:** latest `scripts/check.sh` passed **249 tests**, ruff/format and mypy clean on
-  macOS (85.27 seconds). 26 new planning/control/migration cases since the previous 223-test
-  milestone; affected 55-case checks also passed. Current contracts: `docs/COORDINATION.md`
-  and `docs/PLANNING.md`. P1 local core is complete. Dependent tasks deliberately report
-  `WAITING_BASELINE` after approval until P2 preserves/composes exact baselines. Environment,
-  P3 workers, P4 delivery and P6 installed-host discovery remain unfinished.
+- **P2 first slice:** `baselines.py` retains accepted verified trees in private Git refs,
+  composes approved dependencies deterministically and pins each child baseline. Successors
+  materialize from that fixed commit. Conflicts persist without creating a task/workspace.
+  Snapshot refs may outlive a rolled-back DB transaction; only identical deterministic objects
+  are adopted on retry. Missing/tampered refs fail closed. External merge drivers are refused.
+- **Execution context:** planned children receive goal/child/base and approved-input attribution.
+  `child preflight` checks presence, branch/repo/base ownership and required verifier cwd/binaries,
+  without executing located tools. `run` checks twice, including the reservation transaction;
+  failures consume no attempt. Presence checks do not install dependencies or prove tool/service
+  functionality. Controlled setup/resource management remain P2 work.
+- **Migration:** revision 1/2/3→4 adds approval/baseline records with one WAL-aware backup and
+  all-stage rollback. Old plan digests and replay keys are preserved. Older approved tasks need
+  explicit `retain-approved` with matching unchanged evidence/candidate; no silent resnapshot.
+  No actual live/user state directory was migrated. Preserve Git refs/objects and state/artifacts.
+- **Checks:** final `scripts/check.sh`: **278 passed**, 157.26s; ruff/format clean (87 files),
+  strict mypy clean (27 source files). 29 new cases; affected 60-case checks also passed.
+  No real model, auth/network calls or user-state migration. Current runtime contracts:
+  `docs/EXECUTION_CONTEXT.md`, `docs/COORDINATION.md`, `docs/PLANNING.md`. P2 remains incomplete;
+  no goal-level integrated delivery, worker survival or installed-host activation claim.
 
 - **Latest user clarification:** target developers who already use several coding-agent
   subscriptions, such as ZCode/GLM, Claude Code and Codex. This is not a Codex-only product.
@@ -42,7 +53,7 @@
   Bridge creates per-child workspaces and launches the executor with the assigned cwd.
   Treat plugins as entrypoints to that relationship. Parent/child coordination, dependency
   baselines and integration remain product priorities; goal/child links and initial aggregate
-  attempt/repair guards are now code, while dependency plans and integration are not.
+  attempt/repair guards and fixed dependency plans are now code; integrated delivery remains pending.
 - **New local plugin alpha:** `plugins/harness-bridge/` has portable, Codex and ZCode
   manifests plus one self-contained supervisor Skill. Codex catalog lives under
   `.agents/plugins/marketplace.json`; ZCode catalog is root `marketplace.json`.
@@ -70,8 +81,8 @@
   `local/glm-macos-validation` (contains cloud head `fcbd21a`); remote queried at takeover:
   **pushed through `470f5b0`** at that check. Repair/evidence `94f7c4d`, product/plugin
   `7efd2bf`, product clarification `bab602a`, plan `24ee6ad`, first P1 slice `83f0793` and
-  the new P1 completion milestone are
-  local, not auto-pushed. Remote was not re-queried during this offline implementation round;
+  P1 completion `9d73e1c` precede the new P2 first-slice milestone; all are local, not auto-pushed.
+  Remote was not re-queried during this offline implementation round;
   visibility remains public by instruction.
 - **Live-gate hygiene:** the global default state dir was never live-enabled; the T3/T4 test
   state dirs had live on only during authorized attempts; the repair state gate was closed
@@ -122,11 +133,11 @@
 
 ## Next bounded work
 
-1. Continue P2 from `docs/PROJECT_PLAN.md`: preserve approved snapshots as reproducible
-   dependency baselines, compose multiple dependency results, then materialize successors and
-   prepare environments/context. Reuse `planning.py` and existing ownership/stop/budget guards.
-   A complete 249-test offline regression passed for this shared-core change; no live budget
-   is renewed. Do not rerun past smokes or replan the product merely for handoff.
+1. Continue P2 from `docs/PROJECT_PLAN.md`: explicit bounded setup commands with durable
+   preparation records, cancellation/recovery, artifact/cache/resource attribution and shared
+   resource conflicts. Baselines, context and presence preflight are done; see
+   `docs/EXECUTION_CONTEXT.md`. Do not rerun past smokes or replan merely for handoff.
+   No live budget is renewed; new code is covered by offline fake/stub checks only.
 2. Interruption / timeout behaviour with a live executor (SIGTERM to the runner, wall
    timeout) — offline tests exist; live behaviour does not.
 3. T5 evaluation per `docs/EVALUATION_PLAN.md` — the only place where "cheaper/better than

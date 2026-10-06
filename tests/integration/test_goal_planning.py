@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from threading import Barrier
 from typing import Any
 
@@ -64,12 +65,13 @@ def test_plan_is_durable_without_workspace_and_dependencies_never_use_old_head(f
     assert b.materialize(ids["a"])["task_id"] == root["task_id"]
     b.run(root["task_id"])
     b.review(root["task_id"], review_for(b.artifacts(root["task_id"]), "approve", "ok"))
-    assert b.plans.status(ids["b"])["state"] == "WAITING_BASELINE"
-    assert b.coordination.status(g["goal_id"])["state"] == "NEEDS_ATTENTION"
-    with pytest.raises(BridgeError) as err:
-        b.materialize(ids["b"])
-    assert err.value.details["blocking_reasons"] == ["approved_dependency_baseline_not_implemented"]
-    assert len(b.store.list_tasks()) == len(list(b.worktrees_dir.iterdir())) == 1
+    assert b.plans.status(ids["b"])["state"] == "READY_TO_MATERIALIZE"
+    successor = b.materialize(ids["b"])
+    assert successor["base_sha"] != g["base_sha"]
+    a = Path(b.store.get_task(root["task_id"]).worktree_path)
+    c = Path(b.store.get_task(successor["task_id"]).worktree_path)
+    assert (a / "tagnorm/normalize.py").read_bytes() == (c / "tagnorm/normalize.py").read_bytes()
+    assert len(b.store.list_tasks()) == len(list(b.worktrees_dir.iterdir())) == 2
     b.close()
 
 

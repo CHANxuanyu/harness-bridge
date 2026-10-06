@@ -1,13 +1,13 @@
 # Status
 
-_Last updated 2026-10-06 (P1 local coordination complete; 249 offline tests passed)._
+_Last updated 2026-10-06 (P2 first slice implemented; 278 offline tests passed)._
 
 ## Current state
 
 - **Planning milestone P0 complete:** `docs/PROJECT_PLAN.md` is the canonical product and
   engineering plan. Advisor is the user's existing agent session; Executor is a bound child
-  agent session. P1 local coordination is implemented and offline-validated. P2–P7 remain
-  future implementation/acceptance, not complete. Scope defaults,
+  agent session. P1 is complete; the P2 dependency/context/presence-check slice is implemented.
+  P2 environment setup and P3–P7 remain incomplete. Scope defaults,
   dependency materialization, budget/ownership checks, worker lifecycle, integration and
   local-branch delivery are specified with V01–V14 acceptance criteria.
 - **P1 first vertical slice implemented:** project/goal registration, independent child links,
@@ -18,8 +18,13 @@ _Last updated 2026-10-06 (P1 local coordination complete; 249 offline tests pass
   immutable child plans and DAG validation, explicit idempotent root materialization. Accepted
   workspace preparation racing with cancel retains ownership without reviving the task.
   Schema revision 3 upgrades v1/v2 atomically with a pre-upgrade backup. See `docs/PLANNING.md`.
-  Dependent children remain unmaterialized until P2 supplies approved fixed baselines;
-  environment readiness, host discovery wiring, workers and integrated delivery are pending.
+- **P2 first slice:** approval retains immutable Git snapshots; dependencies compose into
+  pinned baselines before successor task/worktree creation. Conflicts block materialization;
+  old approvals require explicit unchanged-candidate retention. Child packets carry goal/base/
+  dependency attribution. Read-only presence/ownership checks run before child dispatch and
+  consume no attempt on failure. See `docs/EXECUTION_CONTEXT.md`. Controlled environment setup,
+  resource lifecycle, host discovery wiring, workers and integrated delivery remain pending.
+  Schema revision 4 adds retained records with atomic v1/v2/v3 migration and backup.
 - **Experimental prototype (V0.1, milestones M0–M4).** The live path has now been exercised
   for real in bounded initial smokes and one controlled repair/resume task on 2026-10-06.
 - **Verified so far**
@@ -59,8 +64,8 @@ _Last updated 2026-10-06 (P1 local coordination complete; 249 offline tests pass
   or more Executors (cross-harness subagents). The Advisor inspects/plans/reviews/integrates;
   Bridge prepares workspaces and runs/records tasks. `supervisor` is the existing name for
   Advisor. Parent goals, child ownership, takeover fencing and initial aggregate
-  attempt/repair limits are now implemented. Child dependencies, background/concurrent workers and multi-executor
-  integration remain pending; this is not the full product behavior.
+  attempt/repair limits and fixed child dependencies are implemented. Controlled environment setup,
+  background/concurrent workers and integrated delivery remain pending; this is not the full product behavior.
 
 ## Implemented
 
@@ -80,8 +85,9 @@ _Last updated 2026-10-06 (P1 local coordination complete; 249 offline tests pass
 | Goal/project registration, child ownership, Advisor takeover and old-entrypoint fencing | implemented first P1 slice; offline checks pass |
 | Goal attempt/repair ceilings; one project execution slot; unknown exit holds reservation | implemented initial guards; P3 worker/concurrency/time accounting pending |
 | Goal controls and confirmed-stop terminal projections | implemented; offline active fake-process cancellation and unknown-exit checks pass |
-| Immutable child plans / DAG validation / explicit independent-root materialization | implemented; dependency snapshot baselines remain P2 |
-| SQLite revision 1/2→3 upgrade + WAL-consistent backup/rollback | implemented; eight migration tests pass |
+| Immutable child plans / DAG validation / explicit root and dependent materialization | implemented; fixed approved inputs and conflict refusal |
+| Retained approval snapshots / goal-child context / presence preflight | P2 first slice implemented; controlled setup commands remain pending |
+| SQLite revision 1/2/3→4 upgrade + WAL-consistent backup/rollback | implemented; isolated fixtures only, real user state not migrated |
 | Offline demos `success`, `bug-then-repair` | pass |
 | Manual offline CI workflow (`workflow_dispatch`) | written, never run |
 | Codex / ZCode plugin source package, shared supervisor Skill, host catalogs | alpha; static/copy/CLI-contract checks pass; Codex catalog discovery pass; installed activation and ZCode loading NOT_RUN |
@@ -124,6 +130,15 @@ _Last updated 2026-10-06 (P1 local coordination complete; 249 offline tests pass
   (25 source files). 26 new cases: 23 planning/control and 3 migration. Includes real fake
   subprocess cancellation; no live harness, network/auth calls or user-state migration.
 
+- **P2 first slice (macOS, 2026-10-06):** affected planning/migration baseline 31 passed;
+  final dependency/readiness/planning/migration checks 60 passed (62.25s). Final
+  `scripts/check.sh` → **278 passed / 0 skipped / 0 failed**, 157.26 seconds;
+  ruff/format clean (87 files), strict mypy clean (27 source files). Adds 29 cases:
+  15 dependency/retention/context, 13 readiness, one migration revision case. Includes
+  real local Git/worktrees/SQLite and fake/stub subprocesses, no real model, auth/network
+  calls or user-state migration. Full regression was required by shared approval/store/run
+  changes; previous live smokes/repair were not repeated. P2 remains incomplete.
+
 ## Findings worth knowing
 
 - `--max-turns`: official docs declare it; `--help` of CLI 2.1.291 does not list it; on this
@@ -150,11 +165,11 @@ _Last updated 2026-10-06 (P1 local coordination complete; 249 offline tests pass
 
 ## Next
 
-Continue P2 in `docs/PROJECT_PLAN.md`: preserve approved dependency snapshots, compose fixed
-baselines and explicitly prepare environments/context before successor execution. Independent
-root materialization and DAG validation are implemented; do not duplicate them or bypass
-`WAITING_BASELINE` with the original goal SHA. Contracts: `docs/COORDINATION.md` and
-`docs/PLANNING.md`. P3–P7 retain their dependency order.
+Continue P2 in `docs/PROJECT_PLAN.md`: explicit bounded environment preparation with durable
+lifecycle/cancellation/recovery and artifact/cache/resource records. Fixed approved dependency
+baselines, successor workspaces, context and presence preflight are implemented; do not redo them.
+Presence does not prove tool versions or services work. Contracts: `docs/EXECUTION_CONTEXT.md`,
+`docs/COORDINATION.md` and `docs/PLANNING.md`. P3–P7 retain their dependency order.
 `docs/PRODUCT_FORM.md` is an overview only. The plan is documentation, not execution evidence.
 
 Real interruption/timeout validation and T5 evaluation (`docs/EVALUATION_PLAN.md`) still

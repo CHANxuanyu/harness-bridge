@@ -376,13 +376,19 @@ class Coordinator:
         claim: AdvisorClaim | None,
         values: dict[str, Any],
         executor: str,
+        child_id: str | None = None,
     ) -> None:
         goal = self.guard_goal(cur, goal_id, claim)
         spec: GoalSpec = parse_contract(GoalSpec, json.loads(goal["spec_json"]))
-        if (
-            values["repo_identity"] != goal["repo_identity"]
-            or values["base_sha"] != goal["base_sha"]
-        ):
+        expected_base = goal["base_sha"]
+        if child_id is not None:
+            from harness_bridge.planning import ChildPlans
+
+            plans = ChildPlans(self)
+            if plans.get(cur, child_id)["goal_id"] != goal_id:
+                raise BridgeError("INVALID_INPUT", "child plan belongs to another goal")
+            expected_base = plans.materialization_spec(cur, child_id, claim)["repo"]["base_ref"]
+        if values["repo_identity"] != goal["repo_identity"] or values["base_sha"] != expected_base:
             raise BridgeError(
                 "INVALID_INPUT", "child must use the goal's repository and pinned base SHA"
             )
@@ -465,7 +471,9 @@ class Coordinator:
             )
             controls = self.controls(cur, goal_id)
             plans = ChildPlans(self).list_in_transaction(cur, goal_id)
-            attention = attention or any(p["state"] == "WAITING_BASELINE" for p in plans)
+            attention = attention or any(
+                p["state"] in ("WAITING_BASELINE", "BASELINE_CONFLICT") for p in plans
+            )
             state = (
                 "DRAFT"
                 if not children and not plans

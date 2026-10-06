@@ -10,7 +10,7 @@ from threading import Barrier
 import pytest
 
 from harness_bridge.errors import BridgeError
-from harness_bridge.migrations import COORDINATION_SCHEMA, PLANNING_SCHEMA
+from harness_bridge.migrations import BASELINE_SCHEMA, COORDINATION_SCHEMA, PLANNING_SCHEMA
 from harness_bridge.store import _SCHEMA, SCHEMA_REVISION, Store
 from tests.conftest import Fixture
 from tests.integration.test_coordination import setup_goal
@@ -118,20 +118,22 @@ def test_backup_failure_aborts_upgrade(tmp_path: Path, monkeypatch: pytest.Monke
     old.close()
 
 
-@pytest.mark.parametrize("revision", ["1", "2"])
+@pytest.mark.parametrize("revision", ["1", "2", "3"])
 def test_failure_at_last_migration_rolls_back_all_stages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, revision: str
 ) -> None:
     path = tmp_path / "state.sqlite3"
     old = legacy(path, revision)
-    if revision == "2":
+    if revision in ("2", "3"):
         old.executescript(COORDINATION_SCHEMA)
+    if revision == "3":
+        old.executescript(PLANNING_SCHEMA)
     before = list(old.iterdump())
     original = Store._apply_schema
 
     def fail(cur: sqlite3.Cursor, schema: str) -> None:
         original(cur, schema)
-        if schema == PLANNING_SCHEMA:
+        if schema == BASELINE_SCHEMA:
             raise RuntimeError("interrupted after new tables, before version commit")
 
     monkeypatch.setattr(Store, "_apply_schema", staticmethod(fail))
@@ -151,6 +153,8 @@ def test_upgrade_v2_preserves_goal_binding_and_real_task(fx: Fixture) -> None:
     # Reconstruct the actual v2 schema while retaining its project/goal/task rows.
     old = sqlite3.connect(path, isolation_level=None)
     for table in (
+        "approved_snapshots",
+        "child_baselines",
         "plan_batches",
         "child_dependencies",
         "child_plans",
@@ -163,7 +167,7 @@ def test_upgrade_v2_preserves_goal_binding_and_real_task(fx: Fixture) -> None:
     assert b.store.get_task(task) == before_task
     after = b.coordination.status(g["goal_id"])
     assert after == before_goal
-    backup_path = next((fx.state_dir / "backups").glob("pre-v3-*.sqlite3"))
+    backup_path = next((fx.state_dir / "backups").glob(f"pre-v{SCHEMA_REVISION}-*.sqlite3"))
     backup = sqlite3.connect(backup_path)
     assert backup.execute("SELECT value FROM meta").fetchone()[0] == "2"
     assert backup.execute("SELECT task_id FROM goal_tasks").fetchone()[0] == task

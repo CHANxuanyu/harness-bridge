@@ -119,3 +119,29 @@ This round added 26 cases (23 planning/control, 3 migration); affected 55-case c
 passed. P1's local coordination acceptance is complete. P2–P7, including dependency execution,
 environment preparation, managed concurrency, integrated delivery and installed-host discovery,
 remain incomplete. Goal success/delivery cannot be inferred from these results.
+
+## P2 fixed dependencies and presence preflight — 2026-10-06
+
+| Scope | Evidence | Result | Boundary |
+|---|---|---|---|
+| Exact retained approvals | Parent files changed after approval and Git GC; successor gets the approved content; task status exposes review/attempt/fingerprint/commit | PASS, offline | Git-visible content only; private refs are not delivery branches |
+| Chains and multiple dependencies | Real Git diamond with an ancestor file updated in a descendant and disjoint sibling changes; restart/materialization replay | PASS, offline | Clean merge is not integrated acceptance |
+| Conflicts and concurrent requests | Persistent `BASELINE_CONFLICT`, no extra task/worktree; two materializers get the same pinned base/task; source checkout content unchanged | PASS, offline | Automatic conflict resolution/plan supersession pending |
+| Retention integrity and crash gap | Missing pins, tampered records, stale Advisor, legacy create/base bypass, rollback after Git pin then exact retry, custom merge driver never invoked | PASS, offline | Same-user logical guards, not hostile-process isolation; unclaimed ref cleanup deferred |
+| Older approvals and revision 4 | Explicit retention accepts only unchanged candidate/evidence; CLI replay; v3 materialized plan/replay preserved; final-stage migration rollback from v1/v2/v3 | PASS, offline | No real user state migrated; existing WAL/backup tests retained |
+| Assigned context | Successor invocation gets its own cwd plus goal/child/base/dependency attribution; same context reaches JSON and rendered prompt | PASS, fake adapter/prompt contract | No new real cross-harness context acceptance |
+| Non-executing readiness | Missing file/directory/tool/verifier cwd/verifier executable, symlink escape, wrong branch, late filesystem change all refuse dispatch without an attempt; explicit local fix unblocks same task; located probe binary never runs | PASS, offline | Presence/ownership only; no install, version/service/auth check or preparation lifecycle |
+
+Affected baseline before edits: 31 planning/migration checks passed. After edits: **60 affected
+checks passed**, 62.25s, with ruff/format/mypy clean. This slice adds 29 cases: 15 dependency,
+13 readiness and one additional migration revision case. Earlier dependency-unavailable assertions
+were updated to require approved content in successors; missing historical-snapshot refusal is
+covered separately. No tests skipped/deleted and no live calls, probes, auth or user-state migration.
+
+P2 remains incomplete: controlled setup commands and artifact/cache/shared-resource lifecycle
+are still required. P3–P7 and goal delivery remain incomplete. See `EXECUTION_CONTEXT.md`.
+
+Final shared-core regression for this slice: `scripts/check.sh` → **278 passed / 0 skipped /
+0 failed**, 157.26s on macOS, Python 3.11.16; ruff/format clean (87 files), strict mypy clean
+(27 source files). Required because approval retention, store migration and planned-child
+run paths changed. Historical live smokes/repair were not rerun.

@@ -1,8 +1,4 @@
-"""Immutable child plans, validated DAGs and explicit materialization of independent roots.
-
-Dependency results need preserved, approved baselines (P2); they are never silently mapped
-to the original goal HEAD. Planning or querying does not touch a workspace or start a process.
-"""
+"""Immutable child plans, validated DAGs and explicitly frozen dependency baselines."""
 
 from __future__ import annotations
 
@@ -13,9 +9,11 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from pydantic import Field, field_validator
 
+from harness_bridge.baselines import approved, compose, read_record, validate_pin
 from harness_bridge.coordination import AdvisorClaim, Contract, check_key, parse_contract
 from harness_bridge.errors import BridgeError
 from harness_bridge.models import TaskDefinition, canonical_json, sha256_digest
+from harness_bridge.readiness import EnvironmentRequirements
 from harness_bridge.store import new_id
 
 if TYPE_CHECKING:
@@ -26,6 +24,13 @@ class ChildPlan(Contract):
     key: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
     task: TaskDefinition
     depends_on: list[str] = Field(default_factory=list, max_length=100)
+    environment: EnvironmentRequirements | None = None
+
+    def normalized(self) -> dict[str, Any]:
+        value = self.model_dump(mode="json")
+        if self.environment is None:
+            value.pop("environment")  # Preserve pre-v4 immutable plan/replay digests.
+        return value
 
     @field_validator("depends_on")
     @classmethod
@@ -58,7 +63,12 @@ class ChildPlans:
     ) -> dict[str, Any]:
         check_key(key)
         batch = parse_contract(PlanBatch, data)
-        digest = sha256_digest(batch.model_dump(mode="json"))
+        digest = sha256_digest(
+            {
+                "schema_version": batch.schema_version,
+                "children": [p.normalized() for p in batch.children],
+            }
+        )
         with self.store.transaction() as cur:
             goal = self.coordination.guard_goal(cur, goal_id, claim)
             replay = cur.execute(
@@ -97,7 +107,7 @@ class ChildPlans:
                     "INVALID_INPUT", "child dependency graph contains a cycle"
                 ) from None
             for plan in batch.children:
-                normalized = plan.model_dump(mode="json")
+                normalized = plan.normalized()
                 cur.execute(
                     "INSERT INTO child_plans VALUES (?,?,?,?,?,?,?)",
                     (
@@ -152,9 +162,12 @@ class ChildPlans:
         elif any(d["task_state"] != "SUCCEEDED" for d in dependencies):
             state = "WAITING_DEPENDENCIES"
             reasons = ["dependencies_not_approved"]
-        elif dependencies:
+        elif any(approved(cur, d["task_id"]) is None for d in dependencies):
             state = "WAITING_BASELINE"
-            reasons = ["approved_dependency_baseline_not_implemented"]
+            reasons = ["approved_dependency_snapshot_missing"]
+        elif (baseline := self.baseline(cur, child_id)) and baseline["status"] == "conflict":
+            state = "BASELINE_CONFLICT"
+            reasons = ["approved_dependency_merge_conflict"]
         else:
             state = "READY_TO_MATERIALIZE"
         return {
@@ -166,7 +179,60 @@ class ChildPlans:
             "blocking_reasons": reasons,
             "dependencies": dependencies,
             "plan_digest": row["spec_digest"],
+            "baseline": self.baseline(cur, child_id),
         }
+
+    def baseline(self, cur: sqlite3.Cursor, child_id: str) -> dict[str, Any] | None:
+        record = read_record(
+            cur.execute("SELECT * FROM child_baselines WHERE child_id=?", (child_id,)).fetchone()
+        )
+        if record is not None and (
+            record["child_id"] != child_id
+            or record["plan_digest"] != self.get(cur, child_id)["spec_digest"]
+        ):
+            raise BridgeError("INTEGRITY_ERROR", "baseline is not bound to this child plan")
+        return record
+
+    def freeze_baseline(
+        self, cur: sqlite3.Cursor, child_id: str, claim: AdvisorClaim | None
+    ) -> None:
+        row = self.get(cur, child_id)
+        goal = self.coordination.guard_goal(cur, row["goal_id"], claim)
+        existing = self.baseline(cur, child_id)
+        if existing:
+            if existing["status"] == "ready":
+                validate_pin(goal["repo_path"], existing)
+            return
+        view = self.view(cur, child_id)
+        if row["task_id"] is None and view["state"] != "READY_TO_MATERIALIZE":
+            raise BridgeError("STATE_CONFLICT", "child dependencies are not ready", details=view)
+        inputs = []
+        for dependency in view["dependencies"]:
+            snapshot = approved(cur, dependency["task_id"])
+            if snapshot is None:
+                raise BridgeError("STATE_CONFLICT", "approved dependency snapshot missing")
+            inputs.append(
+                {"child_id": dependency["child_id"], "key": dependency["key"], **snapshot}
+            )
+        record = {
+            "child_id": child_id,
+            "goal_id": row["goal_id"],
+            "plan_digest": row["spec_digest"],
+            "goal_base_sha": goal["base_sha"],
+            "inputs": inputs,
+            **compose(goal["repo_path"], child_id, goal["base_sha"], inputs),
+        }
+        cur.execute(
+            "INSERT INTO child_baselines VALUES (?,?,?)",
+            (
+                child_id,
+                canonical_json(record),
+                sha256_digest(record),
+            ),
+        )
+        self.coordination.event(
+            cur, row["goal_id"], goal["advisor_epoch"], "child_baseline_frozen", record
+        )
 
     def list_in_transaction(self, cur: sqlite3.Cursor, goal_id: str) -> list[dict[str, Any]]:
         rows = cur.execute(
@@ -192,7 +258,11 @@ class ChildPlans:
                 details=view,
             )
         task = json.loads(row["spec_json"])["task"]
-        repo = {**json.loads(goal["spec_json"])["repo"], "base_ref": goal["base_sha"]}
+        baseline = self.baseline(cur, child_id)
+        if baseline is None or baseline["status"] != "ready":
+            raise BridgeError("STATE_CONFLICT", "child baseline is not ready", details=view)
+        validate_pin(goal["repo_path"], baseline)
+        repo = {**json.loads(goal["spec_json"])["repo"], "base_ref": baseline["commit_sha"]}
         return {**task, "schema_version": "1.0", "repo": repo}
 
     def attach(

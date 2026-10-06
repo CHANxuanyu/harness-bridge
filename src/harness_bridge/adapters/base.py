@@ -34,6 +34,7 @@ class TaskPacket:
     verification: list[dict[str, Any]]
     max_turns: int
     feedback: list[dict[str, Any]] | None = None
+    context: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {"protocol": "hbridge-task-packet/1", **asdict(self)}
@@ -51,6 +52,12 @@ class TaskPacket:
         ]
         if self.requirements:
             lines += ["", "## Requirements", *[f"- {r}" for r in self.requirements]]
+        if self.context:
+            lines += [
+                "",
+                "## Parent goal and fixed execution context",
+                json.dumps(self.context, ensure_ascii=False, sort_keys=True),
+            ]
         lines += [
             "",
             "## Path policy",

@@ -1,4 +1,4 @@
-# Goal controls and child planning (P1 local core)
+# Goal controls and child planning
 
 Implemented 2026-10-06 on top of the [coordination contract](COORDINATION.md). All operations
 use the same SQLite authority and Advisor fencing. No operation here launches a model.
@@ -93,12 +93,15 @@ hbridge --state-dir /absolute/project-state --json child materialize CHILD_ID \
 | No dependencies, not materialized | `READY_TO_MATERIALIZE`; explicit materialization permitted |
 | At least one dependency is not an approved task | `WAITING_DEPENDENCIES`; no workspace/task creation |
 | Dependencies approved, but preserved dependency baseline unavailable | `WAITING_BASELINE`; refused, not silently replaced by original HEAD |
+| Approved inputs available | `READY_TO_MATERIALIZE`; fixed composition precedes task creation |
+| Conflicting approved inputs | `BASELINE_CONFLICT`; no task/worktree, goal needs attention |
 | Materialized | Actual execution-task state and `task_id`; querying creates nothing |
 | Unmaterialized and goal termination requested | `CANCELLED`; no task or workspace created |
 
-This milestone materializes **independent roots only**. It freezes TaskSpec 1.0 against the
-goal's original pinned SHA, attaches the child/task relationship and task-created event in
-one transaction, then prepares the existing owned worktree. The original checkout must still
+Independent roots freeze TaskSpec 1.0 against the goal's original pinned SHA. Successors
+freeze against the composed approved dependency baseline described in
+[EXECUTION_CONTEXT.md](EXECUTION_CONTEXT.md). Materialization attaches the child/task relationship
+and task-created event in one transaction, then prepares the existing owned worktree. The original checkout must still
 be clean. Per-task limits and goal aggregate limits both apply to later attempts.
 
 Competing requests get one execution task and one owned workspace. Materialization uses a
@@ -108,10 +111,10 @@ and the existing explicit `recover` finishes preparation. It does not create ano
 start an executor. If goal cancellation races with accepted workspace preparation, the result
 stays cancelled and any successfully created workspace remains recorded under that task.
 
-P2 will preserve approved dependency snapshots, form a fixed baseline (including multiple
-dependency results), and prepare the environment before allowing those successors to run.
-Current `WAITING_BASELINE` is an explicit unsupported boundary, not a claim of dependency execution.
-Do not manually create a substitute standalone task to bypass the dependency wait.
+The P2 first slice preserves approved dependency snapshots, composes fixed baselines and
+checks workspace readiness before successors run. `WAITING_BASELINE` now means an older approval
+has no retained snapshot; `BASELINE_CONFLICT` records a failed composition. Controlled setup
+commands remain pending. Do not create a substitute standalone task to bypass dependency checks.
 
 ## Goal state projection
 
@@ -119,7 +122,7 @@ Do not manually create a substitute standalone task to bypass the dependency wai
 |---|---|
 | No plans or tasks | `DRAFT` |
 | Work registered, no attention condition | `ACTIVE` |
-| Child awaiting review, blocked, interrupted, failed or cancelled; or dependency baseline unavailable | `NEEDS_ATTENTION` |
+| Child awaiting review, blocked, interrupted, failed or cancelled; or dependency baseline unavailable/conflicting | `NEEDS_ATTENTION` |
 | Cancel/fail requested, a task remains nonterminal or any attempt exit is unknown | `NEEDS_ATTENTION` with pending stop IDs |
 | Cancel requested, stopping fully confirmed | `CANCELLED` |
 | Fail requested, stopping fully confirmed | `FAILED` |
@@ -130,11 +133,13 @@ and exact-delivery gates. No command can set those states directly.
 
 ## Storage and evidence
 
-Revision 3 adds goal control receipts, child plans/dependency edges and batch receipts. Both
+Revision 3 added goal control receipts, child plans/dependency edges and batch receipts. Both
 v1→v3 and v2→v3 run under one writer transaction after a WAL-consistent backup; a failure in
 the final migration rolls back every stage. Existing v2 goals/bindings/tasks remain identical.
 Backup files are owner-readable/writable from creation. No live/user state directory was used
 for validation. Recovery guidance remains in [COORDINATION.md](COORDINATION.md).
+
+Revision 4 adds the retained snapshot/baseline records; see the execution context reference.
 
 Evidence: `tests/integration/test_goal_planning.py`, the prior coordination suite, and
 `tests/unit/test_migrations.py`. These are offline simulated executors with real subprocesses,

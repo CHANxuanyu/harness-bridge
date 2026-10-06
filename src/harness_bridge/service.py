@@ -42,6 +42,7 @@ from harness_bridge.artifacts import (
     store_bounded_file,
     store_capture,
 )
+from harness_bridge.baselines import approved, retain_approval, validate_pin
 from harness_bridge.config import BridgeConfig, evaluate_live_gate, load_config
 from harness_bridge.coordination import AdvisorClaim, Coordinator
 from harness_bridge.errors import BridgeError
@@ -60,6 +61,7 @@ from harness_bridge.policy import (
     redact_text,
     symlink_escapes,
 )
+from harness_bridge.readiness import EnvironmentRequirements, inspect_readiness
 from harness_bridge.runner import ProcessSpec, RunLimits, run_process, runner_identity
 from harness_bridge.runner import group_alive as _group_alive
 from harness_bridge.runner import runner_alive as _runner_alive
@@ -224,7 +226,7 @@ class Bridge:
                 self.store.insert_task(cur, values)
                 if goal_id is not None:
                     self.coordination.link_task(
-                        cur, goal_id, self.advisor_claim, values, spec.executor.kind
+                        cur, goal_id, self.advisor_claim, values, spec.executor.kind, _child_id
                     )
                 if _child_id is not None:
                     if self.plans.get(cur, _child_id)["goal_id"] != goal_id:
@@ -274,12 +276,99 @@ class Bridge:
         return self._task_receipt(existing, created=False)
 
     def materialize(self, child_id: str) -> dict[str, Any]:
+        # Persist conflicts as well as successful fixed baselines before attempting a task.
+        with self.store.transaction() as cur:
+            self.plans.freeze_baseline(cur, child_id, self.advisor_claim)
         with self.store.transaction() as cur:
             data = self.plans.materialization_spec(cur, child_id, self.advisor_claim)
             row = self.plans.get(cur, child_id)
             goal_id = row["goal_id"]
         receipt = self.create(data, f"materialize:{child_id}", goal_id=goal_id, _child_id=child_id)
         return {**receipt, "child_id": child_id}
+
+    def child_preflight(self, child_id: str) -> dict[str, Any]:
+        with self.store.transaction() as cur:
+            row = self.plans.get(cur, child_id)
+            if not row["task_id"]:
+                raise BridgeError(
+                    "STATE_CONFLICT", "materialize the child before workspace preflight"
+                )
+            context = self._child_context(cur, row["task_id"], require_ready=False)
+            assert context is not None
+            return dict(context["readiness"])
+
+    def _child_context(
+        self, cur: sqlite3.Cursor, task_id: str, *, require_ready: bool = True
+    ) -> dict[str, Any] | None:
+        row = cur.execute("SELECT child_id FROM child_plans WHERE task_id=?", (task_id,)).fetchone()
+        if row is None:
+            return None
+        child = self.plans.get(cur, row["child_id"])
+        task = self.store.get_task(task_id, cur=cur)
+        goal = self.coordination._goal(cur, child["goal_id"])
+        baseline = self.plans.baseline(cur, row["child_id"])
+        # Pre-v4 independent roots may already be materialized; their original pinned
+        # goal base remains valid without inventing a new dependency result.
+        if baseline is not None:
+            if baseline["status"] != "ready" or baseline["commit_sha"] != task.base_sha:
+                raise BridgeError("INTEGRITY_ERROR", "task differs from frozen child baseline")
+            validate_pin(task.repo_path, baseline)
+        elif json.loads(child["spec_json"])["depends_on"] or task.base_sha != goal["base_sha"]:
+            raise BridgeError("INTEGRITY_ERROR", "task is missing its dependency baseline")
+        data = json.loads(child["spec_json"]).get("environment") or {}
+        requirements = EnvironmentRequirements.model_validate(data)
+        readiness = inspect_readiness(task, self._spec(task), requirements, self.env)
+        if require_ready and not readiness["ready"]:
+            raise BridgeError(
+                "PREFLIGHT_FAILED",
+                "child workspace requirements are missing",
+                task_id=task_id,
+                details=readiness,
+            )
+        return {
+            "goal_id": goal["goal_id"],
+            "objective": json.loads(goal["spec_json"])["objective"],
+            "child_id": child["child_id"],
+            "child_key": child["child_key"],
+            "base_sha": task.base_sha,
+            "worktree": task.worktree_path,
+            "dependencies": baseline["inputs"] if baseline else [],
+            "environment": data,
+            "readiness": readiness,
+        }
+
+    def retain_approved(self, task_id: str) -> dict[str, Any]:
+        """Explicitly retain an older approval only if its candidate/evidence still match."""
+        self._check_advisor(task_id)
+        task = self.store.get_task(task_id)
+        self._spec(task)
+        with self._advisor_transaction(task_id) as cur:
+            existing = approved(cur, task_id)
+            if existing:
+                validate_pin(task.repo_path, existing)
+                return existing
+            task = self.store.get_task(task_id, cur=cur)
+            if task.state != S.SUCCEEDED or task.current_attempt_id is None:
+                raise BridgeError("STATE_CONFLICT", "retention requires an approved task")
+            attempt = self.store.get_attempt(task.current_attempt_id, cur=cur)
+            manifest = self._load_manifest(attempt)
+            review = cur.execute(
+                "SELECT * FROM reviews WHERE task_id=? AND attempt_id=? AND status='accepted' "
+                "AND verdict='approve'",
+                (task_id, attempt.attempt_id),
+            ).fetchone()
+            if (
+                review is None
+                or manifest is None
+                or self.current_fingerprint(task) != attempt.fingerprint
+                or json.loads(review["receipt_json"])["snapshot_digest"] != attempt.fingerprint
+            ):
+                raise BridgeError(
+                    "STALE_REVIEW", "older approved candidate/evidence no longer match"
+                )
+            record = retain_approval(cur, task, manifest, review["review_id"])
+            self.store.add_event(cur, task_id, "approved_snapshot_retained", record)
+            return record
 
     def _prepare_workspace(self, task_id: str) -> None:
         task = self.store.get_task(task_id)
@@ -453,6 +542,8 @@ class Bridge:
                 task_id=task_id,
             )
         assert task.worktree_path is not None
+        with self.store.transaction() as cur:
+            context = self._child_context(cur, task_id)
         seq = task.attempts_used + 1
         feedback = task.pending_feedback
         kind = "initial" if seq == 1 else ("repair" if feedback else "retry")
@@ -471,6 +562,7 @@ class Bridge:
             ],
             max_turns=spec.limits.max_turns_per_attempt,
             feedback=feedback,
+            context=context,
         )
         attempt_id = packet.attempt_id
         resume = self._resume_session(task, spec) if kind == "repair" else None
@@ -501,6 +593,9 @@ class Bridge:
         evidence = _evidence_level(spec.executor.kind, mode)
         with self._advisor_transaction(task_id) as cur:
             self.coordination.guard_dispatch(cur, task_id, self.advisor_claim, kind)
+            # Check again after invocation construction: a late filesystem/ownership
+            # change must not slip through the legacy run entrypoint.
+            self._child_context(cur, task_id)
             self.store.transition(
                 cur,
                 task_id,
@@ -1317,6 +1412,8 @@ class Bridge:
     def status(self, task_id: str) -> dict[str, Any]:
         task = self.store.get_task(task_id)
         spec = self._spec(task)
+        with self.store.transaction() as cur:
+            retained = approved(cur, task_id)
         attempts = self.store.list_attempts(task_id)
         current = next((a for a in attempts if a.attempt_id == task.current_attempt_id), None)
         gate: dict[str, Any] | None = None
@@ -1343,6 +1440,7 @@ class Bridge:
             "current_attempt_id": task.current_attempt_id,
             "attempts": [_attempt_brief(a) for a in attempts],
             "approval_gate": gate,
+            "approved_snapshot": retained,
             "reviews": self.store.list_reviews(task_id),
             "recent_events": [
                 {k: e[k] for k in ("seq", "type", "from_state", "to_state", "created_at")}
@@ -1605,6 +1703,8 @@ class Bridge:
                 receipt.update({"status": "accepted", "resulting_state": S.SUCCEEDED.value})
                 with self._advisor_transaction(task_id) as cur:
                     self.store.insert_review(cur, {**row, "status": "accepted", "receipt": receipt})
+                    assert manifest is not None
+                    retain_approval(cur, task, manifest, review_id)
                     self.store.transition(
                         cur,
                         task_id,

@@ -117,3 +117,16 @@ Each entry: decision — reason. Newest last.
 37. **Schema revision 3:** chain additive migrations from v1/v2 in one transaction, with one
     WAL-aware pre-upgrade snapshot and owner-only backup creation; late failures roll back every
     migration stage. TaskSpec/ReviewDecision wire contracts and canonical digests stay 1.0.
+
+38. **P2 retained approvals:** pin the verified tree as a deterministic unsigned commit and
+    bind it to the accepted review in SQLite; Git/DB crash gaps may leave unclaimed refs,
+    adopted only on an exact retry. Never read later parent worktree contents as dependency input.
+39. **Fixed dependency composition:** merge retained commits in stable child-key order,
+    preserving ancestry; pin the result before TaskSpec creation. Persist conflicts without a
+    task/workspace. Missing refs or configured external merge drivers fail closed, no fallback.
+40. **P2 presence preflight is a partial milestone:** explicit immutable file/directory/tool
+    requirements and ownership checks run before planned-child reservation, consume no attempt
+    on failure and execute no located tools. Controlled setup commands/resources remain pending.
+41. **Schema revision 4 compatibility:** additive retained-record tables; preserve old child-plan
+    canonical JSON by omitting absent environment configuration. Old approvals require explicit,
+    unchanged-candidate retention; no state migration invents an approved snapshot.

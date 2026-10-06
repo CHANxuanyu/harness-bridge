@@ -82,4 +82,18 @@ CREATE TABLE plan_batches (
 );
 """
 
-MIGRATIONS = {2: COORDINATION_SCHEMA, 3: PLANNING_SCHEMA}
+BASELINE_SCHEMA = """
+CREATE TABLE approved_snapshots (
+    task_id TEXT PRIMARY KEY REFERENCES tasks(task_id),
+    review_id TEXT NOT NULL REFERENCES reviews(review_id),
+    record_json TEXT NOT NULL,
+    record_digest TEXT NOT NULL
+);
+CREATE TABLE child_baselines (
+    child_id TEXT PRIMARY KEY REFERENCES child_plans(child_id),
+    record_json TEXT NOT NULL,
+    record_digest TEXT NOT NULL
+);
+"""
+
+MIGRATIONS = {2: COORDINATION_SCHEMA, 3: PLANNING_SCHEMA, 4: BASELINE_SCHEMA}
