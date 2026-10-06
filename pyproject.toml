@@ -1,0 +1,53 @@
+[project]
+name = "harness-bridge"
+version = "0.1.0.dev0"
+description = "Local-first bridge for supervised coding across agent harnesses (experimental prototype)"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Xuanyu CHAN" }]
+dependencies = ["pydantic>=2.6,<3"]
+classifiers = ["Private :: Do Not Upload"]
+
+[project.scripts]
+hbridge = "harness_bridge.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
+
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/harness_bridge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers -m 'not live'"
+markers = [
+    "live: real model / real harness tests; never run by default, require explicit local authorization",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
+ignore = [
+    "S101",  # assert is fine in tests and internal invariants
+    "S603",  # subprocess without shell is the intended pattern; argv is validated upstream
+    "S607",  # git is resolved from PATH on purpose
+    "RUF001", "RUF002", "RUF003",  # CJK punctuation in docs strings
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S108", "S311"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"

@@ -1,0 +1,43 @@
+# Python / tooling
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets: never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.token
+.netrc
+credentials*.json
+
+# Harness Bridge runtime state (never commit)
+.hbridge/
+hbridge-state/
+state/
+artifacts/
+worktrees/
+*.sqlite3
+*.db
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+raw-transcripts/
+*.transcript.jsonl
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
