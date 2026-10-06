@@ -1,12 +1,14 @@
 # Handoff
 
 ## Repo and revision
-- Actual repository / visibility: `CHANxuanyu/harness-bridge` / **public** at session start
-  (plan expected private; visibility is the user's decision)
+- Actual repository / visibility: `CHANxuanyu/harness-bridge` / still **public** at close-out
+  (user authorized private; the cloud session had no tool to change visibility)
 - Working branch: `claude/new-repo-plan-dn1eac`
-- Last verified code revision: `1cc850b` (fresh clone, frozen install, full offline suite, demos)
-- Latest local commit: the docs-only commit after `1cc850b` (`git log -1`)
-- Remote push verified: **no** — held pending the user's visibility decision (see STATUS.md)
+- Last code revision: `aeea786`; branch head = docs-only commit on top (`git log -1`), fully
+  re-verified (see STATUS.md and the final session message)
+- Remote push verified: **no** — visibility could not be changed to private with the tools
+  available to the cloud session, and pushing to a public repo was not authorized (STATUS.md →
+  Remote). The branch was delivered as a self-contained git bundle.
 
 ## Current milestone
 - Completed vertical slice: M1 create → run → verify → artifacts → review → SUCCEEDED; M2 repair
@@ -17,7 +19,7 @@
 
 ## Verification actually executed
 - `scripts/check.sh -q` (Linux container, Python 3.11.17, git 2.43.0, SQLite 3.45.1):
-  169 passed, ruff/mypy clean; repeated from a fresh clone of `1cc850b`.
+  184 passed, ruff/mypy clean at `aeea786`; final head re-verified, including from a bundle clone.
 - `hbridge demo --scenario success|bug-then-repair`: demo_passed true.
 - Expected failures and skipped tests: none skipped; the bug-then-repair demo's first attempt is
   *supposed* to fail verification (it is the scenario, not a defect).
@@ -32,8 +34,10 @@
 - Development bonus remaining: unknown
 
 ## Known issues
-- `--max-turns` is not listed by `claude --help` 2.1.291 → live preflight fails by design until
-  verified locally (docs/LOCAL_HANDOFF.md §2 step 4). Fail-closed.
+- `--max-turns`: documented officially, not listed by local `--help` 2.1.291 (help is
+  incomplete by design), never run locally → unknown / pending local confirmation. Live preflight
+  holds until confirmed per flag (docs/LOCAL_HANDOFF.md §2 step 4); a run-time rejection stops
+  the attempt. Fail-closed, no flag-dropping retries.
 - Process-group tests needed an explicit "steady state" handshake: killing the runner before the
   fake executor wrote its first line makes the executor die of a broken pipe (legitimate, but a
   different path). Tests now wait for 2 live group members first.
@@ -47,7 +51,7 @@
 - Files to inspect: `src/harness_bridge/runner.py` (ps fallbacks), `tests/unit/test_runner.py`,
   `tests/integration/test_recovery.py`.
 - First reproduction/test command: `uv sync --frozen && scripts/check.sh`
-- Acceptance criteria: same 169 tests pass on macOS or each failure is root-caused and fixed;
+- Acceptance criteria: same 184 tests pass on macOS or each failure is root-caused and fixed;
   both demos pass; matrix rows carry macOS platform/version.
 - Things NOT to do: run real Claude/Codex inference without explicit authorization; add
   `--bare`/skip-permissions; weaken gates or convert failures into skips; copy Linux PASS to

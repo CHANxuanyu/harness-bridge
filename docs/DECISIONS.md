@@ -38,9 +38,7 @@ Each entry: decision — reason. Newest last.
 14. **Claude adapter contract tests use a stub executable** (`tests/helpers/cc_stub.py`) through
     `run --mode mock --stub-binary` — exercises the real runner/store/verifier wiring without a
     model. The stub must not be named `claude*` nor resolve to the real binary.
-15. **Live preflight compares used flags with `claude --help`** and fails clearly for unlisted
-    ones (2.1.291 does not list `--max-turns`); the user opts in per flag via
-    `[live] allow_unlisted_flags` after verifying locally. No flag-combination retries.
+15. ~~Live preflight compares used flags with `claude --help` only~~ — superseded by 19.
 16. **Live dispatch additionally requires `[live] hooks_and_permissions_reviewed = true`** —
     the plan requires reviewing hooks/MCP/permissions before the first real run; this makes it
     an explicit, recorded opt-in.
@@ -51,3 +49,12 @@ Each entry: decision — reason. Newest last.
     binding** (executor kind, task, repo identity, worktree); a resume the output does not
     confirm → BLOCKED `resume_failed` (never silently a new session). `--strict-mcp-config` is
     on by default to keep MCP servers out of executor runs.
+19. **Flag capability = three separate evidence sources** (supersedes 15): official CLI reference
+    (documents `--max-turns`; states `--help` does not list every flag), local `--help`, and the
+    user's per-flag local confirmation (`[live] allow_unlisted_flags`, exact names only). Help
+    absence → "unknown / pending local confirmation", never "unsupported"; docs alone never
+    unlock a flag, so the existing hold stays. A run-time CLI rejection → `BLOCKED
+    cli_rejected_argument`; the bridge never drops a limit flag and retries.
+20. **Remote**: the user authorized making the repo private; the cloud session's GitHub tools
+    have no visibility operation, so the repo stayed public and the branch was not pushed (no
+    alternative credentials used). Delivery = self-contained git bundle (not version-controlled).

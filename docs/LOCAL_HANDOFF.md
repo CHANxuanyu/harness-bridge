@@ -6,13 +6,18 @@ Three separate things — none of them happens automatically:
 3. **first real Codex/Astra → Claude loop** (T4; after T3).
 
 ## Where the code is
-- Repository: `CHANxuanyu/harness-bridge` (was **public** at session start; the plan expected
-  private — check the visibility you want before pushing more).
+- Repository: `CHANxuanyu/harness-bridge` — still **public** at cloud close-out and the branch
+  was **not pushed** (the cloud session had no tool to change visibility). Make it private
+  yourself (GitHub → Settings → General → Danger Zone → Change visibility), then push the branch
+  from the bundle:
+  ```bash
+  git clone -b claude/new-repo-plan-dn1eac harness-bridge.bundle harness-bridge
+  cd harness-bridge && git remote set-url origin https://github.com/CHANxuanyu/harness-bridge.git
+  git push -u origin claude/new-repo-plan-dn1eac
+  ```
 - Branch: `claude/new-repo-plan-dn1eac`
-- Last verified code revision: `1cc850b` (full offline suite + both demos re-run from a fresh
-  clone with `uv sync --frozen` on Linux / Python 3.11.17). Later commits on this branch are
-  documentation only unless `STATUS.md` says otherwise.
-- Push status and any bundle file: see `STATUS.md` → "Remote".
+- Last code revision: `aeea786`; the branch head adds docs only and was itself re-verified
+  (offline suite + both demos, also from a clone of the exported bundle).
 
 ## 1. Reproduce the offline results locally
 ```bash
@@ -22,7 +27,7 @@ git switch claude/new-repo-plan-dn1eac
 uv sync --frozen                             # uv fetches Python 3.11 if it is missing
 uv run ruff check .
 uv run mypy src/harness_bridge
-uv run pytest -m "not live"                  # expected: 169 passed
+uv run pytest -m "not live"                  # expected: 184 passed
 uv run hbridge doctor --offline --json
 uv run hbridge demo --scenario success
 uv run hbridge demo --scenario bug-then-repair
@@ -53,16 +58,19 @@ Checklist, all by you in your own terminal:
 3. Review hooks, MCP servers and permissions that `claude -p` will load: `~/.claude/settings.json`,
    the fixture's `.claude/` (if any), managed settings. The adapter adds `--strict-mcp-config`
    by default and never adds `--bare` (which would ignore subscription login).
-4. `--max-turns`: CLI 2.1.291 does not list it in `--help`. A non-inference check that may help:
-   `claude -p --max-turns 1 --output-format stream-json --verbose < /dev/null` — an
-   "unknown option" error means unsupported; a "no input/prompt" error suggests it parses. Treat
-   this as unverified until you see it. If supported, allow it explicitly (below).
+4. `--max-turns` evidence so far: the official CLI reference documents it and says `--help` does
+   not list every flag; local `--help` (2.1.291) does not list it; no local run has confirmed it.
+   Status: unknown / pending confirmation on your machine. A possibly non-inference parse check
+   (itself unverified): `claude -p --max-turns 1 --output-format stream-json --verbose < /dev/null`
+   — "unknown option" means this installation rejects it (do not allow it; the bridge would stop
+   the attempt anyway and never retries without the limit); a "no input/prompt" error suggests it
+   parses. Only after you see that, confirm it per flag in `config.toml` (below).
 5. Create `~/.local/state/harness-bridge/config.toml` (or under your `--state-dir`):
    ```toml
    [live]
    enabled = true
    hooks_and_permissions_reviewed = true
-   allow_unlisted_flags = ["--max-turns"]   # only if step 4 confirmed it
+   allow_unlisted_flags = ["--max-turns"]   # exact names only, after step 4 confirmed it
    ```
 6. TaskSpec for the first run: `"executor": {"kind": "claude-code", "requested_model":
    "claude-opus-5-5", "allowed_tools": ["Read", "Edit", "Write", "Glob", "Grep",

@@ -2,7 +2,8 @@
 
 - Capture redacted real `claude -p --output-format stream-json` samples locally → `captured-live`
   fixtures; adjust parser if the real schema differs.
-- Verify `--max-turns` on the installed CLI (2.1.291 does not list it in `--help`).
+- Confirm `--max-turns` on the installed CLI (documented officially; not in 2.1.291 `--help`;
+  status unknown until a local check).
 - Verify macOS: process groups, `ps`-based liveness, cancel, worktree paths, SQLite locking.
 - Verify Codex tool-session teardown: does killing the tool session kill the foreground runner,
   and does the runner's signal handler get a chance to stop its group?

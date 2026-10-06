@@ -29,6 +29,9 @@ environment variables are reported as present/absent only.
 - Repository visibility at session start: **public** (GitHub API `private: false`). The execution
   plan asks for private by default; changing visibility is the user's decision and was not done
   by the agent. Pushing was held for the user's decision (STATUS.md → Remote).
+- Close-out: the user then authorized switching to private, but the GitHub MCP tools available to
+  this session expose no repository-settings/visibility operation. No other route was used
+  (`gh`, raw API with the ambient token). Repo stays public; branch not pushed; bundle delivered.
 - Fresh-clone verification: `git clone` of the local repo at `1cc850b`, `uv sync --frozen`,
   `scripts/check.sh` → 169 passed; both demos passed.
 - Working branch: `claude/new-repo-plan-dn1eac` (assigned by the cloud platform).

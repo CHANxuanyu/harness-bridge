@@ -61,10 +61,14 @@ Other commands: `verify`, `recover [--resolve retry|fail]`, `cancel`, `list`. Fu
 stream-json --verbose --model claude-opus-5-5 --max-turns N ...` only when **all** of these
 hold: local `config.toml` opt-in (`[live] enabled = true`, `hooks_and_permissions_reviewed =
 true`), no API-key/provider variables in the environment, not a cloud agent session, not nested
-inside Claude Code, and every flag used is listed by the installed `claude --help` (or allowed
-explicitly). The installed CLI seen during development (2.1.291) does **not** list
-`--max-turns`, so live runs fail preflight until that flag is verified locally. Follow
-[`docs/LOCAL_HANDOFF.md`](docs/LOCAL_HANDOFF.md) before the first live run.
+inside Claude Code, and every flag used is either listed by the installed `claude --help` or
+confirmed by you per flag in `config.toml`. Flag evidence is kept in three separate sources:
+the official CLI reference (which documents `--max-turns` and states that `--help` does not
+list every flag), the local `--help` output (2.1.291 does not list `--max-turns`), and your
+local confirmation. A flag missing from `--help` is therefore **unknown, pending local
+confirmation — not unsupported**; documentation alone does not unlock it. If the CLI rejects a
+flag at run time, the attempt stops as `BLOCKED` and the bridge never retries without the
+limit. Follow [`docs/LOCAL_HANDOFF.md`](docs/LOCAL_HANDOFF.md) before the first live run.
 
 ## What it is not
 Not a sandbox (same-UID executor; see [`docs/SECURITY.md`](docs/SECURITY.md)), not a model

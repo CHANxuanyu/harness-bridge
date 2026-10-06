@@ -6,8 +6,8 @@ subprocess, real git, real SQLite, real verifier) · T3 live single harness (rea
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
 All results below were produced on: Linux 6.18 x86_64 container, Python 3.11.17, git 2.43.0,
-SQLite 3.45.1 (Claude Code Cloud session, 2026-10-06), code revision `1cc850b`, also
-re-run from a fresh clone of that revision. macOS is the target platform but is
+SQLite 3.45.1 (Claude Code Cloud session, 2026-10-06), code revision `aeea786` (184 tests),
+re-run on the final docs-only head and from a clone of the exported bundle. macOS is the target platform but is
 **not yet verified**. "PASS" means the listed tests passed on that platform; it says nothing
 about real model behaviour.
 
@@ -44,7 +44,8 @@ about real model behaviour.
 | S03 | Verifier config / manifest tampering detected | implemented | T2 | `test_s03_tampered_verifier_config_is_detected`, `test_tampered_manifest_file_is_detected` | PASS | not tamper-proof against a same-UID attacker |
 | S04 | API/provider env, cloud/nested markers, unreviewed hooks, unlisted flags → no live dispatch | implemented | T1/T2 | `test_s04_*`, `test_live_gate_refuses_in_cloud_even_when_configured`, `test_live_code_path_with_stub_binary_is_not_a_real_run` | PASS | misuse prevention, not billing isolation |
 | — | Claude adapter through full pipeline with a stub binary (resume on repair, resume mismatch, model mismatch risk) | implemented | T2 (stub) | `tests/integration/test_claude_stub_flow.py` | PASS | stub replays synthetic streams; not Claude |
-| — | Installed CLI flag check (`claude --help`, 2.1.291) | implemented | captured help text | `hbridge doctor`, `test_s04_preflight_reports_unlisted_max_turns_for_cli_2_1_291` | `--max-turns` NOT listed in 2.1.291 help | must be verified locally before live use |
+| — | `--max-turns` capability evidence (docs vs local help vs local confirmation) | implemented | docs + captured help text | `test_help_absence_is_not_treated_as_unsupported`, `test_documentation_alone_never_marks_a_flag_usable`, `test_confirmation_is_per_flag_and_forbidden_flags_stay_forbidden`, `test_no_global_preflight_bypass_in_config`, `test_doctor_reports_flag_evidence_not_unsupported` | docs: declared; local help 2.1.291: not listed; local verification: none → **unknown (pending)** | needs a local check; never inferred from docs alone |
+| — | CLI rejects an argument at run time → stop, no retry without it | implemented | T1/T2 (stub) | `test_cli_rejecting_a_flag_stops_the_attempt`, `test_cli_rejection_of_max_turns_stops_and_is_never_retried_without_it` | PASS | real CLI error text unverified (commander-style assumed) |
 | T3 | Real Claude CLI single-harness run | not run | — | — | **NOT_RUN** | requires local, explicitly authorized run |
 | T4 | Real Codex/Astra → Claude loop | not run | — | — | **NOT_RUN** | requires local, explicitly authorized run |
 | T5 | Comparative evaluation | not run | — | — | **NOT_RUN** | format only (`docs/EVALUATION_PLAN.md`) |

@@ -1,12 +1,13 @@
 # Status
 
-_Last updated 2026-10-06 (Claude Code Cloud session)._
+_Last updated 2026-10-06 (Claude Code Cloud session, final close-out)._
 
 - **Milestone:** M0–M3 complete; M4 close-out complete (docs, clean-checkout rerun, manual CI).
   This is an **experimental prototype**, not a usable real bridge yet: the live path has never
   run.
-- **Last verified code revision:** `1cc850b` — fresh `git clone` + `uv sync --frozen` +
-  `scripts/check.sh` + both demos, Linux, Python 3.11.17. Later commits are docs only.
+- **Last code revision:** `aeea786` (flag-evidence correction). The final branch head adds
+  documentation only; the full offline checks and both demos were re-run on that final head
+  and from a clone of the exported bundle (results in the final session message).
 - **Validation levels reached:** T0, T1, T2 (offline, simulated executor / stub binary).
   **T3 live Claude: NOT_RUN. T4 live Codex→Claude: NOT_RUN. T5: NOT_RUN.**
 
@@ -21,29 +22,37 @@ _Last updated 2026-10-06 (Claude Code Cloud session)._
 | Independent verifier, snapshot fingerprint, manifest, scope/secret checks, redaction, approval gate | done, tested |
 | Repair loop with attempt/repair budgets | done, tested |
 | recover / cancel / verify; crash windows fail closed; no auto re-dispatch | done, tested (real crash injection + signals) |
-| Claude Code adapter: command builder, stream parser, classification, resume binding, live gate + `--help` preflight | done, **offline contract only** |
+| Claude Code adapter: command builder, stream parser, classification, resume binding, live gate + per-flag evidence preflight, run-time argument-rejection stop | done, **offline contract only** |
 | CLI: doctor, create, run, status, list, artifacts, verify, review, recover, cancel, demo | done |
 | Offline demos `success`, `bug-then-repair` | pass |
 | Manual offline CI workflow (`workflow_dispatch`) | written, never run |
 
 ## Tests actually run
 - `scripts/check.sh -q` → ruff clean, ruff format clean, mypy `--strict` clean,
-  **169 passed, 0 skipped, 0 failed** (live tests excluded by marker; none exist).
-- Same result from a fresh clone of `1cc850b`. During M2 the suite ran 5× consecutively green
+  **184 passed, 0 skipped, 0 failed** at `aeea786` (live tests excluded by marker; none exist).
+- Earlier: 169 passed from a fresh clone of `1cc850b`. During M2 the suite ran 5× consecutively green
   after one test timing assumption was fixed (the code was correct; see HANDOFF known issues).
 - `hbridge demo --scenario success` and `--scenario bug-then-repair` → `demo_passed: true`.
 
 ## Findings worth knowing
-- Installed Claude CLI **2.1.291 does not list `--max-turns` in `--help`**; live preflight
-  refuses until it is verified locally and allowed in `config.toml`.
+- `--max-turns` evidence, kept separate: **official docs** declare it (CLI reference, checked
+  2026-10-06, which also states `--help` does not list every flag); **local `--help`** of CLI
+  2.1.291 does not list it; **local real verification**: none (no live run). Status on this
+  installation: **unknown / pending local confirmation** — not unsupported, not supported. Live
+  preflight holds dispatch until the flag is listed or confirmed per flag in `config.toml`; a
+  run-time CLI rejection stops the attempt (`BLOCKED cli_rejected_argument`), never a retry
+  without the flag.
 - In this cloud session the live gate is closed for 6 independent reasons (cloud markers, nested
   session, `ANTHROPIC_BASE_URL` present, no config opt-in, no review flag, no
   `--allow-model-usage`) — as intended.
 
 ## Remote
-- Repository `CHANxuanyu/harness-bridge` is **public** (GitHub API, session start); the plan
-  expected private. Pushing was **held** pending the user's decision. Remote push status:
-  **not pushed** (see the final session message for any later change).
+- The user authorized switching the repository to private (2026-10-06). The GitHub tooling
+  available to this cloud session (GitHub MCP server) has no repository-settings / visibility
+  operation, so visibility could not be changed. As instructed, no other credential or route
+  was used (no `gh` CLI with the ambient token, no raw API calls with `GITHUB_TOKEN`).
+- Result: repository still **public**, branch **not pushed**. Delivered instead as a
+  self-contained git bundle of the branch (SHA-256 reported with the file, outside the repo).
 
 ## Development model / budget
 - `claude-opus-5-5` (configured and last-served model from Claude Code Remote session metadata).

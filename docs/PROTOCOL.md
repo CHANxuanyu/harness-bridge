@@ -105,11 +105,23 @@ With `--json`, stdout is one object: `{"ok": true, ...}` or
 | 8 | `EXECUTOR_ERROR`, `VERIFICATION_ERROR` |
 | 9 | `CANNOT_CONFIRM_EXIT` |
 
+## Flag evidence (live preflight)
+Per flag used: `official_docs` (declared in https://code.claude.com/docs/en/cli-reference,
+checked 2026-10-06), `local_help` (`listed` / `not_listed` / `not_checked`),
+`local_confirmation` (`user_confirmed_in_config` / `none`) and a derived `status`:
+`listed_in_local_help`, `confirmed_locally_by_user`, `documented_pending_local_confirmation`,
+`undocumented_and_unlisted`. Only the first two are usable for live dispatch. Absence from
+`--help` is never reported as "unsupported" (the reference says `--help` is incomplete), and
+documentation alone never makes a flag usable. A run-time rejection by the CLI (unknown /
+unrecognized / invalid option with no stream output) → attempt `blocked`,
+`category: cli_rejected_argument`; no automatic retry and no retry without the flag.
+
 ## Local config (`<state-dir>/config.toml`)
 ```toml
 [live]
 enabled = false                         # deliberate local opt-in
 hooks_and_permissions_reviewed = false  # set after reviewing hooks / MCP / permissions
 claude_binary = "/absolute/path/to/claude"   # optional; default: `claude` on PATH
-allow_unlisted_flags = []               # e.g. ["--max-turns"] after verifying it locally
+allow_unlisted_flags = []               # exact flag names you confirmed locally, e.g. ["--max-turns"];
+                                        # no wildcards; forbidden flags can never be allowed
 ```
