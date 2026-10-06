@@ -1,8 +1,25 @@
 # Handoff
 
-## Current state (2026-10-06, P6 Advisor entrypoint slice)
+## Current state (P6 installed entrypoint/shared connection acceptance)
 
-- **P6 partial:** shared plugin alpha.2 now documents the full goal/child/job/review/delivery path
+- **P6 no-model wiring accepted:** Codex actual profile now installed/enabled alpha.2 through its
+  native CLI. Existing 34 plugins unchanged. A short-lived native app-server `skills/list` resolves
+  enabled `harness-bridge:harness-bridge` for repo/chat cwd without creating threads/turns. Actual
+  ZCode installed/enabled evidence remains valid; both caches match 13 source files.
+- **Default connection now configured:** `~/.config/harness-bridge/connection.json` (0600), runtime
+  in the source checkout's `.venv/bin/hbridge`, new dedicated state under `Documents/Codex/harness-bridge-state`.
+  Both installed cache checkers resolve it with no arguments. Explicit normal projects read created
+  an empty store, live disabled. Existing smoke/repair state was not opened/migrated; its explicit
+  locators still win. Do not silently move historical tasks or enable live on this default.
+- **Native tool lifecycle:** current Codex tool PTY exited; one mock job remained RUNNING. A fresh
+  reader reconnected via its saved locator and cancelled it with confirmed exit. Exactly one attempt,
+  unchanged source, no surviving fixture job. Raw evidence: takeover chat `work/p6-desktop/`.
+  No runtime/package edit, model call or prior test-suite rerun. See `docs/P6_DESKTOP_ACCEPTANCE.md`.
+  Computer-use access to Codex itself was refused; no GUI workaround/restart was attempted. Native
+  metadata loading passes but the already-open window's hot refresh is unobserved. Full app
+  termination and real agent behavior remain P7. Leave both installed plugins/connection intact.
+
+- **Prior P6 slice:** shared plugin alpha.2 now documents the full goal/child/job/review/delivery path
   and resolves a shared local runtime/state connection. Its checker uses temporary state/home,
   34 help surfaces and offline diagnostics; it never opens the selected database or calls a model.
   New copied-package/CLI integration suite: **24 passed**, 19.96s, lint/format/mypy clean.
@@ -44,7 +61,7 @@
 
 - **Canonical plan:** `docs/PROJECT_PLAN.md` consolidates the product, session relationships,
   contracts, V1 scope defaults, P0–P7 milestones and V01–V14 acceptance. P0 is complete;
-  P1–P4 local cores and P5 offline adapter are implemented; Codex live readiness and P6–P7 remain pending. Advisor is
+  P1–P4 local cores, P5 offline adapter and P6 model-free wiring are implemented; Codex live readiness and P7 remain pending. Advisor is
   explicitly an existing agent session; Bridge does not create its own planning model. `PRODUCT_FORM.md` is now a short summary, and the
   original cloud execution plan is clearly historical, not renewed authorization.
 - Key plan choices: dependencies are fixed before child execution-task/worktree materialization;
@@ -299,10 +316,12 @@
 
 ## Next bounded work
 
-1. P4 local core and P5 Codex offline adapter are implemented. P6 alpha.2 wiring and isolated
-   native Codex installation and actual ZCode installation/Skill discovery now pass. Next is
-   actual Codex desktop catalog discovery, host lifecycle acceptance, and model-free investigation
-   of a supported Codex turn ceiling/config provenance (`docs/CODEX_EXECUTOR.md`). Live Codex is
+1. P4 local core/P5 offline adapter and P6 model-free installed entrypoint wiring are implemented.
+   Actual Codex native Skill loading, ZCode Skill UI, shared default connection and one native Codex
+   tool PTY reconnection now pass. Next is P7 preparation: model-free investigation of supported
+   Codex turn ceiling/config provenance (`docs/CODEX_EXECUTOR.md`), host lifecycle constraints and
+   concrete bounded real acceptance packets. Do not spend another model call to refresh a host.
+   Live Codex is
    unavailable until capability gaps are resolved; new bounded authorization is also required.
    P4 references: `INTEGRATION_REPAIRS.md` and `CLEANUP.md` complete the
    existing candidate/check/review/delivery chain. Preserve all required inputs and original total

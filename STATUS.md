@@ -1,10 +1,20 @@
 # Status
 
-_Last updated 2026-10-06 (P6 entrypoint slice; 24 new affected checks passed)._
+_Latest: P6 installed-entrypoint/shared-connection acceptance; runtime/package source unchanged._
 
 ## Current state
 
-- **P6 Advisor entrypoint slice:** plugin alpha.2 now covers shared connection discovery,
+- **P6 model-free entrypoint acceptance:** actual Codex profile now has alpha.2 installed/enabled;
+  its native skills loader resolves the enabled Skill for both repository and current chat cwd.
+  Existing 34 plugins are unchanged. Actual Codex/ZCode caches each match all 13 source files and
+  resolve the same new default connection. The dedicated empty shared store has live mode closed;
+  no old task database was opened/migrated. An actual Codex tool PTY exit left one fake job running;
+  reconnection/cancel confirmed its exit, one attempt only, source unchanged.
+  See `docs/P6_DESKTOP_ACCEPTANCE.md`. P6 installation/connection acceptance passes; current GUI
+  hot refresh is unobserved, full app termination and real cross-harness behavior remain P7.
+  No new model call, runtime change, broad test repeat or push.
+
+- **Prior P6 Advisor entrypoint slice:** plugin alpha.2 now covers shared connection discovery,
   goals/children/Advisor takeover, background observation, repair, integration and local delivery.
   A bundled model-free checker validates 34 command surfaces in temporary state without opening
   the selected store. Cached examples exercise failure/takeover/repair/delivery through fresh CLI
@@ -13,7 +23,8 @@ _Last updated 2026-10-06 (P6 entrypoint slice; 24 new affected checks passed)._
   connection check passed. After explicit UI installation authorization, ZCode installed alpha.2
   and reports its Skill enabled; its 13 cached files and the same connection check also pass.
   Actual Codex desktop Skill discovery and host behavior/lifecycle acceptance remain pending.
-  P6 remains partial. See `docs/P6_ENTRYPOINT_RESULT.md`. No model call, user-state migration or push.
+  P6 was partial at that slice; the continuation above closes model-free wiring acceptance.
+  See `docs/P6_ENTRYPOINT_RESULT.md`. No model call, user-state migration or push in that slice.
 
 - **P5 Codex offline adapter:** native options, strict JSONL completion/refusal handling and
   exact UUID repair resume now reuse shared worktrees/workers/checks/reviews/budgets. Live dispatch
@@ -49,7 +60,7 @@ _Last updated 2026-10-06 (P6 entrypoint slice; 24 new affected checks passed)._
 - **Planning milestone P0 complete:** `docs/PROJECT_PLAN.md` is the canonical product and
   engineering plan. Advisor is the user's existing agent session; Executor is a bound child
   agent session. P1/P2/P3 local cores are implemented and offline-validated.
-  P5 offline adapter is implemented; its live readiness and P6–P7 remain incomplete. Scope defaults,
+  P5 offline adapter and P6 model-free wiring are implemented; Codex live readiness and P7 remain incomplete. Scope defaults,
   dependency materialization, budget/ownership checks, worker lifecycle, integration and
   local-branch delivery are specified with V01–V14 acceptance criteria.
 - **P1 first vertical slice implemented:** project/goal registration, independent child links,
@@ -226,7 +237,7 @@ _Last updated 2026-10-06 (P6 entrypoint slice; 24 new affected checks passed)._
 | Exact local branch delivery / durable intent / atomic proof / current goal readiness | implemented; no automatic checkout, push, merge or cleanup |
 | Offline demos `success`, `bug-then-repair` | pass |
 | Manual offline CI workflow (`workflow_dispatch`) | written, never run |
-| Codex / ZCode plugin package, shared Advisor Skill, host catalogs | alpha.2; 24 package/CLI checks pass; isolated Codex install/cache pass; actual ZCode install/Skill enabled/cache pass; actual Codex desktop and host behavior remain |
+| Codex / ZCode plugin package, shared Advisor Skill, host catalogs | alpha.2; 24 prior package/CLI checks pass; actual Codex install/native Skill loader and ZCode install/Skill UI pass; shared default connection and native tool PTY reconnection pass; GUI hot refresh/full app termination/real behavior unverified |
 
 ## Tests actually executed (chronological, by environment)
 

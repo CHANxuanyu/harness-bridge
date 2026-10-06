@@ -52,9 +52,10 @@ A [local Advisor plugin alpha.2](plugins/harness-bridge/README.md) packages one 
 for Codex/ZCode, covering goals, children, background jobs, review/repair and local delivery.
 It connects to the separate runtime via trusted runtime/state paths and includes a model-free
 compatibility checker. Package/CLI workflow checks and native Codex installation in an isolated
-profile passed. Actual ZCode installation and enabled Skill discovery also pass; actual Codex
-desktop discovery and host behavior/lifecycle acceptance remain pending.
-See [P6 entrypoint validation](docs/P6_ENTRYPOINT_RESULT.md) for the evidence boundary.
+profile passed. Actual Codex profile installation/native Skill loading and ZCode installation/
+enabled Skill discovery now pass, as do the shared default connection and one native Codex tool
+PTY reconnection. See [P6 installed-entrypoint acceptance](docs/P6_DESKTOP_ACCEPTANCE.md).
+The current GUI's hot refresh, full app termination and real agent behavior remain unverified.
 
 The [goal coordination reference](docs/COORDINATION.md) documents the implemented
 `goal create/status/takeover`, `projects` and `create --goal` commands. Linked tasks require
@@ -73,8 +74,9 @@ The [local delivery reference](docs/DELIVERY.md) covers exact branch delivery, c
 READY_TO_DELIVER/DELIVERED projections. [Integration repairs](docs/INTEGRATION_REPAIRS.md) bind
 conflict/failed-check children to retained inputs and existing budgets; [cleanup](docs/CLEANUP.md)
 removes only selected clean owned worktrees after delivery, retaining refs/evidence and user changes.
-P4 local core and P5 Codex offline adapter are implemented; Codex live readiness, installed-host
-lifecycle and P6–P7 remain incomplete. See [Codex capability boundary](docs/CODEX_EXECUTOR.md). Approval alone
+P4 local core, P5 Codex offline adapter and P6 model-free installed wiring are implemented;
+Codex live readiness and P7 real behavior/lifecycle remain incomplete.
+See [Codex capability boundary](docs/CODEX_EXECUTOR.md). Approval alone
 does not deliver a goal.
 
 ## Quick start (offline, no model, no network needed after install)

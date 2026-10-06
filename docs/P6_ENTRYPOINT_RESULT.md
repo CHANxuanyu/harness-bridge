@@ -3,6 +3,10 @@
 Date: 2026-10-06. Baseline `bbe0132`, local branch `local/glm-macos-validation`.
 Package: `0.1.0-alpha.2`; runtime `0.1.0.dev0`, protocol `1.0`, database revision 10 unchanged.
 
+This slice's remaining-work section is historical. Subsequent actual-profile installation,
+shared first-use setup and native tool reconnection are recorded in
+[P6_DESKTOP_ACCEPTANCE.md](P6_DESKTOP_ACCEPTANCE.md).
+
 ## Implemented
 
 The shared Codex/ZCode Skill now covers project discovery, goal creation/takeover with Advisor

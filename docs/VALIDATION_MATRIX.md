@@ -5,6 +5,18 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+**P6 installed-entrypoint continuation (baseline `ebac4a7`, runtime/package unchanged):** native
+Codex actual-profile installation/enabled status passes, retaining all 34 prior plugins. Native
+`skills/list` in a fresh local app-server resolves the enabled Skill for repo/chat cwd, without
+thread/turn creation. Existing actual ZCode installation/Skill UI evidence is retained. Both actual
+caches match 13 source files and default-connection diagnostics pass (34 command surfaces each).
+An explicit normal read initialized a new empty shared store, live disabled; historical databases
+were not opened/migrated. An actual Codex tool PTY exit left one fake job running; fresh reconnection,
+event reads and cancellation pass with confirmed exit, one attempt, unchanged source. No prior suite
+repeat or new all-suite count. GUI access to Codex was refused; no workaround, desktop hot-refresh
+claim or full app-termination claim. P6 no-model wiring passes; real behavior remains P7. Details:
+[P6_DESKTOP_ACCEPTANCE.md](P6_DESKTOP_ACCEPTANCE.md).
+
 **P6 entrypoint slice (macOS, 2026-10-06):** plugin alpha.2 adds shared connection resolution and
 the goal/child/worker/review/integration/delivery workflow. Baseline focused checks: **24 passed**,
 11.19s. New affected suite: **24 passed**, 19.96s; lint/format clean (125 files), strict mypy clean
