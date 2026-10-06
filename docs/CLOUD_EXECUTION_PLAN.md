@@ -1,5 +1,9 @@
 # Harness Bridge — Claude Code Cloud 项目执行书
 
+> **历史文档：** 本文记录最初 V0.1 云端任务，不是当前执行指令或新的调用/推送授权。
+> 当前统一计划见 [PROJECT_PLAN.md](PROJECT_PLAN.md)，实际状态见 `STATUS.md` / `HANDOFF.md`。
+> 用户后续决定仓库保持 public，并明确 Advisor 会话 + 一个或多个跨 harness Executor 会话的产品模型。
+
 **版本：1.0 · 日期：2026-10-06 · 负责人：Xuanyu CHAN**  
 **目标仓库：`CHANxuanyu/harness-bridge`，新建独立仓库，默认 private**  
 **开发模型：Claude Opus 5.5；云端开发额度：用户提供的约 100 USD bonus**

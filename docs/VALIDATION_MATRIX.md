@@ -75,3 +75,8 @@ workspace creation, adapter cwd and runner spawn paths; runtime and plugin packa
 No tests or model calls were repeated for this clarification. Parent/child coordination,
 multi-executor dependencies/aggregate budgets and integrated-goal acceptance remain
 **NOT_IMPLEMENTED / NOT_RUN**; existing per-task evidence must not be extended to those claims.
+
+Planning P0 (2026-10-06): `docs/PROJECT_PLAN.md` consolidates the current baseline and the
+proposed V1 contracts. Documentation cross-references, milestone/acceptance IDs and
+requirement coverage were reviewed. No runtime or plugin behavior changed; no model calls
+or runtime tests were repeated. V01–V14 are planned acceptance criteria, not new PASS rows.

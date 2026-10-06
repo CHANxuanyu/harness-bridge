@@ -84,3 +84,11 @@ Each entry: decision — reason. Newest last.
     sessions. Bridge owns workspace preparation and execution context, not planning intelligence.
     `supervisor` maps to Advisor; parent/child/dependency/global-budget semantics are pending,
     not new fields in the existing strict TaskSpec. Plugin packaging is subordinate to this model.
+28. **Unified plan (P0):** `docs/PROJECT_PLAN.md` is the product/engineering/acceptance baseline;
+    Advisor and Executor are both agent sessions, and Bridge never creates a planning model.
+    V1 targets bounded one-to-two execution, managed workers and integrated local-branch
+    delivery. These are working implementation defaults, not newly completed capabilities.
+29. **Dependency materialization and mutation guards:** hold a child coordination record until
+    dependency snapshots are fixed, then create its immutable execution spec/worktree. All
+    mutating entrypoints for goal-linked tasks must enforce active Advisor epoch and aggregate
+    constraints; the old task CLI cannot be a bypass. Pending implementation in P1–P3.

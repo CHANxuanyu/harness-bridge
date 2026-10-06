@@ -7,8 +7,9 @@ project's code directly when asked to.
 
 ## Before you change code
 
-1. Read `STATUS.md` and `HANDOFF.md`. Read `docs/CLOUD_EXECUTION_PLAN.md` only when you need the
-   original requirement for a specific feature.
+1. Read `STATUS.md` and `HANDOFF.md`. `docs/PROJECT_PLAN.md` is the current product scope and
+   implementation/acceptance plan; proposed capabilities there are not implemented contracts.
+   Read `docs/CLOUD_EXECUTION_PLAN.md` only for a specific historical V0.1 requirement.
 2. Run the offline checks: `scripts/check.sh` (ruff, mypy, pytest without live tests).
 
 ## Hard rules

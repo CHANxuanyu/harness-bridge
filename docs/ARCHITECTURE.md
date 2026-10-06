@@ -4,14 +4,16 @@ The product relationship is **one Advisor → one or more Executors across harne
 The existing term `supervisor` means Advisor. The Advisor inspects the repo, decomposes work,
 dispatches task prompts and reviews/integrates results; the deterministic Bridge prepares
 workspaces and manages execution/evidence. Plugins expose this capability to the Advisor.
-See [PRODUCT_FORM.md](PRODUCT_FORM.md) for the target role and multi-executor contract.
+Both roles are agent sessions. The Advisor is the current external session, not a model
+service created by Bridge. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the target session,
+workspace, coordination and delivery contracts; [PRODUCT_FORM.md](PRODUCT_FORM.md) is a summary.
 
 The implementation below is the current **single-child-task** building block. Parent-goal
 coordination, dependencies, aggregate budgets and integrated-result review are not implemented.
 Several flat task records do not provide that coordination.
 
 ```text
-External Advisor / supervisor (user's current coding-agent session, or a person)
+External Advisor / supervisor (user's current coding-agent session)
   │  writes TaskSpec / ReviewDecision files, calls `hbridge` in a shell
   ▼
 hbridge CLI (cli.py) ── JSON receipts on stdout, diagnostics on stderr
@@ -55,12 +57,15 @@ Bridge core (service.py) — deterministic, never calls a model API
    `changes_requested` → `READY` with findings for the next attempt (or `FAILED` when the budget
    is spent). `blocked` → `BLOCKED`.
 
-## Why foreground
+## Current V0.1 foreground runner
 
 The runner is the only party that can prove it owns the executor's process group. A crash of the
 runner therefore leaves the task in `STARTING/RUNNING/VERIFYING`; `recover` turns that into
 `INTERRUPTED (outcome unknown)` without signalling anything and without re-dispatching. There is
 no daemon in V0.1; a shell `&` is not treated as a reliable detached worker.
+The V1 plan includes a managed worker acceptance milestone; it is not implemented by adding
+an Advisor/Executor role label. Human CLI diagnostics remain possible without turning the
+human into the product's Advisor session.
 
 ## Exactly-once is not claimed
 

@@ -37,6 +37,11 @@ Claude Code and Codex). The intended product is an independent local runtime wit
 in the user's existing hosts: delegate, review, repair, and continue without carrying
 instructions between conversations. See the [product definition](docs/PRODUCT_FORM.md).
 
+The Advisor is itself the user's existing agent **session**; Executors are separate agent
+sessions bound to child tasks. The [project plan](docs/PROJECT_PLAN.md) is the canonical V1
+scope, session/workspace contract, implementation sequence and acceptance checklist. It
+distinguishes existing V0.1 code from proposed coordination and delivery capabilities.
+
 A [local plugin alpha](plugins/harness-bridge/README.md) now packages one shared supervisor
 Skill with Codex and ZCode manifests. It requires a separately installed runtime. Package
 checks and Codex marketplace discovery passed; installed-host activation and ZCode loading
@@ -99,7 +104,7 @@ better or cheaper than one (see [`docs/EVALUATION_PLAN.md`](docs/EVALUATION_PLAN
 `STATUS.md` (current state) · `HANDOFF.md` (next work package) ·
 `docs/VALIDATION_MATRIX.md` · `docs/ARCHITECTURE.md` · `docs/TESTING.md` ·
 `docs/DECISIONS.md` · `docs/ENVIRONMENT.md` · `docs/LOCAL_HANDOFF.md` · `docs/BACKLOG.md` ·
-`docs/PRODUCT_FORM.md` · `docs/PLUGIN_ALPHA_RESULT.md` ·
+`docs/PROJECT_PLAN.md` · `docs/PRODUCT_FORM.md` · `docs/PLUGIN_ALPHA_RESULT.md` ·
 `docs/CLOUD_EXECUTION_PLAN.md` (original requirements).
 
 No license has been chosen yet (public repository, all rights reserved by the author until a

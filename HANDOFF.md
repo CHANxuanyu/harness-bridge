@@ -1,6 +1,16 @@
 # Handoff
 
-## Current state (2026-10-06, after product definition and plugin alpha)
+## Current state (2026-10-06, after unified project plan P0)
+
+- **Canonical plan:** `docs/PROJECT_PLAN.md` consolidates the product, session relationships,
+  contracts, V1 scope defaults, P0–P7 milestones and V01–V14 acceptance. P0 is complete;
+  implementation P1–P7 is pending. Advisor is explicitly an existing agent session; Bridge
+  does not create its own planning model. `PRODUCT_FORM.md` is now a short summary, and the
+  original cloud execution plan is clearly historical, not renewed authorization.
+- Key plan choices: dependencies are fixed before child execution-task/worktree materialization;
+  task mutations cannot bypass goal budgets or the active Advisor epoch through old CLI paths;
+  unknown exits retain reservations/slots; V1 targets managed workers and exact local-branch
+  delivery with integrated acceptance. These remain proposed runtime behavior.
 
 - **Latest user clarification:** target developers who already use several coding-agent
   subscriptions, such as ZCode/GLM, Claude Code and Codex. This is not a Codex-only product.
@@ -87,10 +97,9 @@
 
 ## Next bounded work
 
-1. Follow `docs/PRODUCT_FORM.md`: specify/implement Advisor-owned parent/child task coordination,
-   execution contexts, dependencies and aggregate budgets around the existing per-task core.
-   Add reviewed-result integration/delivery, then complete host/lifecycle and second-executor
-   acceptance. Do not equate plugin loading or several flat tasks with multi-executor support.
+1. Implement P1 from `docs/PROJECT_PLAN.md` with offline validation, then follow its milestone
+   dependencies. Reuse existing core; do not rebuild the product plan or treat this document
+   as permission for additional live calls. P0 involved docs only, no repeated runtime tests.
 2. Interruption / timeout behaviour with a live executor (SIGTERM to the runner, wall
    timeout) — offline tests exist; live behaviour does not.
 3. T5 evaluation per `docs/EVALUATION_PLAN.md` — the only place where "cheaper/better than

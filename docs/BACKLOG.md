@@ -1,42 +1,49 @@
-# Backlog (not implemented; short entries only)
+# Backlog
 
-Completed in 2026-10-06 rounds (kept for reference, do not redo): captured-redacted live
-stream fixtures (`tests/fixtures/claude_stream_live/`), local `--max-turns` acceptance
-evidence, macOS verification (process groups, `ps` fallbacks, SQLite locking, worktrees),
-T3/T4 bounded live smokes and one controlled live repair/resume (same session and context,
-2 attempts / 1 repair) — see `docs/VALIDATION_MATRIX.md` and `docs/LIVE_REPAIR_RESULT.md`.
+The canonical scope and acceptance sequence is `docs/PROJECT_PLAN.md` (P0–P7, V01–V14).
+This file indexes remaining work; it does not maintain a competing implementation plan.
 
-Open:
+## Completed baseline — reuse, do not redo for handoff
 
-- User-defined core: one Advisor with one or more cross-harness Executors. Add parent goal /
-  child task ownership, Advisor takeover, dependencies and pinned dependent baselines, bounded
-  concurrency and aggregate budgets. Reuse existing per-task worktrees/attempts; no new model
-  planner inside Bridge. Validate child isolation, correctly attributed feedback and integrated
-  goal acceptance offline before claiming multi-executor behavior.
-- Explicit project environment preparation for fresh worktrees (dependencies, tests, approved
-  non-versioned resources); record failures without assuming the source's runtime state copied.
-- Product acceptance follows `docs/PRODUCT_FORM.md` (multi-subscription developers;
-  independent runtime with host plugins). Local plugin alpha packaging is complete; it is
-  not yet the installed end-to-end experience.
-- Codex / ZCode installed-host activation and offline entrypoint checks; persistent runtime
-  and project/state discovery so another conversation finds the same task without manual
-  instruction transfer. Then separately authorized live entrypoint acceptance.
-- Delivery of the approved candidate: export/apply the exact reviewed snapshot, detect source
-  changes/conflicts, preserve user edits and record delivery separately from `SUCCEEDED`.
-- Host-independent worker lifecycle if promising work continues after the host closes;
-  stop at review when no active supervisor, with no hidden model calls or automatic wake-up claim.
-- Codex executor adapter as the next execution direction; separately establish a usable
-  ZCode execution interface. Host plugin compatibility does not imply executor compatibility.
-- Developer installation → guided compatible runtime/plugin setup, update, uninstall with
-  state retained; choose a license before distributable release. No package publication yet.
-- Live interruption / timeout behaviour with a real executor (offline tests exist; live
-  behaviour unverified) — needs explicit user authorization.
-- Evaluation harness implementing `docs/EVALUATION_PLAN.md` (T5) — the only place where
-  "cheaper/better than direct Opus" can be answered — needs explicit user authorization.
-- Verify Codex tool-session teardown: does killing the tool session kill the foreground runner,
-  and does the runner's signal handler get a chance to stop its group?
-- `amend` command (task_version > 1) with explicit re-approval rules.
-- Explicit `cleanup` command for bridge-owned worktrees/branches (ownership-checked, dirty-safe).
-- Optional observation of ignored files (e.g. `git status --ignored`) as a risk signal.
-- Linux child-subreaper for stronger orphan tracking.
-- Supervisor takeover record (stop executor, confirm exit, record takeover).
+- V0.1 task/review contracts, store, worktrees, runner, verifier and recovery foundation.
+- Linux/macOS offline validation, recorded full 192-test result, later affected checks.
+- T3/T4 initial smokes and one controlled live repair/resume; captured-redacted stream fixtures.
+- Codex/ZCode plugin package alpha; package/contract checks and Codex catalog discovery.
+- P0 unified plan: both Advisor and Executor are agent sessions; one Advisor can coordinate
+  multiple child sessions across harnesses. The plan is not runtime implementation.
+
+Evidence: `docs/VALIDATION_MATRIX.md`, `docs/LIVE_REPAIR_RESULT.md`, `docs/PLUGIN_ALPHA_RESULT.md`.
+
+## Product work, in dependency order
+
+1. **P1 — Goal / session coordination.** Project/runtime/state discovery, Advisor binding and
+   takeover epoch, child ownership, shared mutation guards, versioned storage/migration.
+2. **P2 — Execution context.** Dependency plans and delayed materialization of frozen execution
+   specs, independent workspaces, explicit environment preparation, attributable feedback.
+3. **P3 — Managed worker and aggregate limits.** Bounded concurrent attempts, goal budgets,
+   reservations held for unknown exits, incremental events, cancel/recover and host teardown.
+   Validate the actual macOS worker lifecycle before claiming detached operation.
+4. **P4 — Integration / delivery.** Immutable approved snapshots, conflict handling, integrated
+   goal verification, exact local delivery branch, idempotent receipts and ownership-safe cleanup.
+5. **P5 — Codex executor adapter.** Stub/contract evidence first; capability-specific live
+   validation only under new bounded authorization. ZCode executor remains exploratory.
+6. **P6 — Advisor host entrypoints.** Install/activate Codex and ZCode packages, stable project
+   discovery, task operations and session continuation. Loading a plugin is not full behavior.
+7. **P7 — Live product acceptance / distribution.** One Advisor session and two executor harnesses,
+   integrated delivery, live limits/interruption evidence, clean setup/update/uninstall,
+   license and explicit publication scope. Keep unknown capabilities visibly unknown.
+
+Any real call needs explicit bounded authorization; the earlier two-attempt repair allowance
+is fully used. The plan does not grant calls, push, publication or billing changes.
+
+## Subsequent / optional work
+
+- T5 comparative evaluation (`docs/EVALUATION_PLAN.md`): only evidence can support quality,
+  time or cost comparisons. Requires separate authorization for actual model calls.
+- Versioned task amendment with explicit re-review rules; do not alter frozen requirements
+  or move an active task's baseline in place.
+- Other executor harnesses, operating systems, remote execution and team coordination after
+  relevant interfaces and supported routes are established.
+- Optional observation of ignored files as a risk signal, stronger Linux orphan tracking.
+- Explicit manual takeover of an executor's writable directory, after confirmed executor exit;
+  distinct from an Advisor session taking over goal management while a worker is still active.

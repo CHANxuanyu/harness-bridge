@@ -1,9 +1,14 @@
 # Status
 
-_Last updated 2026-10-06 (Advisor / Executor product clarification; runtime unchanged)._
+_Last updated 2026-10-06 (unified project plan P0; runtime unchanged)._
 
 ## Current state
 
+- **Planning milestone P0 complete:** `docs/PROJECT_PLAN.md` is the canonical product and
+  engineering plan. Advisor is the user's existing agent session; Executor is a bound child
+  agent session. P1–P7 are future implementation/acceptance, not complete. Scope defaults,
+  dependency materialization, budget/ownership checks, worker lifecycle, integration and
+  local-branch delivery are specified with V01–V14 acceptance criteria.
 - **Experimental prototype (V0.1, milestones M0–M4).** The live path has now been exercised
   for real in bounded initial smokes and one controlled repair/resume task on 2026-10-06.
 - **Verified so far**
@@ -115,10 +120,10 @@ _Last updated 2026-10-06 (Advisor / Executor product clarification; runtime unch
 
 ## Next
 
-Product work now follows `docs/PRODUCT_FORM.md`: parent/child delegation contracts, isolated
-executor contexts, dependencies and aggregate budgets; approved-result integration/delivery;
-then host entrypoint/lifecycle acceptance, a second execution adapter and installation. Offline
-checks do not need another model call. Do not claim the prototype is the final product.
+Follow P1 in `docs/PROJECT_PLAN.md`: goal/child/session coordination and project discovery,
+with epoch-bound Advisor writes, aggregate checks through every mutation entrypoint and
+backward-compatible storage. P2–P7 define the remaining dependency order and acceptance.
+`docs/PRODUCT_FORM.md` is an overview only. The plan is documentation, not execution evidence.
 
 Real interruption/timeout validation and T5 evaluation (`docs/EVALUATION_PLAN.md`) still
 need explicit bounded authorization before any real call. The prior repair allowance is used.
