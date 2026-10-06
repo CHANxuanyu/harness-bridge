@@ -1,5 +1,14 @@
 # Handoff
 
+> **Local macOS update (2026-10-06).** The "Next bounded work package" below is **complete**:
+> the offline suite (184 passed / 0 skipped / 0 failed), both demos and the targeted
+> runner/recovery `-v` run (28 passed) were reproduced on macOS 26.6.2 arm64 at `fcbd21a`
+> (no source changes). Evidence: `docs/LOCAL_SMOKE_HANDOFF.md`; macOS rows in
+> `docs/VALIDATION_MATRIX.md`. Repository stays **public** by the user's explicit choice, and
+> the branch **is pushed** (`origin/claude/new-repo-plan-dn1eac` == `fcbd21a`) — the
+> "not pushed / make it private" delivery notes elsewhere in this file are historical.
+> T3 materials are prepared under `qa/local/`; no model was invoked.
+
 ## Repo and revision
 - Actual repository / visibility: `CHANxuanyu/harness-bridge` / still **public** at close-out
   (user authorized private; the cloud session had no tool to change visibility)
@@ -46,14 +55,13 @@
 - macOS behaviour (no `/proc`, `ps` fallbacks) is untested.
 
 ## Next bounded work package
-- One concrete goal: reproduce the offline results on the local Mac and record platform rows in
-  `docs/VALIDATION_MATRIX.md`.
-- Files to inspect: `src/harness_bridge/runner.py` (ps fallbacks), `tests/unit/test_runner.py`,
-  `tests/integration/test_recovery.py`.
-- First reproduction/test command: `uv sync --frozen && scripts/check.sh`
-- Acceptance criteria: same 184 tests pass on macOS or each failure is root-caused and fixed;
-  both demos pass; matrix rows carry macOS platform/version.
+- **Done (2026-10-06):** local macOS reproduction — 184 offline tests, both demos, targeted
+  runner/recovery run all pass; recorded in `docs/VALIDATION_MATRIX.md` with platform/version
+  (nothing copied from Linux rows).
+- Current next step: T3 smoke per `docs/LOCAL_HANDOFF.md` §2, only with explicit user
+  authorization. Materials: `qa/local/README.md` (+ `make_fixture.py`,
+  `task-live-smoke.example.json`); preconditions and per-flag confirmation steps are listed
+  there and in `docs/LOCAL_SMOKE_HANDOFF.md`.
 - Things NOT to do: run real Claude/Codex inference without explicit authorization; add
   `--bare`/skip-permissions; weaken gates or convert failures into skips; copy Linux PASS to
-  macOS rows.
-- After that: T3 smoke per `docs/LOCAL_HANDOFF.md` §2, only with explicit authorization.
+  macOS rows; change repository visibility (public is the user's explicit choice).

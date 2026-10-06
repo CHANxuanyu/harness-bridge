@@ -6,6 +6,14 @@ Three separate things — none of them happens automatically:
 3. **first real Codex/Astra → Claude loop** (T4; after T3).
 
 ## Where the code is
+> **Local update (2026-10-06):** the repository stays **public** by the user's explicit choice
+> (do not change visibility), and the branch **is pushed** —
+> `origin/claude/new-repo-plan-dn1eac` == `fcbd21a232759f7b3f2dd2ad22acef69e646fe6d`. The
+> private/bundle instructions below are historical; a plain
+> `gh repo clone CHANxuanyu/harness-bridge` now works. The offline suite and both demos were
+> reproduced on macOS at that SHA (see `docs/LOCAL_SMOKE_HANDOFF.md`); T3 fixture materials
+> are ready under `qa/local/`.
+
 - Repository: `CHANxuanyu/harness-bridge` — still **public** at cloud close-out and the branch
   was **not pushed** (the cloud session had no tool to change visibility). Make it private
   yourself (GitHub → Settings → General → Danger Zone → Change visibility), then push the branch

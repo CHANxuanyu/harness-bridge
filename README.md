@@ -82,4 +82,5 @@ better or cheaper than one (see [`docs/EVALUATION_PLAN.md`](docs/EVALUATION_PLAN
 `docs/DECISIONS.md` · `docs/ENVIRONMENT.md` · `docs/LOCAL_HANDOFF.md` · `docs/BACKLOG.md` ·
 `docs/CLOUD_EXECUTION_PLAN.md` (original requirements).
 
-No license has been chosen yet (private prototype).
+No license has been chosen yet (public repository, all rights reserved by the author until a
+license is added).

@@ -7,9 +7,18 @@ T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evalu
 
 All results below were produced on: Linux 6.18 x86_64 container, Python 3.11.17, git 2.43.0,
 SQLite 3.45.1 (Claude Code Cloud session, 2026-10-06), code revision `aeea786` (184 tests),
-re-run on the final docs-only head and from a clone of the exported bundle. macOS is the target platform but is
-**not yet verified**. "PASS" means the listed tests passed on that platform; it says nothing
-about real model behaviour.
+re-run on the final docs-only head and from a clone of the exported bundle. macOS results are
+recorded in the dedicated paragraph below. "PASS" means the listed tests passed on that
+platform; it says nothing about real model behaviour.
+
+**macOS offline reproduction (2026-10-06, local Mac mini, macOS 26.6.2 arm64, CPython 3.11.16
+via uv, git 2.50.1, SQLite 3.53.1/3.51.0, revision `fcbd21a` — no source changes):**
+`uv sync --frozen`, `scripts/check.sh` (ruff + mypy strict clean, **184 passed / 0 skipped /
+0 failed**), `hbridge doctor --offline --json`, both demos (`demo_passed: true`), and the
+targeted `pytest tests/unit/test_runner.py tests/integration/test_recovery.py -v` run
+(28 passed) — the process-group tests ran the `ps` fallbacks, since macOS has no `/proc`.
+Per-command exit codes and evidence: `docs/LOCAL_SMOKE_HANDOFF.md`. Live rows (T3–T5)
+remain NOT_RUN; no macOS result below is copied from Linux.
 
 | ID | Feature | Status | Evidence | Test / command | Result | Remaining uncertainty |
 |---|---|---|---|---|---|---|
@@ -19,7 +28,7 @@ about real model behaviour.
 | C04 | Idempotent create / conflicting key | implemented | T1/T2 | `test_c04_create_idempotency`, `test_r01_cli_flow_across_fresh_processes` | PASS | — |
 | C05 | Repeated run does not spawn | implemented | T2 | `test_c05_repeated_run_does_not_spawn` | PASS | — |
 | C06 | Malformed output / missing final result | implemented | T1/T2 | `test_c06_malformed_output_is_protocol_error_not_success`, `tests/unit/test_fake_adapter.py` | PASS | fake wire protocol only |
-| C07 | Timeout / crash / non-zero exit | implemented | T1/T2 | `test_c07_*`, `tests/unit/test_runner.py` (group kill, TERM-ignoring child, escaped process) | PASS (Linux) | macOS process-group behaviour unverified |
+| C07 | Timeout / crash / non-zero exit | implemented | T1/T2 | `test_c07_*`, `tests/unit/test_runner.py` (group kill, TERM-ignoring child, escaped process) | PASS (Linux, macOS) | — |
 | C08 | Forbidden / untracked / secret files | implemented | T2 | `test_c08_scope_violation_and_secret_handling` | PASS | ignored files are outside observed scope by design |
 | C09 | Stale review (snapshot/attempt/version) | implemented | T2 | `test_c09_stale_reviews_are_rejected` | PASS | — |
 | C10 | Verifier timeout / not runnable ≠ pass | implemented | T2 | `test_c10_verifier_timeout_is_not_a_pass`, `test_verifier_that_cannot_start_is_error_not_pass` | PASS | — |
@@ -30,7 +39,7 @@ about real model behaviour.
 | R03 | Repair budget enforced | implemented | T2 | `test_r03_repair_budget_is_enforced`, `test_blocked_task_retry_and_budget` | PASS | — |
 | R04 | Duplicate review/event not re-applied | implemented | T1/T2 | `test_r04_duplicate_review_does_not_advance_twice`, `test_event_dedupe_key_prevents_replay`, `test_rejected_approve_is_replayed_as_the_same_rejection` | PASS | — |
 | R05 | Two processes race one task | implemented | T2 | `test_r05_two_runners_race_for_one_task` | PASS | single host only |
-| R06 | Cancel owned group; never signal unproven PIDs | implemented | T2 | `test_r06_cancel_stops_owned_process_group`, `test_sigterm_to_runner_interrupts_with_known_outcome`, `test_hard_killed_runner_never_signals_unproven_processes` | PASS (Linux) | Codex tool-session teardown behaviour must be checked locally |
+| R06 | Cancel owned group; never signal unproven PIDs | implemented | T2 | `test_r06_cancel_stops_owned_process_group`, `test_sigterm_to_runner_interrupts_with_known_outcome`, `test_hard_killed_runner_never_signals_unproven_processes` | PASS (Linux, macOS) | Codex tool-session teardown behaviour must be checked locally |
 | R07 | Candidate change invalidates evidence/approve | implemented | T2 | `test_r07_candidate_change_after_evidence_invalidates_review`, `test_verify_rebinds_evidence_after_candidate_change` | PASS | — |
 | — | Crash during verification resumes without executor | implemented | T2 | `test_crash_during_verification_resumes_without_rerunning_executor` | PASS | — |
 | A01 | Claude command construction (pure, exact model, bounded turns, explicit resume, stdin prompt) | implemented | T1 | `test_a01_*` in `tests/contracts/test_claude_adapter.py` | PASS | flags verified against `--help` text only, not behaviour |

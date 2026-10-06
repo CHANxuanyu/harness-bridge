@@ -58,3 +58,9 @@ Each entry: decision — reason. Newest last.
 20. **Remote**: the user authorized making the repo private; the cloud session's GitHub tools
     have no visibility operation, so the repo stayed public and the branch was not pushed (no
     alternative credentials used). Delivery = self-contained git bundle (not version-controlled).
+21. **T3 smoke fixture (qa/local, 2026-10-06)**: the first live smoke targets a disposable
+    one-shot repo (`slugkit.slugify`) generated per run by `qa/local/make_fixture.py`, with the
+    acceptance script stored *outside* the fixture and presets `max_attempts = 1`,
+    `max_repair_cycles = 0`, `max_turns_per_attempt = 10`, `wall_timeout_seconds = 600`, and a
+    scoped `Bash(python3 -B -m unittest:*)` matching the repo-tests argv — never a task against
+    Harness Bridge itself.

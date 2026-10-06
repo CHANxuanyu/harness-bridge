@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-10-06 (Claude Code Cloud session, final close-out)._
+_Last updated 2026-10-06 (local macOS validation session)._
 
 - **Milestone:** M0–M3 complete; M4 close-out complete (docs, clean-checkout rerun, manual CI).
   This is an **experimental prototype**, not a usable real bridge yet: the live path has never
@@ -8,6 +8,11 @@ _Last updated 2026-10-06 (Claude Code Cloud session, final close-out)._
 - **Last code revision:** `aeea786` (flag-evidence correction). The final branch head adds
   documentation only; the full offline checks and both demos were re-run on that final head
   and from a clone of the exported bundle (results in the final session message).
+- **Local macOS reproduction (2026-10-06): complete — all offline checks pass.** Full suite
+  (184 passed / 0 skipped / 0 failed), both demos and the targeted runner/recovery `-v` run
+  (28 passed) executed on macOS 26.6.2 arm64 at `fcbd21a` (no source changes). Per-command
+  evidence: `docs/LOCAL_SMOKE_HANDOFF.md`; macOS rows added to `docs/VALIDATION_MATRIX.md`.
+  No Claude/Codex inference was performed; `claude` is not even installed on that machine.
 - **Validation levels reached:** T0, T1, T2 (offline, simulated executor / stub binary).
   **T3 live Claude: NOT_RUN. T4 live Codex→Claude: NOT_RUN. T5: NOT_RUN.**
 
@@ -53,10 +58,17 @@ _Last updated 2026-10-06 (Claude Code Cloud session, final close-out)._
   was used (no `gh` CLI with the ambient token, no raw API calls with `GITHUB_TOKEN`).
 - Result: repository still **public**, branch **not pushed**. Delivered instead as a
   self-contained git bundle of the branch (SHA-256 reported with the file, outside the repo).
+- **Correction (local session, 2026-10-06, supersedes the delivery constraints above):**
+  the user has since chosen to keep the repository **public**; do not change visibility and do
+  not pause work over it. The branch **is pushed**: `origin/claude/new-repo-plan-dn1eac` exists
+  and equals `fcbd21a232759f7b3f2dd2ad22acef69e646fe6d` (0 ahead / 0 behind). The bundle
+  detour is obsolete; clone via `gh repo clone CHANxuanyu/harness-bridge`.
 
 ## Development model / budget
 - `claude-opus-5-5` (configured and last-served model from Claude Code Remote session metadata).
 - Development budget remaining: **unknown** (not observable; no spend figures claimed).
 
 ## Next
-See `HANDOFF.md` → next bounded work package (local reproduction on macOS, then T3 smoke).
+Local macOS offline reproduction is **done** (see `docs/LOCAL_SMOKE_HANDOFF.md`). Next:
+T3 live smoke per `docs/LOCAL_HANDOFF.md` §2, only with explicit user authorization, using
+the prepared materials in `qa/local/`.
