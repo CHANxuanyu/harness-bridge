@@ -1,8 +1,19 @@
 # Status
 
-_Latest: P6 installed-entrypoint/shared-connection acceptance; runtime/package source unchanged._
+_Latest: P7 reproducible two-adapter rehearsal and capability audit; live acceptance remains open._
 
 ## Current state
+
+- **P7 preparation complete, live acceptance NOT_RUN:** a fresh-directory packet generator and
+  executable rehearsal now cover two concurrent Claude/Codex-shaped stand-ins, disjoint worktrees,
+  dispatch replay, Advisor takeover while running, stale-writer refusal, exact Claude-session repair,
+  combined external acceptance and exact local-branch delivery. Exactly 3 attempts / 1 repair reserve
+  30 turns / 1800 seconds; all exits confirmed, source and packet/check hashes unchanged. Standalone
+  CLI rehearsal also passes. `docs/P7_ACCEPTANCE.md` distinguishes synthetic evidence, future bounded
+  authorization and remaining native/distribution cases. Current Codex schema/docs audit does not
+  close any live gap; live refusal remains unchanged. New checks: **8 passed**, 13.91s; pre-change
+  affected baseline **44 passed**, 38.80s; lint/format (131 files) and mypy (37 runtime files) clean.
+  No core/package change, new model call, shared-state migration, profile change or push.
 
 - **P6 model-free entrypoint acceptance:** actual Codex profile now has alpha.2 installed/enabled;
   its native skills loader resolves the enabled Skill for both repository and current chat cwd.

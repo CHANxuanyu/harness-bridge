@@ -5,6 +5,24 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+**P7 preparation (macOS, 2026-10-07, baseline `c5ca50c`):** before changes, the affected Codex-stub
+and plugin suites passed **44 / 44**, 38.80s. New fresh-directory packet/rehearsal suite finishes
+**8 passed / 0 failed / 0 skipped**, 13.91s; lint/format (131 files) and strict mypy (37 runtime
+files) pass. Initial new-suite run was **7 passed / 1 failed**, 7.04s: the generated Codex completion
+omitted `cached_input_tokens`, so the existing strict approval gate correctly refused its otherwise
+passing implementation. Fixed the synthetic envelope, not the adapter/gate. An intermediate run
+passed 8 / 14.00s; final run follows isolated Git observation and explicit aggregate-accounting checks.
+
+A separate standalone `qa.local.p7_rehearsal` invocation passes outside pytest in the takeover
+chat's `work/p7-rehearsal-20261007/`. It observes two RUNNING stand-ins, active-job Advisor takeover,
+stale-epoch refusal, same-key dispatch replay, exact Claude-shaped repair session/cwd, combined
+external verification and local delivery replay. **3 attempts / 1 repair**, 30 reserved turns / 1800s;
+all three jobs confirm exits, source unchanged and packet/check hashes unchanged. Evidence is
+**T0/T2 synthetic/offline**, not a real Advisor handoff or native dual-executor run. No new full-suite
+claim, model/auth call, core/package edit, shared-state migration or push. Reused native schemas plus
+current official documentation did not close Codex's live capability gaps. See
+[P7_ACCEPTANCE.md](P7_ACCEPTANCE.md) for reproducible commands, stop rules and remaining acceptance.
+
 **P6 installed-entrypoint continuation (baseline `ebac4a7`, runtime/package unchanged):** native
 Codex actual-profile installation/enabled status passes, retaining all 34 prior plugins. Native
 `skills/list` in a fresh local app-server resolves the enabled Skill for repo/chat cwd, without

@@ -1,6 +1,23 @@
 # Handoff
 
-## Current state (P6 installed entrypoint/shared connection acceptance)
+## Current state (P7 reproducible rehearsal; real acceptance pending)
+
+- **New P7 preparation slice:** `qa/local/p7_fixture.py` generates a fresh synthetic two-child packet;
+  `qa/local/p7_rehearsal.py` drives both adapter paths through fresh CLI processes with live disabled.
+  Two concurrent stand-ins, active-job Advisor takeover, stale-write refusal, exact-session repair,
+  external integrated verification and local delivery all pass. **8 new checks passed / 13.91s**;
+  pre-change affected baseline **44 passed / 38.80s**. Lint/format/mypy pass; no full-suite repeat.
+  A separate standalone invocation also passed: the takeover chat's
+  `work/p7-rehearsal-20261007/result.json` retains 3 attempts / 1 repair, 30 reserved turns / 1800s,
+  confirmed exits, source/check/packet preservation and the delivered commit. No running job remains.
+- **Continue with remaining P7 evidence, not this rehearsal again:** see `docs/P7_ACCEPTANCE.md`.
+  The Codex capability audit reused native 0.160.0 schemas and current official references without
+  reading auth or invoking a native turn. It still does not establish internal model-turn enforcement,
+  effective subscription/config provenance or native resume/workspace behavior. Do not unlock live,
+  substitute token/wall/prompt limits, or rename a real binary as a stub. Synthetic packet pins are
+  not actual model/session choices. The proposed future 3-execution scenario is not authorized;
+  the prior 2-attempt allowance is spent. Native lifecycle/failure cases and distribution remain.
+  Runtime, plugin alpha.2 caches, default connection and historical stores are unchanged; no push.
 
 - **P6 no-model wiring accepted:** Codex actual profile now installed/enabled alpha.2 through its
   native CLI. Existing 34 plugins unchanged. A short-lived native app-server `skills/list` resolves

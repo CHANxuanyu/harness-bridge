@@ -6,6 +6,10 @@ uses the existing worktree/worker/check/review pipeline and emits the same bridg
 attempt or invoking a binary, even with all ordinary live opt-ins set. This is not a new paid
 validation authorization and does not certify subscription routing.
 
+P7's 2026-10-07 model-free audit reused the installed native schemas and checked current official
+references. It did not establish the missing model-step cap or close any live gap. The reproducible
+two-adapter rehearsal and bounded future acceptance proposal are in [P7_ACCEPTANCE.md](P7_ACCEPTANCE.md).
+
 ## User-facing contract
 
 The Advisor is still the user's existing agent session. It can plan a `codex` child, materialize

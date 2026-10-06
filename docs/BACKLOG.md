@@ -48,6 +48,9 @@ Evidence: `docs/VALIDATION_MATRIX.md`, `docs/LIVE_REPAIR_RESULT.md`, `docs/PLUGI
 7. **P7 — Live product acceptance / distribution.** One Advisor session and two executor harnesses,
    integrated delivery, live limits/interruption evidence, clean setup/update/uninstall,
    license and explicit publication scope. Keep unknown capabilities visibly unknown.
+   Preparation now includes a reproducible two-adapter offline rehearsal, 8 new checks and a
+   bounded future acceptance packet (`P7_ACCEPTANCE.md`); all pass without models. Native Codex
+   capability gaps, new per-run authorization and the actual live/distribution cases remain open.
 
 Any real call needs explicit bounded authorization; the earlier two-attempt repair allowance
 is fully used. The plan does not grant calls, push, publication or billing changes.

@@ -9,6 +9,12 @@ is in `docs/LOCAL_SMOKE_HANDOFF.md`, `docs/T4_SMOKE_RESULT.md` and
 |---|---|
 | `make_fixture.py` | Generates a disposable `slugkit.slugify` repository, external acceptance script and validated initial-smoke TaskSpec. |
 | `task-live-smoke.example.json` | Example only; regenerate actual absolute paths. |
+| `p7_fixture.py` | Generate a new two-child P7 synthetic packet; no state store or model call. |
+| `p7_rehearsal.py` | Rehearse both adapter paths, concurrent workers, takeover, repair and delivery in fresh isolated state using generated stand-ins only. |
+
+P7 is a separate no-model preparation path: see [P7 acceptance](../../docs/P7_ACCEPTANCE.md).
+Run its modules from the repository root; each requires a different directory that does not exist.
+The P7 packets have synthetic model/session pins and are **not live-ready or authorized**.
 
 The external acceptance script lives outside the candidate repository. Its required checks
 cannot be satisfied simply by modifying repository tests. Never target Harness Bridge itself
