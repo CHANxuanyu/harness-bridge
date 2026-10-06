@@ -5,15 +5,17 @@ Codex/ZCode to the separate `hbridge` runtime for project discovery, goals, isol
 workspaces, background jobs, review/repair and local result-branch delivery. It contains no model
 client, MCP server, auto-run hook or Executor harness.
 
-The live route is **Advisor host → Bridge → Claude Code**. Codex has an offline-only Executor
-adapter; ZCode execution is unimplemented. A Claude Advisor must respect the nested-session gate;
+Claude Code supports the gated live route. New Codex tasks can explicitly select an
+attempt/wall-time/cancel budget with native configuration preflight; see the bundled
+[live readiness](skills/harness-bridge/references/live-readiness.md) and runtime acceptance notes.
+ZCode execution is unimplemented. A Claude Advisor must respect the nested-session gate;
 it may inspect evidence, but must not strip markers to launch another Claude session.
 
 ## Development installation
 
 1. In the Bridge checkout, install its locked environment with `uv sync --frozen`. Record the
    absolute `.venv/bin/hbridge` path. The plugin cache is not the runtime checkout. Runtime is
-   `0.1.0.dev0`, protocol `1.0`; this plugin is `0.1.0-alpha.2`.
+   `0.1.0.dev1`, protocol `1.0`; this plugin is `0.1.0-alpha.3`.
 2. Choose an absolute state directory outside the target repository/plugin cache. Reuse that
    directory across Advisor hosts. Keep validation state separate; live gates default closed.
 3. For Codex, register the checkout's `.agents/plugins/marketplace.json` using

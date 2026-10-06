@@ -1,8 +1,35 @@
 # Status
 
-_Latest: P7 reproducible two-adapter rehearsal and capability audit; live acceptance remains open._
+_Latest: P7 native observations and local candidate; live stop-resume pending._
 
 ## Current state
+
+- **P7 partially accepted; native continuation stopped by its permission-error rule.** Real Claude
+  and Codex were observed concurrently in separate owned worktrees. Claude's implementation passed
+  independent checks and exact Advisor review; Codex completed diagnosis. Claude's extra Bash
+  sanity check was denied, triggering the user-authorized stop. All exits are confirmed and all
+  isolated live gates closed. **3 actual executions (Claude 2/Codex 1), 540 reserved seconds**;
+  one earlier Codex reservation was a confirmed non-start caused by a now-fixed worker defect.
+  Remaining prepared scope is 4 executions / 345 seconds, awaiting explicit stop-resume permission.
+  No native Codex repair, fault-case or integrated-delivery pass is claimed. See `docs/P7_RESULT.md`.
+- **New Codex contract approved by the user:** explicit null turn cap only for new Codex tasks;
+  attempts/wall/cancel limits, native ChatGPT/default-provider/config preflight, strict worker
+  revalidation. Frozen numeric-turn tasks remain refused. No schema migration (revision 10).
+- **Native host/distribution acceptance passed:** ZCode full app quit/relaunch retains the same
+  fake worker, one attempt, confirmed cancellation; Codex full GUI quit remains unverified.
+  Isolated native install/upgrade/uninstall/reinstall passes for both hosts. Independent runtime
+  upgrade/uninstall/reinstall preserves a completed task/goal/approval. Actual plugins upgraded
+  to alpha.3, other plugins unchanged, same connection; no historical/shared-state migration.
+- **Local candidate only:** runtime 0.1.0.dev1, plugin alpha.3, Apache-2.0 authorized. Reproducible
+  builder and installation/support/retention guide in `scripts/build_release.py` and
+  `docs/LOCAL_RELEASE.md`. No remote publication, tag, push or visibility change.
+- **Validation:** full shared suite 707 passed / 902.56s before final Codex preflight/worker fixes;
+  affected suites 112, 44, 98, 46 and final 6 service cases passed after their corresponding edits.
+  All 722 current cases were exercised across runs, not one final 722-case full run. Final lint/
+  format 135 files and strict mypy 38 runtime files pass. Prior completed tests were reused.
+
+## Historical milestones (state as recorded at each milestone)
+
 
 - **P7 preparation complete, live acceptance NOT_RUN:** a fresh-directory packet generator and
   executable rehearsal now cover two concurrent Claude/Codex-shaped stand-ins, disjoint worktrees,

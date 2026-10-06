@@ -1,78 +1,74 @@
-# Codex executor: offline adapter and capability boundary
+# Codex Executor: budget and capability contract
 
-Implemented 2026-10-06 as P5's offline core. Codex is selectable in TaskSpec and child plans,
-uses the existing worktree/worker/check/review pipeline and emits the same bridge receipts.
-**Actual Codex dispatch is unavailable.** The adapter rejects live mode before reserving an
-attempt or invoking a binary, even with all ordinary live opt-ins set. This is not a new paid
-validation authorization and does not certify subscription routing.
+Updated 2026-10-07 for runtime 0.1.0.dev1. The user explicitly authorized per-harness budget
+semantics for **new** tasks. This replaces P5's unconditional live refusal; it does not rewrite
+frozen tasks or authorize model usage. P7 native execution results are in [P7_RESULT.md](P7_RESULT.md).
 
-P7's 2026-10-07 model-free audit reused the installed native schemas and checked current official
-references. It did not establish the missing model-step cap or close any live gap. The reproducible
-two-adapter rehearsal and bounded future acceptance proposal are in [P7_ACCEPTANCE.md](P7_ACCEPTANCE.md).
+The Advisor remains an existing agent session. Bridge creates the child's worktree, selects cwd,
+launches the native CLI and records results; it never calls a model API. Only the explicit
+`--mode live --allow-model-usage` route with reviewed local opt-in can run a real Executor.
 
-## User-facing contract
-
-The Advisor is still the user's existing agent session. It can plan a `codex` child, materialize
-its fixed baseline, send feedback and review evidence through the same CLI as a Claude child.
-Bridge selects the folder and creates the worktree; the Executor does not choose either.
-The only executable Codex route currently requires `--mode mock --stub-binary /absolute/stand-in`.
-The stand-in is trusted local test code, not a security sandbox or a way to run a real renamed CLI.
-Neither the plugin nor the Advisor may describe this as a working real Codex Executor yet.
-
-The `executor` portion of a TaskSpec is:
+## Explicit new-task contract
 
 ```json
 {
-  "kind": "codex",
-  "requested_model": null,
-  "sandbox": "workspace-write",
-  "resume_on_repair": true
+  "executor": {
+    "kind": "codex",
+    "requested_model": "an-explicit-supported-model",
+    "sandbox": "workspace-write",
+    "resume_on_repair": true
+  },
+  "limits": {
+    "max_attempts": 2,
+    "max_repair_cycles": 1,
+    "wall_timeout_seconds": 180,
+    "max_turns_per_attempt": null
+  }
 }
 ```
 
-`requested_model` may be a nonempty explicit model identifier; null means no pin is requested,
-not a default Claude model. Only `read-only` and `workspace-write` are accepted for sandbox.
-Claude-specific permission/tool/MCP options and fake scenarios are rejected. A parent GoalSpec
-must explicitly include `codex` in `allowed_executors`; its default remains `fake`.
-Existing fake/Claude TaskSpec and plan JSON keep the same canonical shape and digests. Database
-revision remains 10; this slice adds no schema migration or user-state conversion.
+These are portions of a TaskSpec, not a complete runnable specification. Explicit null means
+**native internal-turn hard ceiling unsupported**. Bridge enforces attempt/repair counts,
+wall deadlines and owned-process cancellation. It does not limit/count Codex's internal model
+steps, infer them from JSONL `turn.completed`, or describe this budget as equivalent to Claude's
+native turn cap. A parent numeric turn budget refuses such a child before dispatch; an unbounded
+turn aggregate reports `reserved_turns: null`, never zero. Attempt/wall reservations still apply.
 
-## Evidence and limitations
+Omitted/numeric turn limits retain their old defaults and canonical representation. Those frozen
+Codex tasks remain live refused before an attempt is reserved. Claude/fake tasks cannot use null.
+There is no task conversion or database migration: schema remains 10. Only `read-only` and
+`workspace-write` sandboxes are accepted. Live requires an explicit requested model; observed
+model identity remains unknown unless the native stream establishes it.
 
-Official references checked on 2026-10-06:
+## Native model-free preflight
 
-- [Non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode): JSONL thread/turn/item
-  envelopes and reported token counts.
-- [CLI reference](https://learn.chatgpt.com/docs/cli/reference): stdin prompt and explicit exec
-  session resume, model and workspace options.
-- [Configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference):
-  `approval_policy="never"` is the non-interactive policy. It does not disable sandboxing.
+The supported version is **codex-cli 0.160.0**. A configured absolute `[live] codex_binary` or
+PATH selects the binary. Before reservation, `codex_preflight.py` performs version and native
+app-server metadata reads (`account/read` with refresh disabled, `config/read` for child cwd).
+It starts no thread or turn and never reads credential files itself. It retains only safe
+provenance summaries; raw account/config values are not written to artifacts.
 
-Local non-inference observation: the installed binary reported **codex-cli 0.160.0**. Only
-`--version`, `exec --help`, and `exec resume --help` ran, with a temporary empty HOME/CODEX_HOME,
-temporary cwd and a minimal environment. No auth file, user configuration, model, login or session
-was opened. Help lists JSONL, model, sandbox, working directory and stdin options on `exec`, and
-an explicit session ID plus stdin on `exec resume`. Parent exec options are placed before the
-resume subcommand in the proposed argv. **This arrangement has stub evidence, not native execution
-or native parse-probe evidence.** No extra native probe was run to demonstrate it.
+The gate refuses API/provider environment markers, non-ChatGPT account type, custom provider/
+endpoint configuration, unreviewed external hooks and unsupported native versions/configuration.
+Per-invocation overrides require ChatGPT login, the default OpenAI provider, requested model,
+never approvals and the selected sandbox. Auxiliary subagents, plugins, hooks, memories, MCP,
+apps, notification commands and web search are restricted; workspace network/extra writable
+roots are disabled. A second native configuration read must confirm the effective restrictions.
+User profiles are not rewritten and existing nested/cloud markers are never removed.
 
-| Capability | Evidence now | Runtime policy |
-| --- | --- | --- |
-| Structured normal completion | Docs-derived envelopes, synthetic values, stub pipeline | Accept only one bound thread/start/completion and exit 0; then independent checks |
-| Exact-session repair | Explicit UUID argv; foreground and worker stub repair | Same task/repo/worktree/executor/requested model; returned UUID must match |
-| Refusals/errors | Synthetic failure/stderr cases | Stop, no automatic retry; text hints labeled heuristic, reset unknown |
-| Wall deadline/cancel/known exit | Existing runner and real local stub processes | Keep existing owned-process and reservation rules |
-| Model-step/turn ceiling | Not established by docs/help observations | Live refused; never invent a flag or substitute prompt/wall time |
-| Actual model identity | Not established by the documented exec envelope | Observed model null, requested pin unknown |
-| Subscription/auth/provider provenance | Not checked | Live refused; no API/provider fallback |
-| Effective hooks, MCP, rules and permissions | No reviewed live configuration | Live refused; no ignore-config/rules or bypass flags |
-| Native recovery/workspace behavior | No live Codex evidence | Live refused; mismatched stub resume blocks |
+This is configuration provenance, not a billing receipt. Remaining subscription quota, actual
+charges and actual model identity remain unknown. A unsupported configuration stops before
+reservation, with no silent provider switch or automatic retry.
 
-The absence of a ceiling in the checked material means **unknown**, not a universal claim that
-Codex cannot support bounded operation. A `turn.completed` envelope represents this exec turn;
-it is not proof of how many internal model steps ran. Goal accounting still reserves requested
-ceilings for stub attempts. Native enforcement needs a supported, auditable mechanism before the
-live gate can be opened; another subscription-consuming smoke alone cannot solve that gap.
+| Capability | Runtime policy and evidence |
+| --- | --- |
+| Structured normal completion | Strict one-thread/start/completion and exit 0; independent checks still required |
+| Native initial/resume argv | Initial and exact UUID resume help/parse probes passed without inference |
+| Exact-session repair | Same task/repo/worktree/executor/requested pin; returned UUID must match; P7 real result separately recorded |
+| Turn hard limit | Unsupported for this route; explicit null opt-in, old numeric contracts refused |
+| Account/provider/config | Current native read-only preflight passed; default OpenAI + ChatGPT, per-call restrictions |
+| Wall/cancel/known exit | Shared runner contracts; native fault evidence is separately recorded in P7 |
+| Model identity/cost/quota | Unknown; no inference from requested pin or prose |
 
 ## Invocation and evidence handling
 
@@ -96,16 +92,15 @@ and internal turn count stay unknown. Neither executor prose nor `turn.completed
 bridge verification or exact Advisor approval. Approval/delivery and aggregate budgets remain the
 existing shared contracts, including current Advisor checks on background replay.
 
-## Verification and next boundary
+## Validation and references
 
-`tests/contracts/test_codex_adapter.py` contains 48 contract cases and
-`tests/integration/test_codex_stub_flow.py` contains 20 integration cases. Fixtures explicitly
-record docs-derived/synthetic provenance; no captured-live Codex stream is claimed. The stand-in
-performs real local edits, and real bridge verifiers independently detect/fix the seeded bug.
-Isolated HOME/auth sentinels and the existing Python network guard apply. See
-[VALIDATION_MATRIX.md](VALIDATION_MATRIX.md) for exact completed runs and development failures.
+P5's 48 Codex adapter contracts and 20 stub integration cases remain the offline base.
+P7 adds native-metadata stand-ins, environment/refusal guards and mixed budget accounting tests.
+Tests never read real auth, access the network or launch an actual Codex binary. Manual metadata
+observations are separate from those tests. See [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md).
 
-The next work can proceed without model usage: reconcile a supported bounded Codex execution
-mechanism and its configuration/auth evidence, and update/install-check the P6 Advisor entrypoints
-against the goal/child/worker workflow. Installed-host behavior and P7 one-Advisor/two-real-Executors
-acceptance remain separate. P5 offline completion is not completion of V1.
+Official references checked with installed native help/schema on 2026-10-07:
+[non-interactive execution](https://learn.chatgpt.com/docs/non-interactive-mode),
+[CLI reference](https://learn.chatgpt.com/docs/cli/reference),
+[configuration](https://learn.chatgpt.com/docs/config-file/config-reference).
+Native behavior is version-specific; unsupported future versions fail closed until reviewed.

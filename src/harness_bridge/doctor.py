@@ -120,7 +120,7 @@ def run_doctor(state_dir: Path, *, offline: bool) -> dict[str, Any]:
         },
         {
             "name": "codex_executor_adapter",
-            "status": "offline_only",
+            "status": "gated_wall_time_only",
             "evidence": CodexAdapter(CodexSettings()).describe_capabilities(),
         },
         {

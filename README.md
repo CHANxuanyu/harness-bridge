@@ -1,15 +1,10 @@
 # Harness Bridge
 
-> **Experimental prototype (V0.1, milestone M3/M4).** Not production-ready.
->
-> **Validation level:** the offline suite is green on Linux and macOS (unit + offline
-> integration tests with a *simulated* executor: real subprocess, real git, real verifier,
-> real SQLite). Two bounded **real** smoke runs went through the bridge on 2026-10-06 and
-> passed: T3 (operator → bridge → Claude Code) and a T4 single-run (Codex session → bridge →
-> Claude Code → review → SUCCEEDED). A later controlled **repair/`--resume` passed**,
-> preserving the session and conversation context through failed verification → review →
-> repair → approve. Live interruption/timeout and comparative evaluation (T5) remain
-> **unverified**; see `docs/VALIDATION_MATRIX.md` and `docs/LIVE_REPAIR_RESULT.md`.
+> **Experimental local candidate:** runtime 0.1.0.dev1, Advisor plugin alpha.3, Apache-2.0.
+> P1–P4 local core and installed Advisor entrypoints exist. P7 has real Claude/Codex concurrent
+> execution evidence, native ZCode quit/reconnect and distribution retention checks. Native
+> continuation stopped on an extra denied Claude self-check; Codex repair, fault cases and
+> real integrated delivery remain open. See [current P7 result](docs/P7_RESULT.md).
 
 Harness Bridge aims to provide **one Advisor with one or more Executors across coding
 harnesses**: the Advisor inspects the repo, delegates tasks, reviews results and coordinates
@@ -24,7 +19,8 @@ conservative worktree cleanup. It is a
 deterministic local CLI (`hbridge`). **It never calls a model API itself.** The supervisor is
 whoever runs the CLI (the Advisor, e.g. the user's existing Codex session); the executor is Claude Code
 (live, gated, local only), a bundled fake executor (offline), or the Codex adapter
-with an explicit test stand-in (offline only; real Codex dispatch is unavailable).
+with explicit per-harness budget semantics and native configuration preflight. Codex has no
+internal-turn ceiling; new live tasks must explicitly select attempts/wall-time/cancel limits.
 
 ```text
 supervisor (Codex/Astra or a person)
@@ -48,14 +44,12 @@ sessions bound to child tasks. The [project plan](docs/PROJECT_PLAN.md) is the c
 scope, session/workspace contract, implementation sequence and acceptance checklist. It
 distinguishes existing V0.1 code from proposed coordination and delivery capabilities.
 
-A [local Advisor plugin alpha.2](plugins/harness-bridge/README.md) packages one shared Skill
-for Codex/ZCode, covering goals, children, background jobs, review/repair and local delivery.
-It connects to the separate runtime via trusted runtime/state paths and includes a model-free
-compatibility checker. Package/CLI workflow checks and native Codex installation in an isolated
-profile passed. Actual Codex profile installation/native Skill loading and ZCode installation/
-enabled Skill discovery now pass, as do the shared default connection and one native Codex tool
-PTY reconnection. See [P6 installed-entrypoint acceptance](docs/P6_DESKTOP_ACCEPTANCE.md).
-The current GUI's hot refresh, full app termination and real agent behavior remain unverified.
+A [local Advisor plugin alpha.3](plugins/harness-bridge/README.md) packages one shared Skill
+for Codex/ZCode. Both actual host installations share the same runtime/state connection.
+Native clean install, upgrade, uninstall and reinstall preserve task data. ZCode full app quit
+and relaunch retained a fake worker; Codex tool PTY reconnection was verified earlier. Full
+Codex GUI shutdown and universal host survival are not claimed. See [local installation and
+support boundaries](docs/LOCAL_RELEASE.md) and [P7 evidence](docs/P7_RESULT.md).
 
 The [goal coordination reference](docs/COORDINATION.md) documents the implemented
 `goal create/status/takeover`, `projects` and `create --goal` commands. Linked tasks require
@@ -75,7 +69,7 @@ READY_TO_DELIVER/DELIVERED projections. [Integration repairs](docs/INTEGRATION_R
 conflict/failed-check children to retained inputs and existing budgets; [cleanup](docs/CLEANUP.md)
 removes only selected clean owned worktrees after delivery, retaining refs/evidence and user changes.
 P4 local core, P5 Codex offline adapter and P6 model-free installed wiring are implemented;
-Codex live readiness and P7 real behavior/lifecycle remain incomplete.
+P7 real resume/fault/integrated-delivery acceptance remains incomplete.
 See [Codex capability boundary](docs/CODEX_EXECUTOR.md). Approval alone
 does not deliver a goal.
 
@@ -138,5 +132,5 @@ better or cheaper than one (see [`docs/EVALUATION_PLAN.md`](docs/EVALUATION_PLAN
 `docs/PROJECT_PLAN.md` · `docs/PRODUCT_FORM.md` · `docs/PLUGIN_ALPHA_RESULT.md` ·
 `docs/CLOUD_EXECUTION_PLAN.md` (original requirements).
 
-No license has been chosen yet (public repository, all rights reserved by the author until a
-license is added).
+Licensed under [Apache-2.0](LICENSE). Only a local release candidate is authorized; no remote
+push, package upload or marketplace publication is implied.

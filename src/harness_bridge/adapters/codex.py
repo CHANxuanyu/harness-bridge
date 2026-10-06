@@ -1,8 +1,9 @@
-"""Codex exec JSONL adapter: offline contract/stub evidence, live deliberately unavailable.
+"""Codex exec JSONL adapter with explicit per-harness budget semantics.
 
 The documented exec stream does not establish an enforceable model-step ceiling or observed
 model/auth provenance. A turn.completed event is NOT a count of internal model calls. Never
-silently replace the bridge's mandatory turn ceiling with a prompt or wall-clock limit.
+silently replace an existing task's native turn ceiling with wall-clock limits. New tasks may
+explicitly select null turns after accepting the unsupported capability.
 """
 
 from __future__ import annotations
@@ -76,21 +77,21 @@ class CodexAdapter:
     def describe_capabilities(self) -> dict[str, Any]:
         return {
             "kind": self.kind,
-            "modes": ["mock with explicit --stub-binary"],
+            "modes": ["mock with explicit --stub-binary", "live with null native turn ceiling"],
             "evidence": "docs-derived/synthetic events and offline stub integration only",
             "docs": DOCS,
-            "live_dispatch": "unavailable",
-            "unverified_capabilities": list(LIVE_GAPS),
+            "live_dispatch": "gated_wall_time_only",
+            "unverified_capabilities": ["native_model_turn_ceiling", "observed_model_identity"],
             "model_observation": "not established by the documented exec JSONL schema",
             "resume": "explicit bound UUID only; never --last, --all, name or fork",
-            "turn_ceiling": "not enforced by this adapter; live refused before reservation",
+            "turn_ceiling": "unsupported; legacy numeric-turn tasks remain live-refused",
         }
 
     def build_invocation(self, packet: TaskPacket, ctx: InvocationContext) -> InvocationSpec:
-        if ctx.mode != "mock":
+        if ctx.mode != "mock" and packet.max_turns is not None:
             self.refuse_live()
         if not ctx.executor_binary or not os.path.isabs(ctx.executor_binary):
-            raise BridgeError("PREFLIGHT_FAILED", "Codex stub executable must be absolute")
+            raise BridgeError("PREFLIGHT_FAILED", "Codex executable must be absolute")
         s = self.settings
         if s.sandbox not in ("read-only", "workspace-write"):
             raise BridgeError("PREFLIGHT_FAILED", "unsupported Codex sandbox policy")
@@ -122,8 +123,9 @@ class CodexAdapter:
             argv += ["resume", ctx.resume_session_id]
         argv.append("-")
         notes = [
-            "offline Codex stub only; no live capability established",
-            f"requested max_turns={packet.max_turns}: not enforced by Codex adapter; live refused",
+            "offline Codex stub" if ctx.mode == "mock" else "Codex native gated execution",
+            f"native turn cap not enforced (unsupported); declared max_turns={packet.max_turns}; "
+            "null explicitly selects attempts, wall deadline and cancellation only",
             "approval_policy=never denies requests requiring escalation; sandbox remains enabled",
         ]
         if packet.attempt_kind == "repair" and not ctx.resume_session_id:
@@ -218,7 +220,7 @@ class CodexAdapter:
                 "num_turns": None,
                 "api_key_source": None,
                 "model_pin": "unknown" if self.settings.requested_model else "not_requested",
-                "turn_ceiling": "unverified; live unavailable",
+                "turn_ceiling": "unsupported; no internal model-call count is inferred",
             },
         }
         base = classify_process_level(process)

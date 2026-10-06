@@ -120,7 +120,7 @@ class Limits(_Strict):
     max_attempts: int = Field(default=3, ge=1, le=10)
     max_repair_cycles: int = Field(default=2, ge=0, le=9)
     wall_timeout_seconds: float = Field(default=900, gt=0, le=86400)
-    max_turns_per_attempt: int = Field(default=20, ge=1, le=500)
+    max_turns_per_attempt: int | None = Field(default=20, ge=1, le=500)
     max_artifact_bytes: int = Field(default=10 * 1024 * 1024, ge=64 * 1024, le=1024**3)
     kill_grace_seconds: float = Field(default=5.0, ge=0, le=120)
 
@@ -197,6 +197,8 @@ class TaskDefinition(_Strict):
 
     @model_validator(mode="after")
     def _verification_rules(self) -> TaskDefinition:
+        if self.limits.max_turns_per_attempt is None and self.executor.kind != "codex":
+            raise ValueError("only Codex may explicitly select a null native turn ceiling")
         ids = [c.id for c in self.verification]
         if len(ids) != len(set(ids)):
             raise ValueError("verification ids must be unique")

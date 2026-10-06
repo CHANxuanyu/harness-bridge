@@ -1,4 +1,8 @@
-# P7 acceptance packet and offline rehearsal
+# P7 historical offline rehearsal and original preparation
+
+**Current native/distribution result: [P7_RESULT.md](P7_RESULT.md).** The capability refusal and
+future budget below describe the earlier preparation milestone, before the user approved
+per-harness budgeting and the later seven-execution packet. They are preserved as history.
 
 Prepared 2026-10-07. This extends the canonical [project plan](PROJECT_PLAN.md); it does not
 change the product scope or authorize a model call. **P7 live acceptance is NOT_RUN.**

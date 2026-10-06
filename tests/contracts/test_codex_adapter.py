@@ -86,7 +86,7 @@ def test_live_is_refused_even_by_direct_adapter() -> None:
     with pytest.raises(BridgeError) as exc:
         a.build_invocation(packet(), replace(context(), mode="live"))
     assert exc.value.details["gaps"] == list(LIVE_GAPS)
-    assert a.describe_capabilities()["live_dispatch"] == "unavailable"
+    assert a.describe_capabilities()["live_dispatch"] == "gated_wall_time_only"
 
 
 @pytest.mark.parametrize("sid", ["--last", "latest", "-", "", SESSION.upper(), SESSION + "x"])

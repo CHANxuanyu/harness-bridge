@@ -264,6 +264,7 @@ class WorkerJobs:
                     allow_model_usage=request["allow_model_usage"],
                     config=b.config,
                     env=b.env,
+                    executor_kind=spec.executor.kind,
                 )
                 if not gate.open:
                     raise BridgeError("LIVE_GATE_CLOSED", "worker live gate is closed")
@@ -283,7 +284,10 @@ class WorkerJobs:
                     resume_session_id=attempt.invocation.get("resume_session_id"),
                 ),
             )
-            invocation.notes = execution["notes"]
+            if attempt.mode == "live" and spec.executor.kind == "codex":
+                b._codex_live_preflight(spec, binary, invocation)
+            else:
+                invocation.notes = execution["notes"]
             if invocation.digest() != attempt.invocation_digest:
                 raise BridgeError("INTEGRITY_ERROR", "worker invocation differs from reservation")
             with self.store.transaction() as cur:

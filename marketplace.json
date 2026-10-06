@@ -5,7 +5,7 @@
     {
       "name": "harness-bridge",
       "source": "./plugins/harness-bridge",
-      "version": "0.1.0-alpha.2",
+      "version": "0.1.0-alpha.3",
       "description": "Delegate coding work and review evidence through the local Bridge.",
       "category": "Developer Tools"
     }

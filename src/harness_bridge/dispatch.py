@@ -32,14 +32,18 @@ class BudgetUsage:
     repairs: int = 0
     wall_seconds: Decimal = Decimal(0)
     turns: int = 0
+    uncapped_turn_attempts: int = 0
 
-    def to_dict(self) -> dict[str, int | float]:
-        return {
+    def to_dict(self) -> dict[str, int | float | None]:
+        result: dict[str, int | float | None] = {
             "attempts": self.attempts,
             "repairs": self.repairs,
             "reserved_wall_seconds": float(self.wall_seconds),
-            "reserved_turns": self.turns,
+            "reserved_turns": None if self.uncapped_turn_attempts else self.turns,
         }
+        if self.uncapped_turn_attempts:
+            result["turn_cap_unavailable_attempts"] = self.uncapped_turn_attempts
+        return result
 
 
 def budget_usage(cur: sqlite3.Cursor, goal_id: str) -> BudgetUsage:
@@ -51,15 +55,18 @@ def budget_usage(cur: sqlite3.Cursor, goal_id: str) -> BudgetUsage:
     ).fetchall()
     specs: dict[str, TaskSpec] = {}
     wall = Decimal(0)
-    turns = repairs = 0
+    turns = repairs = uncapped = 0
     for row in rows:
         if row["task_id"] not in specs:
             specs[row["task_id"]] = frozen_spec(row)
         limits = specs[row["task_id"]].limits
         wall += Decimal(str(limits.wall_timeout_seconds))
-        turns += limits.max_turns_per_attempt
+        if limits.max_turns_per_attempt is None:
+            uncapped += 1
+        else:
+            turns += limits.max_turns_per_attempt
         repairs += row["kind"] == "repair" or integration_repair_task(cur, row["task_id"])
-    return BudgetUsage(len(rows), repairs, wall, turns)
+    return BudgetUsage(len(rows), repairs, wall, turns, uncapped)
 
 
 def integration_repair_task(cur: sqlite3.Cursor, task_id: str) -> bool:

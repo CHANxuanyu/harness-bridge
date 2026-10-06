@@ -32,7 +32,7 @@ class TaskPacket:
     allowed_paths: list[str]
     forbidden_paths: list[str]
     verification: list[dict[str, Any]]
-    max_turns: int
+    max_turns: int | None
     feedback: list[dict[str, Any]] | None = None
     context: dict[str, Any] | None = None
 

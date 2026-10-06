@@ -199,7 +199,7 @@ def test_incompatible_runtime_never_reports_connection(
         assert Path(kwargs["env"]["HOME"]).is_relative_to(Path(kwargs["cwd"]))
         code = 0
         if argv[-1] == "--version":
-            out = "hbridge obsolete" if failure == "version" else "hbridge 0.1.0.dev0"
+            out = "hbridge obsolete" if failure == "version" else "hbridge 0.1.0.dev1"
         elif argv[-1] == "--help":
             code = 2 if failure == "command" and "goal" in argv else 0
             out = (
@@ -212,7 +212,7 @@ def test_incompatible_runtime_never_reports_connection(
             out = json.dumps(
                 {
                     "ok": True,
-                    "bridge_version": "0.1.0.dev0",
+                    "bridge_version": "0.1.0.dev1",
                     "schema_version": "1.0",
                     "offline": True,
                     "inference_performed": failure == "doctor",

@@ -36,24 +36,22 @@ Evidence: `docs/VALIDATION_MATRIX.md`, `docs/LIVE_REPAIR_RESULT.md`, `docs/PLUGI
    Exact local delivery/receipts and READY_TO_DELIVER/DELIVERED projections now exist (`DELIVERY.md`).
    Budgeted repair-child binding and conservative post-delivery cleanup now exist
    (`INTEGRATION_REPAIRS.md`, `CLEANUP.md`); dirty worktrees and all refs/evidence remain retained.
-5. **P5 — Codex executor adapter (offline core implemented).** Native contract and foreground/
-   worker stub repair now exist (`CODEX_EXECUTOR.md`). Live is unavailable until internal turn
-   enforcement, subscription/config provenance and native recovery gaps have evidence; any
-   real validation also requires new bounded authorization. ZCode executor remains exploratory.
-6. **P6 — Advisor host entrypoints (model-free wiring accepted).** Alpha.2 workflow and prior 24
-   package/CLI checks pass; actual Codex profile install/native Skill loader and ZCode install/Skill
-   UI pass. Both actual caches share a default connection; native Codex tool PTY exit/reconnection
-   passes (`P6_DESKTOP_ACCEPTANCE.md`). Current GUI hot refresh and full app quit are unobserved;
-   loading is not full real agent behavior.
-7. **P7 — Live product acceptance / distribution.** One Advisor session and two executor harnesses,
-   integrated delivery, live limits/interruption evidence, clean setup/update/uninstall,
-   license and explicit publication scope. Keep unknown capabilities visibly unknown.
-   Preparation now includes a reproducible two-adapter offline rehearsal, 8 new checks and a
-   bounded future acceptance packet (`P7_ACCEPTANCE.md`); all pass without models. Native Codex
-   capability gaps, new per-run authorization and the actual live/distribution cases remain open.
+5. **P5 — Codex adapter and gated native route implemented.** New explicit null-turn tasks use
+   attempts/wall/cancel budgeting; native subscription/config preflight and strict worker
+   reconstruction exist. Real initial diagnosis passed; native same-session repair remains open.
+   Old numeric-turn tasks are unchanged. See `CODEX_EXECUTOR.md` and `P7_RESULT.md`.
+6. **P6 — Advisor entrypoints accepted for model-free wiring.** Alpha.3 installed in both actual
+   hosts with shared connection/native skill discovery. Native ZCode full quit/relaunch with a
+   fake worker passes; Codex full GUI shutdown remains unverified. Installed native lifecycle
+   and independent runtime retention checks pass. See `LOCAL_RELEASE.md`.
+7. **P7 — Partial native acceptance; local candidate prepared.** True Claude/Codex parallel
+   execution and workspace isolation pass. The run stopped on a denied extra Claude Bash check
+   under the user-authorized stop rule. Remaining original-budget work: native Codex repair,
+   Codex cancellation, Claude timeout/turn limit and real integrated review/delivery. Apache-2.0
+   and local-only scope are resolved. Keep those items open until actual evidence closes them.
 
-Any real call needs explicit bounded authorization; the earlier two-attempt repair allowance
-is fully used. The plan does not grant calls, push, publication or billing changes.
+The current seven-execution authorization is stopped pending explicit resume, with 3 actual
+executions used. The earlier two-attempt repair allowance is fully used. The plan does not grant calls, push, publication or billing changes.
 
 ## Subsequent / optional work
 

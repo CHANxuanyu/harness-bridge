@@ -38,6 +38,20 @@ API_PROVIDER_ENV = (
     "CLAUDE_CODE_API_KEY_HELPER",
     "AWS_BEARER_TOKEN_BEDROCK",
 )
+CODEX_PROVIDER_ENV = (
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "CODEX_API_KEY",
+    "CODEX_ACCESS_TOKEN",
+    "CODEX_AUTH_TOKEN",
+    "CODEX_MODEL_PROVIDER",
+    "CODEX_OSS_BASE_URL",
+    "CHATGPT_BASE_URL",
+    "AZURE_OPENAI_API_KEY",
+    "AZURE_OPENAI_ENDPOINT",
+    "OPENAI_ORG_ID",
+    "OPENAI_PROJECT_ID",
+)
 CLOUD_ENV_MARKERS = ("CLAUDE_CODE_REMOTE", "CLAUDE_CODE_REMOTE_SESSION_ID", "CODEX_CLOUD")
 NESTED_ENV_MARKERS = ("CLAUDECODE",)
 
@@ -55,6 +69,7 @@ class BridgeConfig:
     max_parallel_per_project: int = 1
     live_enabled: bool = False
     claude_binary: str | None = None
+    codex_binary: str | None = None
     allow_unlisted_flags: tuple[str, ...] = ()
     hooks_and_permissions_reviewed: bool = False
     source: str = "defaults"
@@ -78,7 +93,13 @@ def load_config(state_dir: Path) -> BridgeConfig:
     live = data.get("live", {})
     if not isinstance(live, dict):
         raise BridgeError("INVALID_INPUT", "[live] in config.toml must be a table")
-    known = {"enabled", "claude_binary", "allow_unlisted_flags", "hooks_and_permissions_reviewed"}
+    known = {
+        "enabled",
+        "claude_binary",
+        "codex_binary",
+        "allow_unlisted_flags",
+        "hooks_and_permissions_reviewed",
+    }
     unknown = set(live) - known
     if unknown:
         raise BridgeError("INVALID_INPUT", f"unknown [live] keys in config.toml: {sorted(unknown)}")
@@ -88,6 +109,9 @@ def load_config(state_dir: Path) -> BridgeConfig:
     binary = live.get("claude_binary")
     if binary is not None and (not isinstance(binary, str) or not os.path.isabs(binary)):
         raise BridgeError("INVALID_INPUT", "[live] claude_binary must be an absolute path")
+    codex = live.get("codex_binary")
+    if codex is not None and (not isinstance(codex, str) or not os.path.isabs(codex)):
+        raise BridgeError("INVALID_INPUT", "[live] codex_binary must be an absolute path")
     flags = live.get("allow_unlisted_flags", [])
     if not isinstance(flags, list) or not all(isinstance(f, str) for f in flags):
         raise BridgeError("INVALID_INPUT", "[live] allow_unlisted_flags must be a list of strings")
@@ -106,6 +130,7 @@ def load_config(state_dir: Path) -> BridgeConfig:
         live_enabled=enabled,
         hooks_and_permissions_reviewed=reviewed,
         claude_binary=binary,
+        codex_binary=codex,
         allow_unlisted_flags=tuple(flags),
         source=str(path),
         raw=data,
@@ -135,7 +160,12 @@ class LiveGate:
 
 
 def evaluate_live_gate(
-    *, mode: str, allow_model_usage: bool, config: BridgeConfig, env: dict[str, str]
+    *,
+    mode: str,
+    allow_model_usage: bool,
+    config: BridgeConfig,
+    env: dict[str, str],
+    executor_kind: str = "claude-code",
 ) -> LiveGate:
     reasons: list[str] = []
     if mode != "live":
@@ -146,7 +176,7 @@ def evaluate_live_gate(
         reasons.append("[live] enabled = true is not set in the state-dir config.toml")
     if not config.hooks_and_permissions_reviewed:
         reasons.append(
-            "[live] hooks_and_permissions_reviewed = true is not set: review Claude Code hooks, "
+            "[live] hooks_and_permissions_reviewed = true is not set: review executor hooks, "
             "MCP servers and permission settings (user and project) before the first live run"
         )
     cloud = present(CLOUD_ENV_MARKERS, env)
@@ -155,7 +185,7 @@ def evaluate_live_gate(
     nested = present(NESTED_ENV_MARKERS, env)
     if nested:
         reasons.append("running inside another Claude Code session (nested); refusing")
-    api = present(API_PROVIDER_ENV, env)
+    api = present(API_PROVIDER_ENV + (CODEX_PROVIDER_ENV if executor_kind == "codex" else ()), env)
     if api:
         reasons.append(
             "API-key / provider variables are set (" + ", ".join(api) + "); a live run could "

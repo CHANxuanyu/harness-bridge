@@ -28,12 +28,12 @@ python3 /absolute/plugin/skills/harness-bridge/scripts/check_connection.py \
 ```
 
 Alternatively supply `--runtime /absolute/hbridge --state-dir /absolute/state` together. The
-checker writes no connection. It checks runtime `0.1.0.dev0`, protocol `1.0`, needed commands and
+checker writes no connection. It checks runtime `0.1.0.dev1`, protocol `1.0`, needed commands and
 offline diagnostics in a fresh temporary state. It does not open/create/migrate the selected state,
 test authentication, enable live mode, invoke a harness or prove host activation.
 `runtime_compatible` means only this interface check passed. Inspect JSON errors instead of
 dispatching as a fallback. The runtime must be trusted local software; no shell or extra runtime
-arguments are accepted. Package `0.1.0-alpha.2` does not change runtime/protocol versions.
+arguments are accepted. Package `0.1.0-alpha.3` does not change runtime/protocol versions.
 
 Use the returned absolute runtime and state as argv for every operation:
 

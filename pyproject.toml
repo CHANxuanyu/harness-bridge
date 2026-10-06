@@ -1,8 +1,9 @@
 [project]
 name = "harness-bridge"
-version = "0.1.0.dev0"
+version = "0.1.0.dev1"
 description = "Local-first bridge for supervised coding across agent harnesses (experimental prototype)"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
 authors = [{ name = "Xuanyu CHAN" }]
 dependencies = ["pydantic>=2.6,<3"]

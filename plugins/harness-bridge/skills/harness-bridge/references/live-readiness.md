@@ -35,6 +35,14 @@ authorized target, executor, attempt/repair/turn/time bounds before dispatch.
 Permission/auth/quota errors stop dispatch. Inspect and report the actual cause; no automatic
 quota waits, provider switching, limit weakening, or new model calls just to refresh a chat.
 
-Codex live dispatch is unavailable even with these opt-ins: its adapter has offline evidence only
-and unresolved bounded-turn/config/subscription provenance. ZCode execution is unimplemented.
-Installing either Advisor plugin never changes those capability limits.
+Codex additionally requires an explicit requested model and `limits.max_turns_per_attempt: null`
+in a new task. The user must accept that the adapter cannot limit/count internal model turns;
+attempt ceilings, mandatory wall deadlines and cancellation still apply. A parent goal with a
+numeric total turn ceiling refuses such a child. Old numeric-turn tasks remain live-refused.
+The current native preflight supports CLI 0.160.0, requires ChatGPT login and the default OpenAI
+provider/endpoint, and validates effective per-invocation model and sandbox/approval controls.
+External hook files/custom routing are refused. Plugins, auxiliary agents, MCP, web search and
+notification commands are disabled for that execution; saved user configuration is not changed.
+No credentials, account identifiers or raw config are retained. Requested model configuration is
+evidence of the pin, not independently observed model identity or a guarantee of remaining quota.
+ZCode execution is unimplemented. Installing an Advisor plugin does not authorize a live call.

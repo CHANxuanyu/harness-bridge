@@ -497,11 +497,12 @@ class Bridge:
             adapter = CodexAdapter(
                 CodexSettings(spec.executor.requested_model, spec.executor.sandbox)
             )
-            if mode != "mock":
+            if mode != "mock" and spec.limits.max_turns_per_attempt is not None:
                 CodexAdapter.refuse_live()
             name = "codex"
-            real = shutil.which(name, path=self.env.get("PATH"))
+            real = self.config.codex_binary or shutil.which(name, path=self.env.get("PATH"))
         else:
+            assert spec.limits.max_turns_per_attempt is not None
             adapter = ClaudeCodeAdapter(
                 ClaudeSettings(
                     requested_model=spec.executor.requested_model,
@@ -538,7 +539,7 @@ class Bridge:
         if real is None:
             raise BridgeError(
                 "PREFLIGHT_FAILED",
-                "claude executable not found (set [live] claude_binary in config.toml)",
+                f"{name} executable not found (set [live] {name}_binary in config.toml)",
             )
         return adapter, real
 
@@ -583,7 +584,11 @@ class Bridge:
         spec = self._spec(task)
         if mode == "live":
             gate = evaluate_live_gate(
-                mode=mode, allow_model_usage=allow_model_usage, config=self.config, env=self.env
+                mode=mode,
+                allow_model_usage=allow_model_usage,
+                config=self.config,
+                env=self.env,
+                executor_kind=spec.executor.kind,
             )
             if not gate.open:
                 raise BridgeError(
@@ -649,7 +654,9 @@ class Bridge:
             resume_session_id=resume,
         )
         invocation = adapter.build_invocation(packet, ctx)
-        if mode == "live":
+        if mode == "live" and isinstance(adapter, CodexAdapter):
+            self._codex_live_preflight(spec, binary, invocation)
+        elif mode == "live":
             assert isinstance(adapter, ClaudeCodeAdapter) and binary is not None
             listed, version = help_flags(binary, self.env)
             checked = preflight(
@@ -723,6 +730,19 @@ class Bridge:
             _fault_point("after_worker_launch")
             return self.jobs.status(job_id, replayed=False)
         return self._execute_attempt(task, spec, attempt_id, adapter, invocation)
+
+    def _codex_live_preflight(
+        self, spec: TaskSpec, binary: str | None, invocation: InvocationSpec
+    ) -> None:
+        """Rebuild the same effective configuration at reservation and worker execution."""
+        from harness_bridge.codex_preflight import prepare_live
+
+        assert binary is not None and spec.executor.kind == "codex"
+        overrides, provenance = prepare_live(
+            binary, invocation.cwd, self.env, spec.executor.requested_model, spec.executor.sandbox
+        )
+        invocation.argv[1:1] = [arg for value in overrides for arg in ("--config", value)]
+        invocation.notes.append("Codex preflight: " + canonical_json(provenance))
 
     def _execute_attempt(
         self,

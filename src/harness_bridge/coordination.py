@@ -441,7 +441,7 @@ class Coordinator:
         )
 
     @staticmethod
-    def _budget(cur: sqlite3.Cursor, goal_id: str) -> dict[str, int | float]:
+    def _budget(cur: sqlite3.Cursor, goal_id: str) -> dict[str, int | float | None]:
         return budget_usage(cur, goal_id).to_dict()
 
     def guard_dispatch(
@@ -471,7 +471,9 @@ class Coordinator:
         ):
             exceeded.append("executor_wall_seconds")
         if spec.max_executor_turns is not None and (
-            usage.turns + limits.max_turns_per_attempt > spec.max_executor_turns
+            limits.max_turns_per_attempt is None
+            or usage.uncapped_turn_attempts
+            or usage.turns + limits.max_turns_per_attempt > spec.max_executor_turns
         ):
             exceeded.append("executor_turns")
         if exceeded:

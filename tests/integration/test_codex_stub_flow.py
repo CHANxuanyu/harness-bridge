@@ -204,8 +204,8 @@ def test_background_cancel_stops_owned_codex_stub(fx: Fixture, cx_stub: Path) ->
 def test_offline_doctor_exposes_codex_gaps(fx: Fixture) -> None:
     _, report = fx.cli("doctor", "--offline")
     cap = next(x for x in report["capabilities"] if x["name"] == "codex_executor_adapter")
-    assert cap["status"] == "offline_only"
-    assert cap["evidence"]["live_dispatch"] == "unavailable"
+    assert cap["status"] == "gated_wall_time_only"
+    assert cap["evidence"]["live_dispatch"] == "gated_wall_time_only"
 
 
 @pytest.mark.parametrize(

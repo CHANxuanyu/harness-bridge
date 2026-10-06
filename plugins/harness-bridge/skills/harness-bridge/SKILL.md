@@ -33,7 +33,10 @@ commit a dirty source to satisfy preflight. Freeze narrow paths, independent acc
 dependencies and aggregate/per-task limits. Materialize ready children and run declared preparation
 explicitly. Bridge owns workspace creation, dependency composition and session binding.
 
-Only Claude Code has a live route. Codex is offline-only; ZCode is an Advisor host, not an Executor.
+Claude Code and Codex have separate gated live routes; ZCode is an Advisor host, not an Executor.
+Codex has no native turn ceiling. Only a new task explicitly declaring
+`limits.max_turns_per_attempt: null` accepts attempts/wall-time/cancel limits; its goal must not
+claim a total turn ceiling. Never convert an existing task's numeric turn requirement in place.
 Mock mode uses the fake executor; its bundled scenario is only a validation fixture.
 Honor existing bounded live authorization, including repairs inside its budget. Installation,
 subscriptions and conversation migration do not grant or renew model usage. Before a live attempt,

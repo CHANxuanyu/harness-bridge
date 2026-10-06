@@ -90,7 +90,11 @@ class IntegrationRepairs:
             )
             or (
                 spec.max_executor_turns is not None
-                and usage.turns + limits.max_turns_per_attempt > spec.max_executor_turns
+                and (
+                    limits.max_turns_per_attempt is None
+                    or usage.uncapped_turn_attempts
+                    or usage.turns + limits.max_turns_per_attempt > spec.max_executor_turns
+                )
             )
         ):
             raise BridgeError(

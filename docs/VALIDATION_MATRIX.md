@@ -5,6 +5,25 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+**P7 current native/distribution slice (2026-10-07, baseline `9445a14`):** see
+[P7_RESULT.md](P7_RESULT.md) for actual runs, failures, budget accounting and stop condition.
+Full shared offline check passed **707 / 902.56s** before the final native preflight/worker fixes.
+Affected checks passed **112 / 28.57s**, **44 / 9.39s**, **98 / 60.91s**, **46 / 5.95s** and
+**6 selected / 3.63s** (42 deselected). The latter six cover foreground/worker launch, preflight
+refusal, changed provider environment and changed invocation before spawn. All **722 current
+cases** were exercised across these runs; not a single final full 722-case run. Lint/format
+135 files and strict mypy 38 runtime files pass. Intermediate failures are retained in P7_RESULT.
+
+Native metadata/parse checks, real ZCode GUI quit/relaunch with a fake worker, both native plugin
+install/update/remove/reinstall cycles and independent runtime retention all pass. Actual alpha.3
+caches/checkers and fresh Codex skills/list pass; historical/shared stores are unchanged.
+Real one-Advisor/two-Executor **concurrent startup/workspaces** pass; full native repair/integration
+acceptance remains open. **3 actual executions**, one additional confirmed Codex non-start; no
+unknown exits. An extra denied Claude Bash check triggered the explicitly agreed stop. All live
+gates closed; remaining original-budget calls await explicit resume. No publication or push.
+
+**Historical preparation and earlier milestones follow.**
+
 **P7 preparation (macOS, 2026-10-07, baseline `c5ca50c`):** before changes, the affected Codex-stub
 and plugin suites passed **44 / 44**, 38.80s. New fresh-directory packet/rehearsal suite finishes
 **8 passed / 0 failed / 0 skipped**, 13.91s; lint/format (131 files) and strict mypy (37 runtime

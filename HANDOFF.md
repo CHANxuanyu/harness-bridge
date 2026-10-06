@@ -1,6 +1,52 @@
 # Handoff
 
-## Current state (P7 reproducible rehearsal; real acceptance pending)
+
+## Current continuation
+
+- **P7 partially accepted; native continuation stopped by its permission-error rule.** Real Claude
+  and Codex were observed concurrently in separate owned worktrees. Claude's implementation passed
+  independent checks and exact Advisor review; Codex completed diagnosis. Claude's extra Bash
+  sanity check was denied, triggering the user-authorized stop. All exits are confirmed and all
+  isolated live gates closed. **3 actual executions (Claude 2/Codex 1), 540 reserved seconds**;
+  one earlier Codex reservation was a confirmed non-start caused by a now-fixed worker defect.
+  Remaining prepared scope is 4 executions / 345 seconds, awaiting explicit stop-resume permission.
+  No native Codex repair, fault-case or integrated-delivery pass is claimed. See `docs/P7_RESULT.md`.
+- **New Codex contract approved by the user:** explicit null turn cap only for new Codex tasks;
+  attempts/wall/cancel limits, native ChatGPT/default-provider/config preflight, strict worker
+  revalidation. Frozen numeric-turn tasks remain refused. No schema migration (revision 10).
+- **Native host/distribution acceptance passed:** ZCode full app quit/relaunch retains the same
+  fake worker, one attempt, confirmed cancellation; Codex full GUI quit remains unverified.
+  Isolated native install/upgrade/uninstall/reinstall passes for both hosts. Independent runtime
+  upgrade/uninstall/reinstall preserves a completed task/goal/approval. Actual plugins upgraded
+  to alpha.3, other plugins unchanged, same connection; no historical/shared-state migration.
+- **Local candidate only:** runtime 0.1.0.dev1, plugin alpha.3, Apache-2.0 authorized. Reproducible
+  builder and installation/support/retention guide in `scripts/build_release.py` and
+  `docs/LOCAL_RELEASE.md`. No remote publication, tag, push or visibility change.
+- **Validation:** full shared suite 707 passed / 902.56s before final Codex preflight/worker fixes;
+  affected suites 112, 44, 98, 46 and final 6 service cases passed after their corresponding edits.
+  All 722 current cases were exercised across runs, not one final 722-case full run. Final lint/
+  format 135 files and strict mypy 38 runtime files pass. Prior completed tests were reused.
+
+The latest user chose Apache-2.0/local candidate only and authorized the seven-execution native
+packet. Its stop condition has fired on a denied extra Bash check. A precise continuation question
+has been presented: remaining Codex repair/cancel + Claude timeout/turn-limit, maximum 4 executions /
+345 seconds, within original 7 / 885 ceilings; no permission expansion. Do not interpret silence as
+consent or start any further real model call until the user explicitly resumes this stopped packet.
+
+Raw locator in the current takeover chat: `work/p7-live-20261007/`. The first `dual/` goal is FAILED,
+its frozen records preserved; `dual-recovered/` has approved Claude task and Codex task READY with
+review feedback and a bound native session. No repeated initial run is needed. Scripts in that chat
+are `p7_live_recovered_controller.py` (repair/observe) and `p7_fault_controller.py` (one fault case).
+Inspect `authorization.json`, `stopped-on-permission.json`, registered IDs and evidence before use.
+Do not copy approved task state or edit frozen limits to evade the retained non-start reservation.
+
+Code defect fixed: jobs.py must reconstruct the same Codex preflight overrides and re-evaluate
+Codex provider markers after worker claim; changed metadata/invocation stays blocked before spawn.
+Source is 0.1.0.dev1; refresh any interim build after final changes. Actual installed plugin caches
+already match alpha.3. Keep the default connection/shared store and all historical state untouched.
+No actual Codex GUI shutdown was tested; its prior automation refusal remains in force.
+
+## Historical state before the P7 native/distribution run
 
 - **New P7 preparation slice:** `qa/local/p7_fixture.py` generates a fresh synthetic two-child packet;
   `qa/local/p7_rehearsal.py` drives both adapter paths through fresh CLI processes with live disabled.
@@ -331,7 +377,7 @@
   day:** the repository stays public by the user's explicit choice and the branches are
   pushed.
 
-## Next bounded work
+## Historical next-work note (superseded by current continuation above)
 
 1. P4 local core/P5 offline adapter and P6 model-free installed entrypoint wiring are implemented.
    Actual Codex native Skill loading, ZCode Skill UI, shared default connection and one native Codex
