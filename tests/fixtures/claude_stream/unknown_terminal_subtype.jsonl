@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"__SESSION_ID__","model":"__MODEL__","cwd":"/redacted/worktree","tools":["Read","Edit","Write","Glob","Grep","Bash"],"mcp_servers":[],"permissionMode":"acceptEdits","apiKeySource":"none"}
+{"type":"result","subtype":"some_future_subtype","is_error":false,"num_turns":1,"session_id":"__SESSION_ID__"}

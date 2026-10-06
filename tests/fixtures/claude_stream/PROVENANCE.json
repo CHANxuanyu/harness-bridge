@@ -1,0 +1,36 @@
+{
+  "_about": "Provenance of Claude Code stream-json fixtures. None of these were captured from a real model run. Parser results on these files prove only that the parser handles these samples; real CLI output must be sampled locally (captured-live) before raising the evidence level.",
+  "generated": "2026-10-06",
+  "author": "Claude Code Cloud session (development agent), hand-written",
+  "documentation_sources": [
+    "https://code.claude.com/docs/en/headless",
+    "https://code.claude.com/docs/en/cli-reference"
+  ],
+  "cli_version_captured": null,
+  "placeholders": {
+    "__SESSION_ID__": "replaced by the stub with the --resume id or a fresh UUID",
+    "__MODEL__": "replaced by the stub with the --model value"
+  },
+  "files": {
+    "success.jsonl": {
+      "provenance": "docs-derived",
+      "assumed_fields": ["system/init: session_id, model, tools, mcp_servers, permissionMode, apiKeySource", "result: subtype, is_error, num_turns, result, session_id, total_cost_usd, usage, permission_denials"]
+    },
+    "max_turns.jsonl": {"provenance": "docs-derived", "assumed_fields": ["result.subtype = error_max_turns"]},
+    "error_during_execution.jsonl": {"provenance": "docs-derived", "assumed_fields": ["result.subtype = error_during_execution"]},
+    "permission_denied.jsonl": {"provenance": "synthetic", "assumed_fields": ["result.permission_denials[].tool_name"], "notes": "combination of error subtype + denials is assumed"},
+    "api_error_rate_limit.jsonl": {"provenance": "synthetic", "notes": "error text invented; only used to show heuristic (not structured) classification"},
+    "max_budget.jsonl": {"provenance": "synthetic", "assumed_fields": ["result.subtype = error_max_budget_usd"], "notes": "subtype name assumed from --max-budget-usd flag"},
+    "unknown_events_no_usage.jsonl": {"provenance": "synthetic", "notes": "unknown event types and a result without usage"},
+    "missing_result.jsonl": {"provenance": "synthetic", "notes": "stream ends without a result event"},
+    "model_mismatch.jsonl": {"provenance": "synthetic", "notes": "init reports a model different from --model"},
+    "resume_new_session.jsonl": {"provenance": "synthetic", "notes": "init reports a session id other than the requested --resume id"},
+    "session_id_changed.jsonl": {"provenance": "synthetic", "notes": "init and result disagree on session id"},
+    "duplicate_result.jsonl": {"provenance": "synthetic", "notes": "two result events"},
+    "unknown_terminal_subtype.jsonl": {"provenance": "synthetic", "notes": "unrecognized result subtype must never count as success"}
+  },
+  "related_captures": {
+    "../claude_help_2.1.291.txt": {"provenance": "captured-local-help", "command": "claude --help", "cli_version": "2.1.291", "inference": false},
+    "../claude_version_2.1.291.txt": {"provenance": "captured-local-help", "command": "claude --version", "cli_version": "2.1.291", "inference": false}
+  }
+}

@@ -2,7 +2,8 @@
 
 Real model dispatch requires ALL of:
   1. ``hbridge run --mode live --allow-model-usage`` on the command line;
-  2. ``[live] enabled = true`` in ``<state-dir>/config.toml`` (a local, deliberate opt-in);
+  2. ``[live] enabled = true`` and ``hooks_and_permissions_reviewed = true`` in
+     ``<state-dir>/config.toml`` (a local, deliberate opt-in after reviewing hooks/MCP/permissions);
   3. not a cloud agent environment and not nested inside another Claude Code session;
   4. no API-key / third-party provider variables in the environment (they can switch Claude Code
      from subscription to API billing); only variable *names* are reported.
@@ -51,6 +52,7 @@ class BridgeConfig:
     live_enabled: bool = False
     claude_binary: str | None = None
     allow_unlisted_flags: tuple[str, ...] = ()
+    hooks_and_permissions_reviewed: bool = False
     source: str = "defaults"
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -66,7 +68,8 @@ def load_config(state_dir: Path) -> BridgeConfig:
     live = data.get("live", {})
     if not isinstance(live, dict):
         raise BridgeError("INVALID_INPUT", "[live] in config.toml must be a table")
-    unknown = set(live) - {"enabled", "claude_binary", "allow_unlisted_flags"}
+    known = {"enabled", "claude_binary", "allow_unlisted_flags", "hooks_and_permissions_reviewed"}
+    unknown = set(live) - known
     if unknown:
         raise BridgeError("INVALID_INPUT", f"unknown [live] keys in config.toml: {sorted(unknown)}")
     enabled = live.get("enabled", False)
@@ -78,8 +81,12 @@ def load_config(state_dir: Path) -> BridgeConfig:
     flags = live.get("allow_unlisted_flags", [])
     if not isinstance(flags, list) or not all(isinstance(f, str) for f in flags):
         raise BridgeError("INVALID_INPUT", "[live] allow_unlisted_flags must be a list of strings")
+    reviewed = live.get("hooks_and_permissions_reviewed", False)
+    if not isinstance(reviewed, bool):
+        raise BridgeError("INVALID_INPUT", "[live] hooks_and_permissions_reviewed must be a bool")
     return BridgeConfig(
         live_enabled=enabled,
+        hooks_and_permissions_reviewed=reviewed,
         claude_binary=binary,
         allow_unlisted_flags=tuple(flags),
         source=str(path),
@@ -119,6 +126,11 @@ def evaluate_live_gate(
         reasons.append("--allow-model-usage was not given")
     if not config.live_enabled:
         reasons.append("[live] enabled = true is not set in the state-dir config.toml")
+    if not config.hooks_and_permissions_reviewed:
+        reasons.append(
+            "[live] hooks_and_permissions_reviewed = true is not set: review Claude Code hooks, "
+            "MCP servers and permission settings (user and project) before the first live run"
+        )
     cloud = present(CLOUD_ENV_MARKERS, env)
     if cloud:
         reasons.append("cloud agent environment detected; live dispatch is never allowed here")

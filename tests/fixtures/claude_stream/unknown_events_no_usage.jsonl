@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"__SESSION_ID__","model":"__MODEL__","cwd":"/redacted/worktree","tools":["Read","Edit","Write","Glob","Grep","Bash"],"mcp_servers":[],"permissionMode":"acceptEdits","apiKeySource":"none"}
+{"type":"stream_event","event":{"type":"content_block_delta"},"session_id":"__SESSION_ID__"}
+{"type":"system","subtype":"hook_response","session_id":"__SESSION_ID__"}
+{"type":"brand_new_event_type","payload":{"x":1}}
+{"type":"result","subtype":"success","is_error":false,"num_turns":1,"result":"done","session_id":"__SESSION_ID__"}

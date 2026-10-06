@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"__SESSION_ID__","model":"__MODEL__","cwd":"/redacted/worktree","tools":["Read","Edit","Write","Glob","Grep","Bash"],"mcp_servers":[],"permissionMode":"acceptEdits","apiKeySource":"none"}
+{"type":"assistant","message":{"id":"msg_01","type":"message","role":"assistant","model":"__MODEL__","content":[{"type":"text","text":"I will edit tagnorm/normalize.py."}],"usage":{"input_tokens":120,"output_tokens":40}},"session_id":"__SESSION_ID__"}

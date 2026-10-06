@@ -1,8 +1,8 @@
 # Status
 
-- Milestone: **M2 (repair loop + basic recovery) complete**; M3 next.
+- Milestone: **M3 (Claude CLI adapter, offline contract) complete**; M4 close-out next.
 - Validation level reached: T0 (lint/types/schema), T1 (unit), T2 (offline integration with a
-  simulated executor). T3/T4/T5: **NOT_RUN**.
+  simulated executor and with a stub binary for the Claude adapter). T3/T4/T5: **NOT_RUN**.
 
 ## Implemented and tested (offline)
 - TaskSpec/ReviewDecision contracts (pydantic, `extra="forbid"`, versioned).
@@ -21,10 +21,18 @@
 - Demos: `success` and `bug-then-repair` both pass (fresh-process status read, user checkout
   unchanged, no model calls).
 
+- M3: Claude Code adapter — pure command builder (`-p --output-format stream-json --verbose
+  --model claude-opus-5-5 --max-turns N --permission-mode ... [--resume id]`), stream parser
+  (metadata only), classification (structured vs heuristic provider errors), session binding
+  for resume, live preflight against `claude --help`, docs-derived/synthetic fixtures with
+  provenance. **Live dispatch is implemented but has never been run.**
+- Finding: installed CLI 2.1.291 does not list `--max-turns` in `--help`; live preflight
+  refuses until it is verified locally and allowed in `config.toml`.
+
 ## Tests actually run
 - `scripts/check.sh -q` on Linux / Python 3.11.17: ruff clean, mypy strict clean,
-  **140 passed** (0 skipped; live tests excluded by marker, none exist yet). The full suite
-  was run 5 times in a row green after fixing one timing assumption in a test.
+  **169 passed** (0 skipped; live tests excluded by marker, none exist yet). During M2 the
+  suite was run 5 times in a row green after fixing one timing assumption in a test.
 
 ## Blockers / constraints
 - Repository is **public** although the plan expected private; push held until the user
@@ -32,5 +40,4 @@
 - Development model: `claude-opus-5-5` (session metadata). Budget remaining: unknown.
 
 ## Next
-- M3: Claude CLI adapter (pure command builder, stream-json parser, classification,
-  no-API preflight, docs-derived fixtures with provenance).
+- M4: clean-checkout rerun, README/LOCAL_HANDOFF/SECURITY/PROTOCOL docs, manual CI workflow.

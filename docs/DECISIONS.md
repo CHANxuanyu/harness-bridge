@@ -35,3 +35,19 @@ Each entry: decision — reason. Newest last.
     carry it so a future amend cannot be approved against old evidence.
 13. **Executor stdout is kept head 1/16 + tail 3/16 of `max_artifact_bytes`** (stderr half of
     that); all lines are still parsed, so truncating the stored log never hides the final result.
+14. **Claude adapter contract tests use a stub executable** (`tests/helpers/cc_stub.py`) through
+    `run --mode mock --stub-binary` — exercises the real runner/store/verifier wiring without a
+    model. The stub must not be named `claude*` nor resolve to the real binary.
+15. **Live preflight compares used flags with `claude --help`** and fails clearly for unlisted
+    ones (2.1.291 does not list `--max-turns`); the user opts in per flag via
+    `[live] allow_unlisted_flags` after verifying locally. No flag-combination retries.
+16. **Live dispatch additionally requires `[live] hooks_and_permissions_reviewed = true`** —
+    the plan requires reviewing hooks/MCP/permissions before the first real run; this makes it
+    an explicit, recorded opt-in.
+17. **Provider errors detected only from text are BLOCKED with `classification: heuristic`** and
+    `reset_at: null`; structured signals (`permission_denials`, `error_max_budget_usd`) are
+    `classification: structured`. Nothing is retried automatically either way.
+18. **Resume only for a session id observed in this task's previous attempt with a matching
+    binding** (executor kind, task, repo identity, worktree); a resume the output does not
+    confirm → BLOCKED `resume_failed` (never silently a new session). `--strict-mcp-config` is
+    on by default to keep MCP servers out of executor runs.

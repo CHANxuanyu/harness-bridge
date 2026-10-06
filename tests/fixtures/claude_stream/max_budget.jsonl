@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"__SESSION_ID__","model":"__MODEL__","cwd":"/redacted/worktree","tools":["Read","Edit","Write","Glob","Grep","Bash"],"mcp_servers":[],"permissionMode":"acceptEdits","apiKeySource":"none"}
+{"type":"result","subtype":"error_max_budget_usd","is_error":true,"duration_ms":800,"num_turns":5,"session_id":"__SESSION_ID__","total_cost_usd":0.5,"permission_denials":[]}

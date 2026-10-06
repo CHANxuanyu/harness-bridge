@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"0b6f1e1e-0000-4000-8000-000000000999","model":"__MODEL__","tools":[],"mcp_servers":[],"permissionMode":"acceptEdits","apiKeySource":"none"}
+{"type":"result","subtype":"success","is_error":false,"num_turns":1,"result":"done","session_id":"0b6f1e1e-0000-4000-8000-000000000999"}

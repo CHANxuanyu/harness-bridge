@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from harness_bridge import SCHEMA_VERSION, __version__
+from harness_bridge.adapters.claude_code import ClaudeCodeAdapter, ClaudeSettings, help_flags
 from harness_bridge.config import (
     API_PROVIDER_ENV,
     CLOUD_ENV_MARKERS,
@@ -24,6 +25,28 @@ from harness_bridge.config import (
     present,
 )
 from harness_bridge.errors import BridgeError
+from harness_bridge.models import DEFAULT_MODEL
+
+
+def _claude_flag_check(binary: str, env: dict[str, str]) -> dict[str, Any]:
+    """Compare the flags the adapter would use with ``claude --help`` (no inference)."""
+    adapter = ClaudeCodeAdapter(
+        ClaudeSettings(DEFAULT_MODEL, 20, "acceptEdits", ("Read", "Edit"), True)
+    )
+    try:
+        listed, version = help_flags(binary, env)
+    except BridgeError as exc:
+        return {"status": "unknown", "error": exc.message}
+    used = adapter.flags_used(resume=True)
+    missing = [f for f in used if f not in listed]
+    return {
+        "status": "all_listed" if not missing else "some_flags_not_listed",
+        "cli_version": version,
+        "flags_used_by_adapter": used,
+        "flags_not_listed_in_help": missing,
+        "note": "help-text check only; flag behaviour, auth and stream schema are unverified "
+        "until a local, authorized live run",
+    }
 
 
 def _version(argv: list[str]) -> str | None:
@@ -70,6 +93,11 @@ def run_doctor(state_dir: Path, *, offline: bool) -> dict[str, Any]:
             "evidence": "offline integration tests + demos (simulated executor, T2)",
         },
         {
+            "name": "claude_code_adapter_offline_contract",
+            "status": "supported",
+            "evidence": "synthetic/docs-derived stream fixtures + stub binary (not a real CLI run)",
+        },
+        {
             "name": "claude_code_live_dispatch",
             "status": "unknown",
             "evidence": "NOT_RUN: no real Claude Code run has been performed through the bridge",
@@ -87,6 +115,11 @@ def run_doctor(state_dir: Path, *, offline: bool) -> dict[str, Any]:
             else "not yet verified on this platform",
         },
     ]
+    claude_check = (
+        _claude_flag_check(claude_path, env)
+        if claude_path and not offline
+        else {"status": "skipped", "reason": "offline" if offline else "claude not found"}
+    )
     return {
         "bridge_version": __version__,
         "schema_version": SCHEMA_VERSION,
@@ -125,5 +158,6 @@ def run_doctor(state_dir: Path, *, offline: bool) -> dict[str, Any]:
             "note": "variable names only; values are never read into output",
         },
         "live_gate_preview": gate.to_dict() if gate else None,
+        "claude_cli_flag_check": claude_check,
         "capabilities": capabilities,
     }

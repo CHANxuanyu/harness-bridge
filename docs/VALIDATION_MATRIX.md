@@ -32,16 +32,18 @@ about real model behaviour.
 | R06 | Cancel owned group; never signal unproven PIDs | implemented | T2 | `test_r06_cancel_stops_owned_process_group`, `test_sigterm_to_runner_interrupts_with_known_outcome`, `test_hard_killed_runner_never_signals_unproven_processes` | PASS (Linux) | Codex tool-session teardown behaviour must be checked locally |
 | R07 | Candidate change invalidates evidence/approve | implemented | T2 | `test_r07_candidate_change_after_evidence_invalidates_review`, `test_verify_rebinds_evidence_after_candidate_change` | PASS | — |
 | — | Crash during verification resumes without executor | implemented | T2 | `test_crash_during_verification_resumes_without_rerunning_executor` | PASS | — |
-| A01 | Claude command construction | pending (M3) | — | — | NOT_RUN | — |
-| A02 | Docs-derived Claude-like fixtures parse | pending (M3) | — | — | NOT_RUN | — |
-| A03 | Unknown event / missing usage | pending (M3) for Claude; fake parser covered | T1 | `test_unknown_events_are_tolerated` | PASS (fake) | Claude stream not yet covered |
-| A04 | Permission / quota → BLOCKED | implemented (fake, structured) | T2 | `test_a04_permission_and_quota_errors_block` | PASS (fake) | Claude classification pending |
+| A01 | Claude command construction (pure, exact model, bounded turns, explicit resume, stdin prompt) | implemented | T1 | `test_a01_*` in `tests/contracts/test_claude_adapter.py` | PASS | flags verified against `--help` text only, not behaviour |
+| A02 | Docs-derived / synthetic Claude stream fixtures parse + classify; provenance recorded | implemented | T1 (synthetic) | `test_a02_*`, `tests/fixtures/claude_stream/PROVENANCE.json` | PASS | real CLI stream schema unverified (no captured-live fixtures) |
+| A03 | Unknown event types / missing usage → tolerated, usage null | implemented | T1 | `test_a03_unknown_events_and_missing_usage`, `test_unknown_events_are_tolerated` | PASS | — |
+| A04 | Permission / quota / provider errors → BLOCKED, no retry, no invented reset | implemented | T1/T2 | `test_a04_*` (Claude, structured vs heuristic), `test_a04_permission_and_quota_errors_block` (fake) | PASS | real Claude error shapes unverified |
 | A05 | Huge stdout/stderr drained and bounded | implemented | T1/T2 | `test_large_interleaved_output_does_not_deadlock`, `test_noisy_executor_output_is_bounded` | PASS | — |
-| A06 | Chunk boundaries / partial UTF-8 | implemented (runner) | T1 | `test_lines_survive_arbitrary_chunk_boundaries_with_utf8` | PASS | Claude parser pending |
+| A06 | Chunk boundaries / partial UTF-8 | implemented | T1/T2 | `test_lines_survive_arbitrary_chunk_boundaries_with_utf8`, `test_stub_flow_with_resume_on_repair` (stub trickles 1 byte/write) | PASS | — |
 | S01 | `../`, absolute, prefix confusion, symlink escape | implemented | T1/T2 | `tests/unit/test_policy.py`, `test_show_artifact_is_restricted_to_known_names` | PASS | not a sandbox |
 | S02 | Credential-looking text redacted | implemented | T1/T2 | `test_redaction_of_fake_credentials`, `test_c08_*` | PASS | regex-based; novel token formats may pass through |
 | S03 | Verifier config / manifest tampering detected | implemented | T2 | `test_s03_tampered_verifier_config_is_detected`, `test_tampered_manifest_file_is_detected` | PASS | not tamper-proof against a same-UID attacker |
-| S04 | API env / `--bare` preflight | partial (gate checks env names) | T2 | `test_live_mode_refused_without_all_gates` | PASS (gate) | Claude-specific preflight pending (M3) |
+| S04 | API/provider env, cloud/nested markers, unreviewed hooks, unlisted flags → no live dispatch | implemented | T1/T2 | `test_s04_*`, `test_live_gate_refuses_in_cloud_even_when_configured`, `test_live_code_path_with_stub_binary_is_not_a_real_run` | PASS | misuse prevention, not billing isolation |
+| — | Claude adapter through full pipeline with a stub binary (resume on repair, resume mismatch, model mismatch risk) | implemented | T2 (stub) | `tests/integration/test_claude_stub_flow.py` | PASS | stub replays synthetic streams; not Claude |
+| — | Installed CLI flag check (`claude --help`, 2.1.291) | implemented | captured help text | `hbridge doctor`, `test_s04_preflight_reports_unlisted_max_turns_for_cli_2_1_291` | `--max-turns` NOT listed in 2.1.291 help | must be verified locally before live use |
 | T3 | Real Claude CLI single-harness run | not run | — | — | **NOT_RUN** | requires local, explicitly authorized run |
 | T4 | Real Codex/Astra → Claude loop | not run | — | — | **NOT_RUN** | requires local, explicitly authorized run |
 | T5 | Comparative evaluation | not run | — | — | **NOT_RUN** | format only (`docs/EVALUATION_PLAN.md`) |

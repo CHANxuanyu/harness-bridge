@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import sys
 import time
@@ -26,6 +27,12 @@ from harness_bridge.adapters.base import (
     InvocationContext,
     ParsedEvent,
     TaskPacket,
+)
+from harness_bridge.adapters.claude_code import (
+    ClaudeCodeAdapter,
+    ClaudeSettings,
+    help_flags,
+    preflight,
 )
 from harness_bridge.adapters.fake import FakeExecutorAdapter
 from harness_bridge.artifacts import (
@@ -243,16 +250,55 @@ class Bridge:
 
     # --- run -----------------------------------------------------------------------------
 
-    def _adapter(self, spec: TaskSpec, mode: str, executor_binary: str | None) -> ExecutorAdapter:
+    def _adapter(
+        self, spec: TaskSpec, mode: str, executor_binary: str | None
+    ) -> tuple[ExecutorAdapter, str | None]:
+        """Pick the adapter and the executable it will launch (never a real binary in mock)."""
         if spec.executor.kind == "fake":
             if mode != "mock":
                 raise BridgeError("INVALID_INPUT", "the fake executor only runs in mock mode")
+            if executor_binary:
+                raise BridgeError("INVALID_INPUT", "--stub-binary applies to claude-code only")
             assert spec.executor.scenario is not None
-            return FakeExecutorAdapter(spec.executor.scenario)
-        raise BridgeError(
-            "PREFLIGHT_FAILED",
-            f"executor kind {spec.executor.kind!r} is not available in this build",
+            return FakeExecutorAdapter(spec.executor.scenario), None
+        adapter = ClaudeCodeAdapter(
+            ClaudeSettings(
+                requested_model=spec.executor.requested_model,
+                max_turns=spec.limits.max_turns_per_attempt,
+                permission_mode=spec.executor.permission_mode,
+                allowed_tools=tuple(spec.executor.allowed_tools),
+                strict_mcp_config=spec.executor.strict_mcp_config,
+            )
         )
+        real = self.config.claude_binary or shutil.which("claude", path=self.env.get("PATH"))
+        if mode == "mock":
+            if not executor_binary:
+                raise BridgeError(
+                    "PREFLIGHT_FAILED",
+                    "claude-code in mock mode needs --stub-binary (a non-model stand-in for "
+                    "contract tests); a real run requires --mode live and the live gate",
+                )
+            stub = os.path.realpath(executor_binary)
+            looks_real = os.path.basename(stub).lower().startswith("claude") or (
+                real is not None and os.path.realpath(real) == stub
+            )
+            if not os.path.isabs(executor_binary) or looks_real:
+                raise BridgeError(
+                    "PREFLIGHT_FAILED",
+                    "--stub-binary must be an absolute path to a stand-in that is not the real "
+                    "claude executable (and not named 'claude*')",
+                )
+            if not os.access(stub, os.X_OK):
+                raise BridgeError("PREFLIGHT_FAILED", f"stub binary {stub} is not executable")
+            return adapter, stub
+        if executor_binary:
+            raise BridgeError("INVALID_INPUT", "--stub-binary is only allowed in mock mode")
+        if real is None:
+            raise BridgeError(
+                "PREFLIGHT_FAILED",
+                "claude executable not found (set [live] claude_binary in config.toml)",
+            )
+        return adapter, real
 
     def _should_stop_factory(self, task_id: str) -> Callable[[], str | None]:
         def should_stop() -> str | None:
@@ -290,7 +336,7 @@ class Bridge:
                     task_id=task_id,
                     details=gate.to_dict(),
                 )
-        adapter = self._adapter(spec, mode, executor_binary)
+        adapter, binary = self._adapter(spec, mode, executor_binary)
         if task.state != S.READY:
             raise BridgeError(
                 "STATE_CONFLICT",
@@ -335,10 +381,20 @@ class Bridge:
             mode=mode,
             python_executable=self.python,
             base_env=self.env,
-            executor_binary=executor_binary,
+            executor_binary=binary,
             resume_session_id=resume,
         )
         invocation = adapter.build_invocation(packet, ctx)
+        if mode == "live":
+            assert isinstance(adapter, ClaudeCodeAdapter) and binary is not None
+            listed, version = help_flags(binary, self.env)
+            preflight(
+                adapter,
+                invocation.argv,
+                listed_flags=listed,
+                allow_unlisted=self.config.allow_unlisted_flags,
+            )
+            invocation.notes.append(f"claude --version: {version}")
         launch_token = uuid.uuid4().hex
         evidence = _evidence_level(spec.executor.kind, mode)
         with self.store.transaction() as cur:
@@ -847,6 +903,24 @@ class Bridge:
         }
 
     def _resume_session(self, task: TaskRecord, spec: TaskSpec) -> str | None:
+        """A session id is reused only if this task's previous attempt observed it for the same
+        executor kind, repository and worktree. Otherwise the repair starts a new session."""
+        if spec.executor.kind != "claude-code" or not spec.executor.resume_on_repair:
+            return None
+        attempts = self.store.list_attempts(task.task_id)
+        if not attempts:
+            return None
+        prev = attempts[-1]
+        binding = prev.session_binding or {}
+        if (
+            prev.session_id
+            and prev.exit_confirmed
+            and binding.get("executor_kind") == "claude-code"
+            and binding.get("task_id") == task.task_id
+            and binding.get("repo_identity") == task.repo_identity
+            and binding.get("worktree") == task.worktree_path
+        ):
+            return prev.session_id
         return None
 
     # --- verification and manifest -----------------------------------------------------------
@@ -1219,6 +1293,13 @@ class Bridge:
             risks.append("executor claimed tests passed but bridge verification did not pass")
         if manifest["diff"].get("truncated"):
             risks.append("stored diff is truncated; inspect the worktree for full content")
+        pin = reported.get("model_pin")
+        if pin == "mismatch":
+            risks.append("observed model differs from the requested model pin")
+        elif pin == "unknown":
+            risks.append("requested model pin was not confirmed by executor output")
+        if reported.get("permission_denials"):
+            risks.append(f"executor hit {reported['permission_denials']} permission denial(s)")
         out.update(
             {
                 "changes": {
