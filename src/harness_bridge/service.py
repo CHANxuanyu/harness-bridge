@@ -12,6 +12,7 @@ import json
 import os
 import sqlite3
 import sys
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -50,6 +51,8 @@ from harness_bridge.policy import (
     symlink_escapes,
 )
 from harness_bridge.runner import ProcessSpec, RunLimits, run_process, runner_identity
+from harness_bridge.runner import group_alive as _group_alive
+from harness_bridge.runner import runner_alive as _runner_alive
 from harness_bridge.state import AttemptOutcome, TaskState
 from harness_bridge.store import AttemptRecord, Store, TaskRecord, new_id, utc_now
 from harness_bridge.verification import (
@@ -556,12 +559,270 @@ class Bridge:
                     src,
                     S.VERIFYING,
                     reason="executor_exited",
+                    details={"runner": runner_identity(), "executor_exit_confirmed": True},
                     attempt_id=attempt_id,
                     payload={"outcome": o.value},
                 )
         if self.store.get_task(task_id).state == S.VERIFYING:
+            _fault_point("after_verifying_commit")
             self._verify_and_finalize(task_id, attempt_id, origin="run")
         return self._run_receipt(task_id, attempt_id)
+
+    # --- verify / recover / cancel -----------------------------------------------------------
+
+    def verify(self, task_id: str) -> dict[str, Any]:
+        """Re-snapshot and re-run the frozen verifiers for the current attempt (no executor)."""
+        task = self.store.get_task(task_id)
+        self._spec(task)
+        if task.state != S.AWAITING_REVIEW:
+            raise BridgeError(
+                "STATE_CONFLICT",
+                f"verify requires state AWAITING_REVIEW, task is {task.state}",
+                task_id=task_id,
+                details={"actual_state": task.state.value},
+            )
+        assert task.current_attempt_id is not None
+        with self.store.transaction() as cur:
+            self.store.transition(
+                cur,
+                task_id,
+                S.AWAITING_REVIEW,
+                S.VERIFYING,
+                reason="reverify_requested",
+                details={"runner": runner_identity(), "executor_exit_confirmed": True},
+                event_type="verification_requested",
+                attempt_id=task.current_attempt_id,
+            )
+        self._verify_and_finalize(task_id, task.current_attempt_id, origin="verify")
+        return self._run_receipt(task_id, task.current_attempt_id)
+
+    def recover(
+        self, task_id: str, *, resolve: str | None = None, acknowledge_unknown: bool = False
+    ) -> dict[str, Any]:
+        """Inspect a task after a crash/interruption and apply only model-free safe actions.
+
+        Never re-dispatches an executor by itself. ``resolve='retry'|'fail'`` records an explicit
+        human decision for BLOCKED / INTERRUPTED tasks.
+        """
+        task = self.store.get_task(task_id)
+        spec = self._spec(task)
+        attempt = (
+            self.store.get_attempt(task.current_attempt_id) if task.current_attempt_id else None
+        )
+        details = task.state_details or {}
+        report: dict[str, Any] = {"task_id": task_id, "state_before": task.state.value}
+        actions: list[str] = []
+
+        if resolve is not None:
+            if resolve not in ("retry", "fail"):
+                raise BridgeError("USAGE_ERROR", "--resolve must be 'retry' or 'fail'")
+            if task.state not in (S.BLOCKED, S.INTERRUPTED):
+                raise BridgeError(
+                    "STATE_CONFLICT",
+                    f"--resolve applies to BLOCKED or INTERRUPTED tasks, task is {task.state}",
+                    task_id=task_id,
+                )
+            unknown = task.state == S.INTERRUPTED and not details.get("outcome_known", False)
+            if resolve == "retry" and unknown:
+                pg = attempt.pgid if attempt else None
+                if pg is not None and _group_alive(pg):
+                    raise BridgeError(
+                        "CANNOT_CONFIRM_EXIT",
+                        f"process group {pg} of the interrupted attempt still has live members; "
+                        "stop it yourself before retrying (the bridge does not signal processes "
+                        "it cannot prove it owns)",
+                        task_id=task_id,
+                    )
+                if not acknowledge_unknown:
+                    raise BridgeError(
+                        "CANNOT_CONFIRM_EXIT",
+                        "the previous attempt's outcome is unknown; a retry could run two "
+                        "executors on one worktree. Check that no executor is still running, then "
+                        "repeat with --acknowledge-unknown",
+                        task_id=task_id,
+                    )
+            exhausted = task.attempts_used >= spec.limits.max_attempts
+            target = S.FAILED if resolve == "fail" or exhausted else S.READY
+            reason = (
+                "resolved_fail"
+                if resolve == "fail"
+                else ("attempt_budget_exhausted" if exhausted else "resolved_retry")
+            )
+            with self.store.transaction() as cur:
+                self.store.transition(
+                    cur,
+                    task_id,
+                    task.state,
+                    target,
+                    reason=reason,
+                    event_type="recovery_resolved",
+                    payload={"resolve": resolve, "acknowledged_unknown": acknowledge_unknown},
+                    details={"previous_state": task.state.value, "previous_details": details},
+                )
+            actions.append(f"{task.state.value} -> {target.value} ({reason})")
+        elif task.state == S.CREATED:
+            self._prepare_workspace(task_id)
+            actions.append("workspace prepared (no model involved): CREATED -> READY")
+        elif task.state in (S.STARTING, S.RUNNING, S.VERIFYING):
+            runner = details.get("runner") if task.state == S.VERIFYING else None
+            runner = runner or (attempt.runner if attempt else None)
+            alive = _runner_alive(runner)
+            report["runner_alive"] = alive
+            if alive is True:
+                actions.append("runner is still active; nothing to recover")
+            elif alive is None and not acknowledge_unknown:
+                actions.append(
+                    "runner liveness cannot be determined; no change (fail closed). Re-run with "
+                    "--acknowledge-unknown after checking that no hbridge run is active"
+                )
+            elif task.state == S.VERIFYING:
+                self._claim_verification(task, "recover")
+                assert attempt is not None
+                self._verify_and_finalize(task_id, attempt.attempt_id, origin="recover")
+                actions.append("executor exit was already confirmed; verification re-run")
+            else:
+                pg = attempt.pgid if attempt else None
+                group = None if pg is None else _group_alive(pg)
+                phase = "launch" if task.state == S.STARTING else "executor"
+                with self.store.transaction() as cur:
+                    self.store.transition(
+                        cur,
+                        task_id,
+                        task.state,
+                        S.INTERRUPTED,
+                        reason="outcome_unknown",
+                        details={
+                            "outcome_known": False,
+                            "phase": phase,
+                            "why": "runner is gone; executor outcome cannot be confirmed",
+                            "recorded_pgid": pg,
+                            "process_group_possibly_alive": group,
+                            "signalled": False,
+                        },
+                        event_type="recovery_interrupted",
+                        attempt_id=attempt.attempt_id if attempt else None,
+                    )
+                actions.append(
+                    f"{task.state.value} -> INTERRUPTED (outcome unknown; no automatic "
+                    "re-dispatch, no signals sent)"
+                )
+        elif (
+            task.state == S.INTERRUPTED
+            and details.get("outcome_known")
+            and details.get("phase") == "verification"
+            and attempt is not None
+        ):
+            with self.store.transaction() as cur:
+                self.store.transition(
+                    cur,
+                    task_id,
+                    S.INTERRUPTED,
+                    S.VERIFYING,
+                    reason="resume_verification",
+                    details={"runner": runner_identity(), "executor_exit_confirmed": True},
+                    event_type="verification_requested",
+                    attempt_id=attempt.attempt_id,
+                )
+            self._verify_and_finalize(task_id, attempt.attempt_id, origin="recover")
+            actions.append("interrupted verification re-run (executor not re-run)")
+        else:
+            actions.append("no automatic action for this state")
+        after = self.store.get_task(task_id)
+        report.update(
+            {
+                "state_after": after.state.value,
+                "state_reason": after.state_reason,
+                "actions": actions,
+                "attempts_used": after.attempts_used,
+                "max_attempts": spec.limits.max_attempts,
+                "options": _next_actions(after.state),
+            }
+        )
+        return report
+
+    def _claim_verification(self, task: TaskRecord, origin: str) -> None:
+        """Take over a VERIFYING task whose runner died (CAS on revision)."""
+        with self.store.transaction() as cur:
+            details = dict(task.state_details or {})
+            details["runner"] = runner_identity()
+            details["claimed_by"] = origin
+            cur.execute(
+                "UPDATE tasks SET state_details=?, revision=revision+1 "
+                "WHERE task_id=? AND state=? AND revision=?",
+                (
+                    json.dumps(details, sort_keys=True),
+                    task.task_id,
+                    S.VERIFYING.value,
+                    task.revision,
+                ),
+            )
+            if cur.rowcount != 1:
+                raise BridgeError(
+                    "STATE_CONFLICT",
+                    "task changed while claiming verification",
+                    task_id=task.task_id,
+                )
+            self.store.add_event(cur, task.task_id, "verification_claimed", {"origin": origin})
+
+    def cancel(
+        self, task_id: str, *, wait_seconds: float = 0.0, acknowledge_unknown: bool = False
+    ) -> dict[str, Any]:
+        task = self.store.get_task(task_id)
+        details = task.state_details or {}
+        if task.state in (S.SUCCEEDED, S.FAILED, S.CANCELLED):
+            raise BridgeError("STATE_CONFLICT", f"task is already {task.state}", task_id=task_id)
+        unknown = task.state == S.INTERRUPTED and not details.get("outcome_known", False)
+        if unknown and not acknowledge_unknown:
+            raise BridgeError(
+                "CANNOT_CONFIRM_EXIT",
+                "the interrupted attempt's process exit is unknown, so cancellation cannot be "
+                "confirmed. Check for leftover executor processes, then repeat with "
+                "--acknowledge-unknown (or use recover --resolve fail)",
+                task_id=task_id,
+            )
+        if task.state in (S.STARTING, S.RUNNING, S.VERIFYING):
+            with self.store.transaction() as cur:
+                self.store.update_task(cur, task_id, cancel_requested=1)
+                self.store.add_event(cur, task_id, "cancel_requested", {})
+            runner = details.get("runner") if task.state == S.VERIFYING else None
+            attempt = (
+                self.store.get_attempt(task.current_attempt_id) if task.current_attempt_id else None
+            )
+            runner = runner or (attempt.runner if attempt else None)
+            alive = _runner_alive(runner)
+            deadline = time.monotonic() + max(0.0, wait_seconds)
+            while alive is True and time.monotonic() < deadline:
+                if self.store.get_task(task_id).state not in (S.STARTING, S.RUNNING, S.VERIFYING):
+                    break
+                time.sleep(0.1)
+            now = self.store.get_task(task_id)
+            if now.state == S.CANCELLED:
+                return {"task_id": task_id, "status": "cancelled", "state": now.state.value}
+            return {
+                "task_id": task_id,
+                "status": "cancellation_pending",
+                "state": now.state.value,
+                "runner_alive": alive,
+                "note": (
+                    "the foreground runner will stop its own process group and record CANCELLED"
+                    if alive
+                    else "runner is not alive; nothing was signalled. Run `hbridge recover`."
+                ),
+            }
+        with self.store.transaction() as cur:
+            self.store.transition(
+                cur,
+                task_id,
+                task.state,
+                S.CANCELLED,
+                reason="cancelled",
+                details={
+                    "previous_state": task.state.value,
+                    "residual_process_risk": task.state == S.INTERRUPTED
+                    and not details.get("outcome_known", False),
+                },
+            )
+        return {"task_id": task_id, "status": "cancelled", "state": S.CANCELLED.value}
 
     def _run_receipt(self, task_id: str, attempt_id: str) -> dict[str, Any]:
         task = self.store.get_task(task_id)

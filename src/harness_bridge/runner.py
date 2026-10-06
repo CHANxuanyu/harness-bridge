@@ -262,10 +262,27 @@ def runner_alive(identity: dict[str, Any] | None) -> bool | None:
         return False
     except PermissionError:
         return None
+    if _is_zombie(pid):
+        return False
     marker = process_start_marker(pid)
     if marker is None or identity.get("start_marker") is None:
         return None
     return bool(marker == identity["start_marker"])
+
+
+def _is_zombie(pid: int) -> bool:
+    try:
+        raw = Path(f"/proc/{pid}/stat").read_text()
+        return raw[raw.rfind(")") + 2 :].split()[0] == "Z"
+    except (OSError, IndexError):
+        pass
+    try:
+        out = subprocess.run(
+            ["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, timeout=10, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return out.stdout.decode().strip().startswith("Z")
 
 
 # --- the runner ---------------------------------------------------------------------------------

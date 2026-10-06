@@ -121,6 +121,8 @@ class Fixture:
         try:
             payload = json.loads(proc.stdout)
         except json.JSONDecodeError:
+            if check_ok is None:  # e.g. an injected crash: no receipt is expected
+                return proc.returncode, {"stdout": proc.stdout, "stderr": proc.stderr}
             raise AssertionError(f"non-JSON CLI output: {proc.stdout!r} {proc.stderr!r}") from None
         if check_ok is not None:
             assert payload["ok"] is check_ok, (payload, proc.stderr)

@@ -88,6 +88,37 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("task_id")
     p.add_argument("--file", required=True, help="ReviewDecision JSON file ('-' for stdin)")
 
+    p = sub.add_parser("verify", parents=[common], help="re-run frozen verifiers (no executor)")
+    p.add_argument("task_id")
+
+    p = sub.add_parser("recover", parents=[common], help="inspect/repair state after a crash")
+    p.add_argument("task_id")
+    p.add_argument(
+        "--resolve",
+        choices=["retry", "fail"],
+        default=None,
+        help="explicit decision for a BLOCKED or INTERRUPTED task",
+    )
+    p.add_argument(
+        "--acknowledge-unknown",
+        action="store_true",
+        help="accept that a previous executor's exit could not be confirmed",
+    )
+
+    p = sub.add_parser("cancel", parents=[common], help="cancel a task")
+    p.add_argument("task_id")
+    p.add_argument(
+        "--wait",
+        type=float,
+        default=10.0,
+        help="seconds to wait for a live runner to confirm (default 10)",
+    )
+    p.add_argument(
+        "--acknowledge-unknown",
+        action="store_true",
+        help="cancel an INTERRUPTED task whose executor exit is unknown",
+    )
+
     p = sub.add_parser("demo", parents=[common], help="offline demo with the fake executor")
     p.add_argument("--scenario", choices=["success", "bug-then-repair"], required=True)
     p.add_argument("--workdir", default=None, help="directory for the demo (default: temp dir)")
@@ -156,6 +187,22 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
             return bridge.artifacts(args.task_id, attempt_seq=args.attempt, show=args.show)
         if cmd == "review":
             return bridge.review(args.task_id, _read_json_file(args.file))
+        if cmd == "verify":
+            _install_signal_handlers(flag)
+            return bridge.verify(args.task_id)
+        if cmd == "recover":
+            _install_signal_handlers(flag)
+            return bridge.recover(
+                args.task_id,
+                resolve=args.resolve,
+                acknowledge_unknown=args.acknowledge_unknown,
+            )
+        if cmd == "cancel":
+            return bridge.cancel(
+                args.task_id,
+                wait_seconds=args.wait,
+                acknowledge_unknown=args.acknowledge_unknown,
+            )
         raise BridgeError("USAGE_ERROR", f"unknown command {cmd!r}")
     finally:
         bridge.close()
