@@ -5,6 +5,16 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+Workbench levels (plan v2.0 §8): T1 unit · T2-W offline integration (real PTY/subprocess/git/
+SQLite/loopback HTTP with **stub** harness executables) · UI-offline (browser/window with stub
+harnesses) · T3-W real single native harness session on the user's machine · T4-W real Claude Code +
+Codex sessions with handoff.
+
+## W0 product direction v2.0 — 2026-10-07
+
+Documentation only (T0): product form, plan v2.0 with superseded-scope table, decisions 112–117,
+AGENTS rules. No code, tests, model calls or credential reads in this step.
+
 ## P8 native initialization / Start Plan / route templates — 2026-10-07
 
 **Native non-inference, separate from T3/T4:** read-only account/model/MCP/hooks UI plus two

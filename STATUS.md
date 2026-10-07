@@ -1,5 +1,26 @@
 # Status
 
+## W0 product direction v2.0 — RepoBridge workbench — 2026-10-07
+
+The user redirected the product: **RepoBridge is a project-centred, lightweight local desktop
+workbench that runs native Codex and Claude Code CLI sessions in one window.** It is not a further
+Advisor/Executor orchestration layer and not a dashboard over the task scheduler.
+[PRODUCT_FORM.md](docs/PRODUCT_FORM.md) is rewritten; [PROJECT_PLAN.md](docs/PROJECT_PLAN.md) v2.0
+lists, row by row, which v1.5 scope is superseded (§0) and keeps the v1.5 text as Appendix A.
+Secretary's product goal is untouched. AGENTS.md now carries workbench rules (interactive native
+CLIs only on user action, no token reads, API/provider env stripped, stub harnesses in tests) and
+records that commits are authored by the repository owner.
+
+Technical decision (DECISIONS 112–117): Python `workbench` subpackage, stdlib loopback HTTP/SSE
+server, optional pywebview window with `--browser` fallback, vendored xterm.js; native interactive
+CLIs in an App-owned PTY; record-only Claude hooks and per-invocation Codex notify/OSC 9 side
+channels; separate `workbench.sqlite3`. Existing kernel, plugins and P7/P8 evidence are retained;
+P8 Astra/Opus/Flash routing is paused, not deleted.
+
+This step is documentation only: no code, model call, credential read, push or release.
+Next: W1 — a desktop window that really runs native sessions; then W2 session management and
+W3 manual handoff across the two harnesses in one project.
+
 ## P8 native findings and Advisor routing source — 2026-10-07
 
 Source58a3771 is already pushed. This continuation adds explicit Z.ai/BigModel **Start Plan**

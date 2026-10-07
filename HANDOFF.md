@@ -1,5 +1,15 @@
 # Handoff
 
+## W0 product direction v2.0 — 2026-10-07
+
+Read [PRODUCT_FORM.md](docs/PRODUCT_FORM.md) and [PROJECT_PLAN.md](docs/PROJECT_PLAN.md) §0–§9
+first; everything below this section describes the paused Advisor/Executor line and its evidence.
+The workbench lives in `src/harness_bridge/workbench/` (from W1). Development rules: AGENTS.md.
+Boundaries still in force: no real `claude`/`codex` spawn in tests, no token reads, no API billing
+switch, no push/release without the user's instruction, commit author = repository owner.
+
+Next work package: W1 desktop window + native sessions (see STATUS for the latest state).
+
 ## P8 native findings and Advisor routing source — 2026-10-07
 
 Source58a3771 is already pushed. This continuation adds explicit Z.ai/BigModel **Start Plan**
