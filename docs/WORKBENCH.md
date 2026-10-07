@@ -5,10 +5,16 @@ _2026-10-07，作者 Xuanyu CHAN。产品范围见 [PROJECT_PLAN.md](PROJECT_PLA
 
 ## 运行
 
+在包含本代码的检出目录中运行（`hbridge app` 首次出现在提交 `aa9a404`；较早的分支没有 `app` 命令和
+`desktop` extra）。当前开发版本位于 worktree
+`/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9`
+（分支 `claude/repobridge-product-direction-8e26f9`），尚未合并到 `/Users/chan/Downloads/harness-bridge`
+所在的 `local/glm-macos-validation`。
+
 ```bash
-uv sync --extra desktop        # 安装可选的原生窗口依赖 pywebview（只需一次）
-uv run hbridge app             # 打开 RepoBridge 原生窗口（也可用 `uv run repobridge`）
-uv run hbridge app --browser   # 不用 pywebview，在默认浏览器中打开同一界面
+cd /Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9 && uv sync --frozen --extra desktop && uv run --frozen --extra desktop hbridge app --help
+uv run --frozen --extra desktop hbridge app             # 原生窗口（也可用 repobridge）
+uv run --frozen --extra desktop hbridge app --browser   # 在默认浏览器中打开同一界面
 ```
 
 - 请从 Finder 打开的终端或普通终端启动，不要在另一个 agent 会话（例如 Claude Code 的终端）里启动：
@@ -86,9 +92,7 @@ src/harness_bridge/workbench/
 在普通终端（不是 agent 会话）中：
 
 ```bash
-cd <harness-bridge 仓库>
-uv sync --extra desktop
-uv run hbridge app
+cd /Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9 && uv sync --frozen --extra desktop && uv run --frozen --extra desktop hbridge app
 ```
 
 1. 顶栏显示 Claude Code 2.1.291 与 Codex 0.162.0-alpha.2；若出现“未传递 API 变量”，确认这是你期望的。

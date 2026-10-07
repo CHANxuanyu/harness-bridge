@@ -10,9 +10,12 @@
 > available with its evidence, but it is no longer the first-version path.
 
 ```bash
-uv sync --extra desktop   # optional native window (pywebview)
-uv run hbridge app        # RepoBridge window; add --browser to use the default browser
+uv sync --frozen --extra desktop                  # optional native window (pywebview)
+uv run --frozen --extra desktop hbridge app       # add --browser to use the default browser
 ```
+
+Run these in a checkout that contains commit `aa9a404` or later; older branches have neither the
+`app` command nor the `desktop` extra.
 
 Start it from a normal terminal (not from inside another agent session). Usage, implementation and
 evidence levels: [docs/WORKBENCH.md](docs/WORKBENCH.md). Real Claude Code / Codex sessions in the App

@@ -8,7 +8,12 @@ State: workbench code in `src/harness_bridge/workbench/`, tests in
 Read [WORKBENCH.md](docs/WORKBENCH.md) (run/use/structure/evidence/W4 steps) and DECISIONS 112–122.
 
 To continue:
-1. W4: in a normal terminal (not an agent session) `uv sync --extra desktop && uv run hbridge app`,
+0. Location: this code is on branch `claude/repobridge-product-direction-8e26f9` in worktree
+   `/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9`; the main
+   checkout `/Users/chan/Downloads/harness-bridge` (`local/glm-macos-validation`, f2cd6e6) does not contain
+   it until the user chooses to merge. Running there gives "Extra desktop is not defined"/"invalid choice: app".
+1. W4: in a normal terminal (not an agent session), from that worktree:
+   `uv sync --frozen --extra desktop && uv run --frozen --extra desktop hbridge app`,
    then follow WORKBENCH.md "真实验收步骤". Record results as T3-W/T4-W in VALIDATION_MATRIX with
    exact CLI versions; keep failures as found.
 2. Likely follow-ups: native quirks of Claude/Codex TUIs inside xterm.js (keys, IME, alt-screen),
