@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RepoBridge</title>
+<link rel="stylesheet" href="/static/vendor/xterm/xterm.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand"><span class="brand-mark"></span>RepoBridge</div>
+    <div id="harness-chips" class="chips"></div>
+    <div class="spacer"></div>
+    <div id="env-chips" class="chips"></div>
+    <div id="conn" class="conn" title="与本地内核的连接"></div>
+  </header>
+  <aside id="sidebar">
+    <div class="sidebar-head">
+      <span class="section-label">项目</span>
+      <button id="add-project" class="btn btn-small">＋ 添加项目</button>
+    </div>
+    <div id="project-list"></div>
+  </aside>
+  <main id="main">
+    <div id="session-bar"></div>
+    <div id="banner"></div>
+    <div id="stage">
+      <div id="terminals"></div>
+      <div id="empty-state"></div>
+    </div>
+  </main>
+  <section id="inspector">
+    <nav id="tabs" class="tabs">
+      <button data-tab="activity" class="tab">活动</button>
+      <button data-tab="changes" class="tab">文件变更</button>
+      <button data-tab="details" class="tab">会话</button>
+    </nav>
+    <div id="panel"></div>
+  </section>
+</div>
+<div id="modal-root"></div>
+<div id="toasts"></div>
+<script src="/static/vendor/xterm/xterm.js"></script>
+<script src="/static/vendor/xterm/addon-fit.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

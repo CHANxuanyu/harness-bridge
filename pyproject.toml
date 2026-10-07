@@ -9,8 +9,12 @@ authors = [{ name = "Xuanyu CHAN" }]
 dependencies = ["pydantic>=2.6,<3"]
 classifiers = ["Private :: Do Not Upload"]
 
+[project.optional-dependencies]
+desktop = ["pywebview>=6.2,<7"]
+
 [project.scripts]
 hbridge = "harness_bridge.cli:main"
+repobridge = "harness_bridge.workbench.app:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
@@ -53,3 +57,7 @@ strict = true
 warn_unreachable = true
 plugins = ["pydantic.mypy"]
 mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = ["webview"]
+ignore_missing_imports = true

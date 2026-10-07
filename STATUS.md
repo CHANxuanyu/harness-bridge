@@ -1,5 +1,41 @@
 # Status
 
+## W1–W3 RepoBridge workbench — 2026-10-07
+
+**A desktop window that runs native Claude Code / Codex sessions is implemented**
+(`src/harness_bridge/workbench/`, `hbridge app` / `repobridge`). Projects organise sessions;
+each session runs one harness's **interactive** CLI in an App-owned PTY rendered by xterm.js;
+the CLI keeps conversation, tools, permissions, login and billing. Same-project session management
+(list, stop, native resume, restart-before-first-turn, rename/remove, single writer per real
+workdir, reconcile after App restart) and manual cross-harness handoff (editable note from observed
+facts + user progress, new session in the same project, chain recorded, note kept out of the repo)
+are in place. Guide, structure and evidence: [WORKBENCH.md](docs/WORKBENCH.md).
+
+Visibility: Claude Code record-only hooks (prompt, tools, permission requests, stop, session ID
+confirmation); Codex per-invocation notify (turn completion + thread ID) and OSC 9 approval
+notifications; read-only git changes/diff; exit code/signal/failure reason/output tail; resume
+state. Session env drops API/provider variables (names shown); real sessions are refused when the
+App itself runs inside an agent session (`CLAUDECODE`) or a cloud agent environment.
+
+Evidence: T1 + T2-W with **stub CLIs** (real PTY/subprocess/git/SQLite/loopback HTTP), UI-offline
+in the built-in browser, and the pywebview 6.2.1 window opened (1440×900 on screen, WebKit connected
+to the loopback server) with stub CLIs. Real discovery is model-free only: `claude --version`
+2.1.291 and ChatGPT.app-bundled `codex --version` 0.162.0-alpha.2. **Real native sessions in the App
+(T3-W/T4-W) have not been run:** this development session itself runs inside Claude Code, so it may
+not spawn real harness sessions; W4 steps for the user are in WORKBENCH.md.
+
+Checks: full offline `scripts/check.sh` **891 passed / 17m10s** (ruff, format, strict mypy 52 files);
+after the final small changes (Codex `--no-daemon`, run-dir cleanup on refusal, UI focus) lint/format/
+mypy and the 30 workbench tests were re-run and pass (18s). Wheel build includes static assets,
+the `desktop` extra and both entry points. No failing case removed or skipped.
+
+No model call, credential read, push, tag or release. Optional dependency `desktop` = pywebview
+(lock updated); xterm.js 6.0.0 / addon-fit 0.11.0 vendored unmodified (MIT, NOTICE updated).
+
+Next: W4 — the user runs the real acceptance in WORKBENCH.md (or authorizes a bounded run outside an
+agent session); then fix what it finds, and decide on `.app` packaging. Later: worktree-parallel
+sessions, read-only sessions, ZCode, structured conversation view.
+
 ## W0 product direction v2.0 — RepoBridge workbench — 2026-10-07
 
 The user redirected the product: **RepoBridge is a project-centred, lightweight local desktop

@@ -9,6 +9,15 @@
 > [project plan](docs/PROJECT_PLAN.md). The Advisor/Executor kernel described below remains
 > available with its evidence, but it is no longer the first-version path.
 
+```bash
+uv sync --extra desktop   # optional native window (pywebview)
+uv run hbridge app        # RepoBridge window; add --browser to use the default browser
+```
+
+Start it from a normal terminal (not from inside another agent session). Usage, implementation and
+evidence levels: [docs/WORKBENCH.md](docs/WORKBENCH.md). Real Claude Code / Codex sessions in the App
+have not yet been accepted on this machine; offline checks use stub CLIs.
+
 > **Experimental local candidate:** runtime 0.1.0.dev2, Advisor plugin alpha.6, Apache-2.0.
 > Real Claude/Codex parallel work, exact-session repair and integrated local delivery passed.
 > The corrected Codex cancellation retest and Claude native turn-stop also passed.

@@ -10,6 +10,27 @@ SQLite/loopback HTTP with **stub** harness executables) · UI-offline (browser/w
 harnesses) · T3-W real single native harness session on the user's machine · T4-W real Claude Code +
 Codex sessions with handoff.
 
+## W1–W3 workbench — 2026-10-07
+
+| ID | Check | Level | Result |
+|---|---|---|---|
+| W01 | Window opens; harness availability/version or reason shown | UI-offline + window (stub CLIs); real `--version` discovery | pass |
+| W02 | Claude session in PTY; input/output; preassigned ID confirmed by SessionStart | T2-W stub | pass |
+| W03 | Codex session; thread ID observed only after first turn; resume keeps it | T2-W stub | pass |
+| W04 | Second writer on the same realpath refused (same and second App instance) | T1 + T2-W | pass |
+| W05 | Stop = SIGHUP group, exit confirmed; failure code/reason/output tail kept | T2-W stub | pass |
+| W06 | Restart: dead run → interrupted + resumable; live orphan keeps slot, terminable | T2-W stub | pass |
+| W07 | Permission requests visible (Claude PermissionRequest; Codex OSC 9), answered in terminal | T2-W stub + UI-offline | pass |
+| W08 | Git changes and per-file diff, path traversal refused | T2-W + UI-offline | pass |
+| W09 | Handoff A→B across harnesses, source must be stopped, chain kept, note outside repo | T2-W + UI-offline | pass |
+| W10 | API/provider env stripped (names only); nested/cloud refusal; no forbidden flags | T1 + T2-W | pass |
+| W11 | Loopback only; token cookie, Host/Origin/X-RepoBridge/JSON guards; CSP | T2-W | pass |
+| W12 | Offline evidence uses stub CLIs only; sentinel binaries untouched | suite | pass |
+| T3-W/T4-W | Real Claude Code / Codex sessions, resume and handoff in the App | — | **not run** (development session is inside Claude Code; user-run or separately authorized) |
+
+Stub CLIs emulate only the interfaces the App relies on (tty, hooks via `--settings`, notify,
+OSC 9). Passing them does not prove the real CLIs behave identically; W4 decides that.
+
 ## W0 product direction v2.0 — 2026-10-07
 
 Documentation only (T0): product form, plan v2.0 with superseded-scope table, decisions 112–117,

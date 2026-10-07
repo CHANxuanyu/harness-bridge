@@ -1,5 +1,24 @@
 # Handoff
 
+## W1–W3 workbench implemented; W4 real acceptance next — 2026-10-07
+
+State: workbench code in `src/harness_bridge/workbench/`, tests in
+`tests/unit/test_workbench_units.py`, `tests/integration/test_workbench.py`,
+`tests/integration/test_workbench_server.py`, stub CLIs in `tests/helpers/wb_stub.py`.
+Read [WORKBENCH.md](docs/WORKBENCH.md) (run/use/structure/evidence/W4 steps) and DECISIONS 112–122.
+
+To continue:
+1. W4: in a normal terminal (not an agent session) `uv sync --extra desktop && uv run hbridge app`,
+   then follow WORKBENCH.md "真实验收步骤". Record results as T3-W/T4-W in VALIDATION_MATRIX with
+   exact CLI versions; keep failures as found.
+2. Likely follow-ups: native quirks of Claude/Codex TUIs inside xterm.js (keys, IME, alt-screen),
+   Codex resume semantics for the bundled 0.162 CLI, `.app` packaging/launch from Finder.
+3. Offline UI checks: start `hbridge app --no-open --claude-binary <stub> --codex-binary <stub>`
+   with `WB_STUB_HOME` set and without `CLAUDECODE`; stub wrappers exec `tests/helpers/wb_stub.py`.
+
+Boundaries unchanged: no real `claude`/`codex` spawn from tests or agent sessions, no token reads,
+no API-billing switch, no push/release without the user's instruction, commit author = owner.
+
 ## W0 product direction v2.0 — 2026-10-07
 
 Read [PRODUCT_FORM.md](docs/PRODUCT_FORM.md) and [PROJECT_PLAN.md](docs/PROJECT_PLAN.md) §0–§9
