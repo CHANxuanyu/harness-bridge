@@ -5,6 +5,26 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+## P8.0 routing contract and local interface discovery — 2026-10-07
+
+User-selected route: Codex Astra Advisor, Claude Code Opus5.5 for difficult work, ZCode
+GLM5.3Flash for simple work. [ROUTING_PROFILE.md](ROUTING_PROFILE.md) records this requirement
+and explicit cross-harness escalation; it is not runtime support or live acceptance.
+
+Evidence level: model-free installed help and static bundle inspection, distinct from adapter
+T1/T2 or native T3/T4. ZCode0.16.9 advertises cwd/resume/mode/surface/app-server; bundle contains
+GLM-5.3-Flash plus session model/read/send/stop symbols. Headless --prompt defaults to yolo;
+permissions must be explicitly qualified. CLI help does not expose a top-level --model option.
+No native protocol session/server was created, no prompt sent, no account/config changed and no
+inference invoked. Account-specific selection and protocol behavior remain pending.
+Bundle SHA256:fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f.
+Private evidence: takeover work/p8-routing-discovery/result.json and zcode-help.txt.
+
+This slice changes8 Markdown documents only;47 local links and git diff whitespace checks pass.
+No runtime suite or previously completed native acceptance is repeated. P7 native budget stays8/1/975,
+all gates closed. The user-authorized source113b0a7 push and fresh simulated demo are separate
+from the new route; P7-push-receipt.json and P7-demo-evidence.json retain their provenance.
+
 ## Final local closure after app update — 2026-10-07
 
 Original-repository write access and its separately protected Git directory were restored

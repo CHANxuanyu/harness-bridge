@@ -1,7 +1,16 @@
 # Backlog
 
-The canonical scope and acceptance sequence is `docs/PROJECT_PLAN.md` (P0–P7, V01–V14).
+The canonical scope is `docs/PROJECT_PLAN.md` (P0–P7, V01–V15), extended by `docs/ROUTING_PROFILE.md` for P8.
 This file indexes remaining work; it does not maintain a competing implementation plan.
+
+## Current next work — P8 user-selected route
+
+Codex Astra is the Advisor; Claude Code Opus 5.5 handles difficult work and ZCode GLM 5.3 Flash
+handles bounded simple work. P7 is accepted for its existing scope and source113b0a7 was pushed.
+P8.0 route/discovery is documented; **ZCode Executor is not implemented**. Follow
+[ROUTING_PROFILE.md](ROUTING_PROFILE.md): model/account/permission metadata, native adapter and
+offline contracts, Advisor routing and explicit escalation, then a newly authorized bounded
+real acceptance of the exact three-model route. Do not spend the closed P7 allowance.
 
 ## Completed baseline — reuse, do not redo for handoff
 

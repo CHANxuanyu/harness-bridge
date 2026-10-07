@@ -1,6 +1,33 @@
 # Status
 
-_Latest: P7 accepted for the documented local scope, including desktop history persistence and Codex GUI lifecycle._
+## P8 primary route fixed; model-free discovery — 2026-10-07
+
+The user selected **Codex Astra Advisor → Claude Code Opus5.5 for difficult work + ZCode
+GLM5.3Flash for simple bounded work**. See [ROUTING_PROFILE.md](docs/ROUTING_PROFILE.md) for
+routing, explicit escalation and the P8 sequence. Existing ZCode Advisor/Codex Executor routes
+remain; they do not substitute for the missing Flash Executor. ZCode Executor is **not implemented**.
+
+P8.0 documents the exact route and examines installed ZCode0.16.9 help/bundle without inference:
+--cwd/--resume/--surface/--mode/app-server exist; model-selection and session protocol symbols
+and GLM-5.3-Flash canonical name are present. Account entitlement, effective model selection,
+permissions, event semantics, cancel/resume and desktop continuity remain unverified for this
+Executor. The headless prompt default is yolo, so the adapter must choose and verify explicit
+permissions. No prompt, native session, protocol server, auth/config change or model call.
+Private evidence: takeover chat work/p8-routing-discovery/result.json and zcode-help.txt.
+
+P7 remains accepted within its recorded scope. Its source113b0a7 was non-force pushed to the
+existing public branch under the user's subsequent authorization, and a fresh offline demo
+completed with3 simulated attempts/1 repair. An initial restricted demo could not run ps;
+its uncertainty is retained separately, not rewritten as successful exit. See takeover outputs
+P7-push-receipt.json and P7-demo-evidence.json. Local release candidate remains pinned to113b0a7;
+this planning change does not rebuild/release it. All prior native allowances remain closed.
+
+Next: P8.1 qualify native metadata and protocol contracts, then implement and exercise the
+ZCode adapter offline. Prepare a concrete bounded acceptance packet before seeking any new
+model allowance. Do not repeat P7 acceptance, change the current Advisor model implicitly,
+or call the exact three-model route complete because the plan now names it.
+
+_Accepted baseline: P7 passed for the documented local scope, including desktop history persistence and Codex GUI lifecycle; P8 primary-route work is recorded above._
 
 ## Final local closure after app update — 2026-10-07
 
