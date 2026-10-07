@@ -1,32 +1,35 @@
 # Status
 
-_Latest: P7 native observations and local candidate; live stop-resume pending._
+_Latest: P7 real collaboration delivered; native cancellation defect under revalidation._
 
 ## Current state
 
-- **P7 partially accepted; native continuation stopped by its permission-error rule.** Real Claude
-  and Codex were observed concurrently in separate owned worktrees. Claude's implementation passed
-  independent checks and exact Advisor review; Codex completed diagnosis. Claude's extra Bash
-  sanity check was denied, triggering the user-authorized stop. All exits are confirmed and all
-  isolated live gates closed. **3 actual executions (Claude 2/Codex 1), 540 reserved seconds**;
-  one earlier Codex reservation was a confirmed non-start caused by a now-fixed worker defect.
-  Remaining prepared scope is 4 executions / 345 seconds, awaiting explicit stop-resume permission.
-  No native Codex repair, fault-case or integrated-delivery pass is claimed. See `docs/P7_RESULT.md`.
-- **New Codex contract approved by the user:** explicit null turn cap only for new Codex tasks;
-  attempts/wall/cancel limits, native ChatGPT/default-provider/config preflight, strict worker
-  revalidation. Frozen numeric-turn tasks remain refused. No schema migration (revision 10).
-- **Native host/distribution acceptance passed:** ZCode full app quit/relaunch retains the same
-  fake worker, one attempt, confirmed cancellation; Codex full GUI quit remains unverified.
-  Isolated native install/upgrade/uninstall/reinstall passes for both hosts. Independent runtime
-  upgrade/uninstall/reinstall preserves a completed task/goal/approval. Actual plugins upgraded
-  to alpha.3, other plugins unchanged, same connection; no historical/shared-state migration.
-- **Local candidate only:** runtime 0.1.0.dev1, plugin alpha.3, Apache-2.0 authorized. Reproducible
-  builder and installation/support/retention guide in `scripts/build_release.py` and
-  `docs/LOCAL_RELEASE.md`. No remote publication, tag, push or visibility change.
-- **Validation:** full shared suite 707 passed / 902.56s before final Codex preflight/worker fixes;
-  affected suites 112, 44, 98, 46 and final 6 service cases passed after their corresponding edits.
-  All 722 current cases were exercised across runs, not one final 722-case full run. Final lint/
-  format 135 files and strict mypy 38 runtime files pass. Prior completed tests were reused.
+- **P7 collaboration delivered; lifecycle acceptance remains incomplete.** Real Claude/Codex
+  parallel execution, Codex exact-session repair, independent integrated checks, exact Advisor
+  approval and local fixture-branch delivery passed. The user explicitly resumed the earlier
+  permission stop. The subsequent Codex cancellation exposed a detached tool survivor despite
+  the old runner reporting confirmed exit; that native cancellation case **failed**. The known
+  fixture survivor was terminated and separately checked absent. Claude's already-started 15s
+  timeout completed; no further real call followed discovery. See `docs/P7_RESULT.md`.
+- **Budget:** 6 actual executions (Claude 3/Codex 3), 1 repair, 825 reserved seconds; one older
+  Codex reservation is a proven non-start retained in history. All validation gates are closed.
+  The unused Claude turn-limit case remains NOT_RUN. A prepared Codex cancellation retest would
+  add one execution / 90 seconds beyond the original envelope; no retest is authorized yet.
+- **Runner correction:** track sampled descendant ancestry, recheck identities before signalling
+  detached children, retain uncertainty on observation failures/survivors. This is not OS-level
+  containment; fast reparenting between samples can be missed. Native cancellation revalidation
+  remains open. Runtime/plugin versions remain 0.1.0.dev1 / alpha.3, store revision 10.
+- **Native host/distribution acceptance retained:** ZCode full app quit/relaunch with a fake worker,
+  both native plugin upgrade/remove/reinstall cycles and independent runtime retention passed.
+  Actual plugins remain alpha.3 with the same connection and unchanged other plugins. Full
+  Codex GUI shutdown and native desktop conversation-list synchronization remain unverified.
+- **Local candidate only:** Apache-2.0; no push, tag, publication, billing or visibility change.
+  Earlier candidate is historical and must not be described as fully accepted. Claude CLI
+  transcripts exist under the isolated task worktrees; desktop history is not execution evidence.
+- **Validation:** the prior 722-case evidence is retained; pre-fix targeted baseline 70 passed,
+  new affected run 80 passed / 9.23s; final shared regression **732 passed / 922.88s**,
+  zero failures/skips. Lint/format 138 files and strict mypy 39 runtime files pass. Source/tests
+  were unchanged during the full run; no additional broad rerun is needed.
 
 ## Historical milestones (state as recorded at each milestone)
 

@@ -38,20 +38,23 @@ Evidence: `docs/VALIDATION_MATRIX.md`, `docs/LIVE_REPAIR_RESULT.md`, `docs/PLUGI
    (`INTEGRATION_REPAIRS.md`, `CLEANUP.md`); dirty worktrees and all refs/evidence remain retained.
 5. **P5 — Codex adapter and gated native route implemented.** New explicit null-turn tasks use
    attempts/wall/cancel budgeting; native subscription/config preflight and strict worker
-   reconstruction exist. Real initial diagnosis passed; native same-session repair remains open.
+   reconstruction exist. Real initial diagnosis and native same-session repair passed.
    Old numeric-turn tasks are unchanged. See `CODEX_EXECUTOR.md` and `P7_RESULT.md`.
 6. **P6 — Advisor entrypoints accepted for model-free wiring.** Alpha.3 installed in both actual
    hosts with shared connection/native skill discovery. Native ZCode full quit/relaunch with a
    fake worker passes; Codex full GUI shutdown remains unverified. Installed native lifecycle
    and independent runtime retention checks pass. See `LOCAL_RELEASE.md`.
-7. **P7 — Partial native acceptance; local candidate prepared.** True Claude/Codex parallel
-   execution and workspace isolation pass. The run stopped on a denied extra Claude Bash check
-   under the user-authorized stop rule. Remaining original-budget work: native Codex repair,
-   Codex cancellation, Claude timeout/turn limit and real integrated review/delivery. Apache-2.0
-   and local-only scope are resolved. Keep those items open until actual evidence closes them.
+7. **P7 — Real collaboration delivered; lifecycle acceptance incomplete.** Claude/Codex parallel
+   work, exact-session Codex repair, combined external review and exact local delivery passed.
+   Codex cancellation failed its secondary OS audit: a detached tool survived. Runner tracking
+   is corrected with offline regression; native retest and the unused Claude turn-limit case
+   remain open. Claude timeout fired at 15s with the test tool started. Apache-2.0/local-only
+   scope is resolved; the candidate is not fully accepted.
 
-The current seven-execution authorization is stopped pending explicit resume, with 3 actual
-executions used. The earlier two-attempt repair allowance is fully used. The plan does not grant calls, push, publication or billing changes.
+Six actual executions / 825 reserved seconds are spent. Prepared remaining proposal: Codex
+cancellation retest plus Claude turn-limit, 2 executions / 150 seconds, making total ceilings
+8 / 975. The additional Codex execution and resume need explicit authorization. Do not repeat
+successful collaboration, resume, integration, installation or host tests. No billing/push is authorized.
 
 ## Subsequent / optional work
 
@@ -64,3 +67,6 @@ executions used. The earlier two-attempt repair allowance is fully used. The pla
 - Optional observation of ignored files as a risk signal, stronger Linux orphan tracking.
 - Explicit manual takeover of an executor's writable directory, after confirmed executor exit;
   distinct from an Advisor session taking over goal management while a worker is still active.
+
+- Expose an obvious child-session locator/history view in the Advisor experience; native CLI
+  transcripts and desktop chat-list visibility are different surfaces.

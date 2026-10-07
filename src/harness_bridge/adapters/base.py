@@ -168,7 +168,9 @@ def classify_process_level(process: ProcessOutcome) -> ExecutorResult | None:
         return ExecutorResult(AttemptOutcome.SPAWN_FAILED, process.spawn_error)
     if not process.group_exit_confirmed:
         why = (
-            "pipes held open by an unobservable process"
+            "descendant process inspection failed or observed descendants remain"
+            if process.descendants and not process.descendants.get("observed_exits_confirmed")
+            else "pipes held open by an unobservable process"
             if process.pipes_held_open
             else ("owned process group did not exit after TERM/KILL")
         )

@@ -10,10 +10,11 @@ Responsibilities (adapters do not reimplement these):
 * wall timeout, cooperative stop (cancel / runner interrupt), TERM -> grace -> KILL of the owned
   process group, and an explicit ``group_exit_confirmed`` flag.
 
-Only process groups this runner created are ever signalled. After the direct child exits and is
-reaped, surviving members of its group (background processes) are terminated because the group
-id cannot be reused while any member exists. Processes that left the group (``setsid``) are not
-observable; if they keep our pipes open the outcome is reported as not confirmed.
+Only owned groups and positively observed descendant identities are ever signalled. After the
+direct child exits and is reaped, surviving group members are terminated because the group
+id cannot be reused while any member exists. Sampled ancestry tracks observed descendants which
+leave the group. This is not OS containment; descendants that reparent between samples can be
+missed. Inspection failures and observed survivors prevent confirmed exit.
 """
 
 from __future__ import annotations
@@ -32,6 +33,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from harness_bridge.process_tree import ProcessTree
 
 
 @dataclass
@@ -123,6 +126,7 @@ class ProcessOutcome:
     ended_at: float = 0.0
     stdout: StreamCapture = field(default_factory=lambda: StreamCapture(0, 0))
     stderr: StreamCapture = field(default_factory=lambda: StreamCapture(0, 0))
+    descendants: dict[str, object] = field(default_factory=dict)
 
     @property
     def duration(self) -> float:
@@ -147,6 +151,7 @@ class ProcessOutcome:
             "duration_seconds": round(self.duration, 3),
             "stdout": self.stdout.meta(),
             "stderr": self.stderr.meta(),
+            "descendants": self.descendants,
         }
 
 
@@ -323,9 +328,10 @@ def run_process(
     out.pid = proc.pid
     out.pgid = proc.pid  # start_new_session => the child leads its own group
     assert proc.stdin and proc.stdout and proc.stderr
+    tree = ProcessTree(proc.pid)
 
     def terminate_now() -> None:
-        _hard_stop(proc, out, limits, monotonic)
+        _hard_stop(proc, out, limits, monotonic, tree)
 
     if on_spawn is not None:
         try:
@@ -386,11 +392,13 @@ def run_process(
     phase_deadline = 0.0
     child_exit_at: float | None = None
     group_dead = False
+    next_tree_poll = out.started_at
 
     def begin_termination(now: float) -> None:
         nonlocal phase, phase_deadline
         if phase is not None:
             return
+        out.term_sent |= tree.signal_detached(signal.SIGTERM)
         try:
             os.killpg(out.pgid or proc.pid, signal.SIGTERM)
             out.term_sent = True
@@ -434,6 +442,9 @@ def run_process(
                 out.stderr.feed(chunk)
 
         now = monotonic()
+        if now >= next_tree_poll:
+            tree.refresh()
+            next_tree_poll = now + 0.1
         if proc.poll() is not None and child_exit_at is None:
             child_exit_at = now
 
@@ -455,6 +466,8 @@ def run_process(
                 begin_termination(now)
 
         if phase == "term" and now >= phase_deadline:
+            if child_exit_at is None or not group_dead or tree.remaining():
+                out.kill_sent |= tree.signal_detached(signal.SIGKILL)
             if child_exit_at is None or not group_dead:
                 try:
                     os.killpg(out.pgid or proc.pid, signal.SIGKILL)
@@ -464,12 +477,14 @@ def run_process(
             phase = "kill"
             phase_deadline = now + limits.kill_wait
         elif (
-            phase == "kill" and now >= phase_deadline and (child_exit_at is None or not group_dead)
+            phase == "kill"
+            and now >= phase_deadline
+            and (child_exit_at is None or not group_dead or tree.remaining())
         ):
             phase = "gave_up"
             break
 
-        if child_exit_at is not None and group_dead:
+        if child_exit_at is not None and group_dead and (phase is None or not tree.remaining()):
             if open_readers == 0:
                 break
             if now - child_exit_at > limits.drain_after_exit:
@@ -488,8 +503,14 @@ def run_process(
     out.returncode = rc
     if rc is not None and rc < 0:
         out.exit_signal = -rc
+    tree.refresh()
+    out.descendants = tree.report()
     out.group_exit_confirmed = (
-        rc is not None and group_dead and phase != "gave_up" and not out.pipes_held_open
+        rc is not None
+        and group_dead
+        and phase != "gave_up"
+        and not out.pipes_held_open
+        and tree.confirmed()
     )
     out.ended_at = monotonic()
     return out
@@ -500,30 +521,48 @@ def _hard_stop(
     out: ProcessOutcome,
     limits: RunLimits,
     monotonic: Callable[[], float],
+    tree: ProcessTree,
 ) -> None:
     """Synchronous TERM -> grace -> KILL used when a spawn callback fails."""
     pgid = out.pgid or proc.pid
+    out.term_sent |= tree.signal_detached(signal.SIGTERM)
     try:
         os.killpg(pgid, signal.SIGTERM)
         out.term_sent = True
     except ProcessLookupError:
         pass
     end = monotonic() + limits.kill_grace
+    group_dead = False
+
+    def owned_group_alive() -> bool:
+        nonlocal group_dead
+        if not group_dead:
+            group_dead = not group_alive(pgid)
+        return not group_dead
+
     while monotonic() < end:
         proc.poll()
-        if not group_alive(pgid):
+        tree.refresh()
+        if not owned_group_alive() and not tree.remaining():
             break
         time.sleep(0.05)
-    if group_alive(pgid):
-        try:
-            os.killpg(pgid, signal.SIGKILL)
-            out.kill_sent = True
-        except ProcessLookupError:
-            pass
+    if owned_group_alive() or tree.remaining():
+        out.kill_sent |= tree.signal_detached(signal.SIGKILL)
+        if owned_group_alive():
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+                out.kill_sent = True
+            except ProcessLookupError:
+                pass
         end = monotonic() + limits.kill_wait
-        while monotonic() < end and group_alive(pgid):
+        while monotonic() < end and (owned_group_alive() or tree.remaining()):
             proc.poll()
+            tree.refresh()
             time.sleep(0.05)
     out.returncode = proc.poll()
-    out.group_exit_confirmed = out.returncode is not None and not group_alive(pgid)
+    tree.refresh()
+    out.descendants = tree.report()
+    out.group_exit_confirmed = (
+        out.returncode is not None and not owned_group_alive() and tree.confirmed()
+    )
     out.ended_at = monotonic()

@@ -1,6 +1,6 @@
 # P7 result and local candidate — 2026-10-07
 
-**Current status: partial acceptance; live continuation stopped on a permission refusal.**
+**Current status: real collaboration delivered; native cancellation acceptance failed and needs revalidation.**
 Runtime 0.1.0.dev1 / plugin 0.1.0-alpha.3. Apache-2.0, local candidate only; no remote
 publication or push. This is the current result; the earlier synthetic rehearsal remains
 historical evidence in [P7_ACCEPTANCE.md](P7_ACCEPTANCE.md).
@@ -17,7 +17,7 @@ Codex 3; 2 repairs; 885 cumulative reserved wall seconds**. Stop on authenticati
 quota errors or unknown exits; no extra billing or provider changes. This is an execution
 ceiling, not an assertion that Codex can count/limit internal model calls.
 
-## Live observations and stop
+## Initial live observations and first stop
 
 1. First goal: Claude completed diagnosis without edits or permission denials (12.858s,
    reported 2 turns). Codex's worker rejected its reconstructed command before spawning an
@@ -44,17 +44,74 @@ ceiling, not an assertion that Codex can count/limit internal model calls.
    model was `gpt-5.6-sol`; observed model remains unknown. The Advisor saved specific repair
    feedback on that same task/session/worktree. No repair was dispatched after the stop.
 
-**Executed so far: 3 (Claude 2, Codex 1), zero actual repairs, 540 reserved wall seconds.**
-One additional Codex reservation is a proven non-start, excluded from goal execution accounting
-but retained in history. All launched Executors exited normally and all exits are confirmed.
-No source checkout or frozen acceptance script changed. The original incomplete goal is FAILED;
-the replacement goal is not delivered and must not be described as complete.
+## Authorized continuation and current result
 
-Remaining prepared work after an explicit stop-resume decision: Codex repair (180s), Codex
-running cancellation (90s), Claude timeout (15s), Claude native turn exhaustion (60s): four
-executions / 345 reserved seconds. Then inspect repaired diff, approve both inputs, independently
-verify the integrated candidate and deliver its exact commit to a new local fixture branch.
-No model allowance is renewed by installation, state inspection or candidate packaging.
+The human explicitly resumed the stopped packet on 2026-10-07. No limits or permissions were
+expanded. The original Codex task resumed its exact native UUID
+`01a11375-1bfc-7ba3-a351-8d206887423c` and unchanged worktree, recalled `BOXJOIN`, and changed only
+`tagformat/render.py`. Independent external checks passed in 0.023s; the Advisor inspected the
+one-line implementation and approved that exact snapshot. Native execution took 33.567s.
+
+The two approved inputs were composed into a separate integration workspace. The unchanged
+combined verifier passed in 0.027s, the full two-file diff was reviewed, and the exact approved
+commit **73f485d437bc5bcf1796f6bd141e0b3d1be0033f** was delivered to `bridge/p7-result` in the
+isolated fixture repository. Same-key delivery replay retained the identical receipt/commit.
+Goal `goal_e77ac7ce90244b89ac7e` is **DELIVERED**; source checkout/index and frozen checks are
+unchanged. This proves the real one-Advisor/two-harness collaboration/delivery scenario, not
+completion of every P7 fault case.
+
+| Native case | Observation | Acceptance |
+| --- | --- | --- |
+| Codex exact-session repair | Same UUID/cwd, recalled mnemonic, clean assigned diff and external check | Passed |
+| Codex running cancellation | Tool start observed; CLI ended after cancel; old receipt said CANCELLED/confirmed, but secondary OS audit found its separately grouped Python sleeper alive | **Failed** |
+| Claude wall timeout | Tool start observed; timeout at 15.576s for a 15s limit; finish absent, no matching sleeper remained in OS audit | Timeout path observed; no successful task claim |
+| Claude native turn cap | Not launched after cancellation defect discovery | **NOT_RUN** |
+| Combined integration and exact local delivery | Both required inputs, frozen combined check, exact review/commit and replay | Passed |
+
+The detached Codex sleeper had a different process group and was reparented to PID 1. Its
+identity and exact known fixture command were checked before manual TERM; a subsequent OS
+check found no matching fixture survivor. That cleanup does not turn the failed cancellation
+case into a pass. Preserve the old native/job receipt alongside the contradictory observation.
+Claude timeout was already in flight when the secondary audit discovered the Codex survivor;
+it finished under its existing bound. No further real Executor was started after discovery.
+
+**Spent: 6 actual executions (Claude 3/Codex 3), 1 repair, 825 reserved wall seconds.**
+Observed native Executor durations total 129.493s; this is not billed usage. One additional
+Codex reservation remains a proven non-start, retained in history. All isolated live gates are
+closed. The first failed goal is preserved; the replacement collaboration goal is delivered.
+
+Prepared remaining proposal: one new Codex cancellation retest (90s) plus the original unused
+Claude turn-cap case (60s), maximum two executions / 150s. This would increase global ceilings
+from 7 / 885 to **8 / 975**, adding exactly one Codex execution / 90s. It requires explicit
+budget expansion and stop-resume; no automatic retry, new implementation or repair is proposed.
+No model allowance is renewed by testing, state inspection, documentation or packaging.
+
+## Runner correction after the failed cancellation
+
+The runner now observes process ancestry while the native CLI is alive, retains positively
+observed descendants across reparenting, and checks birth identity immediately before signalling
+a detached child individually. TERM grace and KILL escalation include those observed children.
+It never signals an unrelated guessed PID, an inferred detached group, or the original group
+after it was observed dead. Process inspection failure or a known survivor prevents confirmed
+exit, preserving existing unknown-outcome/project-slot blocking.
+
+Ten new offline cases exercise closed-pipe detached children during cancel/timeout, ignored
+TERM, normal root exit with a surviving detached child, failed observation and PID reuse.
+These use ordinary local Python subprocesses and no model/auth/network calls. They are not
+native Codex acceptance. Sampling is not OS containment: an unobserved fork/reparent between
+samples can be missed, and identity check plus signal is not an atomic OS handle. Native
+cancellation retest and these documented lifecycle limits remain release considerations.
+
+## Why Claude Desktop did not show an obvious new conversation
+
+Actual Claude Code CLI transcript files were found under the two isolated task worktree project
+folders. Their native IDs are `8baf095d-4452-4601-881e-ff61a1f348db` (diagnosis) and
+`347cb6dd-57aa-4157-9860-d67a2cd5e1b1` (implementation); metadata matches each Bridge worktree.
+The timeout has a third native session, `48604823-c9f4-46c1-8c00-094100797a8f`. No raw transcript
+or credential is committed here. Native CLI `--resume` is available; automatic desktop sidebar
+synchronization was not tested. No model turn was created to populate a history list. Bridge's
+worktree/session/evidence records are the supported locator; a clearer Advisor history surface
+is recorded as a product follow-up.
 
 ## Native capabilities without inference
 
@@ -69,7 +126,7 @@ No model allowance is renewed by installation, state inspection or candidate pac
   file directly. Actual model identity, subscription balance and charges remain unknown.
 - Claude **2.1.291**: existing native login reports claude.ai / firstParty / Pro; no provider,
   cloud or nested marker was present. Prior native flag-acceptance evidence was reused; native
-  limit enforcement still requires the pending fault case.
+  turn-limit enforcement still requires the pending fault case; wall timeout was observed above.
 
 ## Actual host lifecycle
 
@@ -123,11 +180,15 @@ LICENSE/NOTICE and these acceptance notes; building never upgrades acceptance st
 | Corrected native-null preflight suite | 44 passed / 9.39s |
 | Worker reconstruction and worker/Codex regression | **98 passed / 60.91s** |
 | Worker preflight refusal cases | 46 passed / 5.95s |
+| Pre-descendant-fix runner/adapter baseline | 70 passed / 4.23s |
+| Descendant fix affected runner/adapter cases | 80 passed / 9.23s |
+| Final shared regression after descendant correction | **732 passed / 922.88s**, no failures/skips |
 
-The final tree has 722 offline cases, executed across the full and affected runs; there is no
-claim of a single final 722-case full run. Lint/format pass on 135 Python files; strict mypy
-passes on 38 runtime files. Additional exact worker provider-change/digest-change checks are
-recorded in the validation matrix. No ordinary test reads actual auth, makes network requests
+The earlier tree had 722 cases covered across full and affected runs. The current runner adds
+ten cases: the final shared regression passed all **732 / 922.88s**, with no failures/skips.
+Source and tests were unchanged during the run. Lint/format covers 138 Python files and strict
+mypy passes on 39 runtime files.
+Additional exact worker provider-change/digest-change checks are in the validation matrix. No ordinary test reads actual auth, makes network requests
 or spawns a real Claude/Codex binary. Native probes and real acceptance are separate evidence.
 
 ## Evidence location
@@ -135,5 +196,6 @@ or spawns a real Claude/Codex binary. Native probes and real acceptance are sepa
 Private raw evidence remains outside the public repository, in the takeover chat's
 `work/p7-live-20261007/`, `work/p7-host-lifecycle/`, `work/p7-distribution/`, and `work/p7-codex/`.
 Records include authorization, immutable packet hashes, stop receipt, failed first goal,
-replacement goal, native invocation receipts and independent check artifacts. These logs are
+replacement delivered goal, native invocation receipts, descendant failure/cleanup observations
+and independent check artifacts. These logs are
 not inherently safe to publish; only this manually reviewed summary is committed.

@@ -1,10 +1,10 @@
 # Harness Bridge
 
 > **Experimental local candidate:** runtime 0.1.0.dev1, Advisor plugin alpha.3, Apache-2.0.
-> P1–P4 local core and installed Advisor entrypoints exist. P7 has real Claude/Codex concurrent
-> execution evidence, native ZCode quit/reconnect and distribution retention checks. Native
-> continuation stopped on an extra denied Claude self-check; Codex repair, fault cases and
-> real integrated delivery remain open. See [current P7 result](docs/P7_RESULT.md).
+> Real Claude/Codex parallel work, exact-session repair and integrated local delivery passed.
+> P7 remains incomplete: native Codex cancellation left a detached tool alive. The runner fix
+> is under offline/native revalidation; Claude turn-cap acceptance remains open.
+> See [current P7 result](docs/P7_RESULT.md).
 
 Harness Bridge aims to provide **one Advisor with one or more Executors across coding
 harnesses**: the Advisor inspects the repo, delegates tasks, reviews results and coordinates
@@ -69,7 +69,7 @@ READY_TO_DELIVER/DELIVERED projections. [Integration repairs](docs/INTEGRATION_R
 conflict/failed-check children to retained inputs and existing budgets; [cleanup](docs/CLEANUP.md)
 removes only selected clean owned worktrees after delivery, retaining refs/evidence and user changes.
 P4 local core, P5 Codex offline adapter and P6 model-free installed wiring are implemented;
-P7 real resume/fault/integrated-delivery acceptance remains incomplete.
+P7 real collaboration/delivery passed; native cancellation revalidation and turn-cap acceptance remain incomplete.
 See [Codex capability boundary](docs/CODEX_EXECUTOR.md). Approval alone
 does not deliver a goal.
 

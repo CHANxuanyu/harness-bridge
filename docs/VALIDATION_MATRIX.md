@@ -5,22 +5,27 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
-**P7 current native/distribution slice (2026-10-07, baseline `9445a14`):** see
-[P7_RESULT.md](P7_RESULT.md) for actual runs, failures, budget accounting and stop condition.
-Full shared offline check passed **707 / 902.56s** before the final native preflight/worker fixes.
-Affected checks passed **112 / 28.57s**, **44 / 9.39s**, **98 / 60.91s**, **46 / 5.95s** and
-**6 selected / 3.63s** (42 deselected). The latter six cover foreground/worker launch, preflight
-refusal, changed provider environment and changed invocation before spawn. All **722 current
-cases** were exercised across these runs; not a single final full 722-case run. Lint/format
-135 files and strict mypy 38 runtime files pass. Intermediate failures are retained in P7_RESULT.
+**P7 continuation (2026-10-07, baseline `695503c`):** exact native Codex repair returned the
+same UUID, worktree and recalled mnemonic; independent input/combined checks, exact approval,
+local fixture delivery and replay passed. Source/acceptance scripts remained unchanged.
+Codex cancellation is **FAILED**, despite the old receipt saying CANCELLED/confirmed: a secondary
+OS audit found its separately grouped tool alive. Known survivor was terminated and absence
+checked. Claude's already-started timeout fired at 15.576s; tool start observed, finish absent.
+No further real calls followed discovery. Six executions (3 each) / one repair / 825 reserved
+seconds; all gates closed. Claude turn-limit and fixed native cancellation remain NOT_RUN.
 
-Native metadata/parse checks, real ZCode GUI quit/relaunch with a fake worker, both native plugin
-install/update/remove/reinstall cycles and independent runtime retention all pass. Actual alpha.3
+Runner correction baseline: 70 passed / 4.23s. Affected runner/adapter cases: 80 passed / 9.23s,
+including 10 new cases for detached closed-pipe children, TERM escalation, uncertain observation
+and PID identity reuse. Final shared regression: **732 passed / 922.88s**, zero failures/skips.
+Lint/format 138 files and strict mypy 39 runtime files pass; source/tests remained unchanged
+during the full run. Native cancellation cannot be promoted from these synthetic results.
+Prior 707 full plus affected 722-case coverage remains historical.
+
+Native metadata/parse checks, real ZCode GUI quit/relaunch with a fake worker, native plugin
+install/update/remove/reinstall and independent runtime retention all pass. Actual alpha.3
 caches/checkers and fresh Codex skills/list pass; historical/shared stores are unchanged.
-Real one-Advisor/two-Executor **concurrent startup/workspaces** pass; full native repair/integration
-acceptance remains open. **3 actual executions**, one additional confirmed Codex non-start; no
-unknown exits. An extra denied Claude Bash check triggered the explicitly agreed stop. All live
-gates closed; remaining original-budget calls await explicit resume. No publication or push.
+Full Codex GUI quit and automatic desktop history synchronization remain unverified.
+See [P7_RESULT.md](P7_RESULT.md) for retained failures, accounting and evidence boundaries.
 
 **Historical preparation and earlier milestones follow.**
 

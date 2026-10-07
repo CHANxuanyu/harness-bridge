@@ -59,7 +59,8 @@ Even an already spawned but delayed worker can no longer claim it, so this windo
 non-execution proof. Unknown launcher liveness retains the reservation; emergency cancellation
 can fence an unclaimed reservation regardless. Cancellation already requested at claim/preflight
 is checked before executor invocation. A cancel racing with actual spawn is observed by the
-owning runner, which stops and confirms its own process group.
+owning runner, which stops its group and positively observed detached descendants.
+Exit confirmation also requires no known survivors or process-inspection failure.
 
 After claim, a dead worker is handled conservatively by ordinary recovery. STARTING/RUNNING
 become INTERRUPTED with unknown executor exit; no guessed-PID signals and no automatic executor
@@ -126,3 +127,18 @@ sleep/reboot, service supervision or real-model background execution. There is n
 registration or automatic worker restart. The local P3 core also has concurrency/budget and
 simulated host-session teardown evidence in [CONCURRENCY.md](CONCURRENCY.md). Installed-host
 lifecycle and real cross-harness behavior still need their later bounded acceptance.
+
+## P7 detached tool correction
+
+The native Codex cancellation case exposed a tool in a new process group after its CLI exited.
+The runner now samples PID/parent/group/state/birth metadata, retains observed descendants across
+reparenting, and checks identity again before individually signalling a detached descendant.
+It never signals an inferred detached group, unrelated PID, or original group already observed dead.
+TERM grace and KILL escalation include these observed descendants. Inspection failure or known
+survivors prevents confirmed exit and keeps existing unknown-outcome/slot guards in effect.
+
+A process group alone is not descendant containment: Python's `start_new_session` starts a new
+session, and termination targets a process or group; see the [Python subprocess reference](https://docs.python.org/3.11/library/subprocess.html).
+Sampling can miss a fork/reparent between observations, and birth-marker checks are not an atomic
+OS process handle. This is lifecycle observation for cooperative tools, not an adversarial sandbox
+or machine-wide cleanup guarantee. Native retest is distinct from the offline detached-child cases.

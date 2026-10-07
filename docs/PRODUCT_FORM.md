@@ -1,6 +1,6 @@
 # 产品形态：跨 harness 的 Advisor + Executor
 
-_2026-10-06。本文是产品摘要，统一计划见 [PROJECT_PLAN.md](PROJECT_PLAN.md)。实际完成度以 STATUS 和验证矩阵为准。_
+_2026-10-07。本文是产品摘要，统一计划见 [PROJECT_PLAN.md](PROJECT_PLAN.md)。实际完成度以 STATUS 和验证矩阵为准。_
 
 **Advisor 本身就是用户正在使用的一个 coding agent 会话。它领导一个或多个 Executor 会话，
 这些执行会话可以运行于其他 harness。Harness Bridge 使这种主 agent / 子 agent 关系可靠工作。**
@@ -54,19 +54,24 @@ Bridge 不自动建立新 Advisor，也不自动开始新的子任务或修复�
 这些是工程默认规则；各项当前实现情况见下节，不把计划当作验收证据。完整边界、数据关系、故障处理、P0–P7 实施阶段、
 V01–V14 验收项和待验证假设都在 [项目计划书](PROJECT_PLAN.md)，本摘要不再维护第二套详细路线图。
 
+## Executor 会话与桌面历史
+
+当前版本从指定工作区启动 Claude Code / Codex 原生 CLI 会话，保存其原生会话 ID，返修时恢复该会话。
+它不通过模拟点击来操作 Executor 的聊天窗口。原生聊天记录可能按子任务工作目录归档，
+自动出现在厂商桌面聊天列表中尚未验证，也不是本版本的承诺。
+
+用户在 Advisor 中查看子任务的 harness、工作区、状态和结果；Bridge 提供会话定位与执行证据。
+更直观的子任务/会话查看入口是后续体验工作，不能靠额外发送模型消息来制造历史条目。
+
 ## 当前做到哪里
 
-已有单任务的 worktree/cwd、执行/验证/审查、持久化和有界返修基础；真实 Claude 初次执行和一次受控
-repair/resume 已通过。Codex/ZCode 插件包原型已制作，安装后的完整体验尚未验证。
+P1–P4 本地协调、独立工作区、依赖、受管理后台执行、预算、审查、整合、精确本地交付与保留/清理已经实现。
+P5 包含两个原生执行端的适配与各自预算契约；P6 的 alpha.3 插件已安装在实际 Codex / ZCode 中，
+共享一个本地运行时与任务库，升级/卸载保留数据已经验证。
 
-P1 本地协调内核已实现总目标与子任务归属、Advisor 会话接管、总尝试/返修额度、单执行名额，
-以及目标暂停/取消、待执行子任务计划和依赖无环检查。独立子任务可以显式创建工作区；依赖任务等待固定成果基线。
-具体接口见 [COORDINATION.md](COORDINATION.md) 和 [PLANNING.md](PLANNING.md)。
-P2 已补齐固定的获批依赖成果基线、后继工作区及显式有界环境准备，见 [EXECUTION_CONTEXT.md](EXECUTION_CONTEXT.md)
-和 [PREPARATION.md](PREPARATION.md)。P3 第一段已实现单尝试后台 worker、幂等派发、事件查询与取消/恢复，
-见 [WORKERS.md](WORKERS.md)。P3 后续一段已实现显式双 Executor 并发、修改范围检查和保守的总时间/turn
-预留，见 [CONCURRENCY.md](CONCURRENCY.md)。P4 第一段已实现固定成果输入与独立整合候选，
-见 [INTEGRATION.md](INTEGRATION.md)；总验收与精确审查已实现，见 [INTEGRATION_CHECKS.md](INTEGRATION_CHECKS.md)。
-明确的本地分支交付也已实现，见 [DELIVERY.md](DELIVERY.md)；冲突修复绑定、清理、Codex 执行适配器仍待完成；
-真实桌面宿主退出及不同厂商同时执行仍待验证。
-当前代码是 V0.1 内核原型；计划完成不代表 V1 产品完成。
+P7 真实一对二并发、Codex 原会话返修、独立整合验收与精确交付已经通过。生命周期验收发现 Codex
+取消后工具子进程残留；修复已通过 732 项离线回归，原生复测和 Claude 轮数上限仍待完成，所以尚未宣布 P7 完成。
+ZCode 完整退出重连使用模拟 Executor 通过；Codex 完整 GUI 退出、其他系统与通用后台存活没有宣称通过。
+
+当前为 Apache-2.0 的实验性本地候选，未远程发布。准确证据见 [P7_RESULT.md](P7_RESULT.md)；
+统一范围及后续验收见 [PROJECT_PLAN.md](PROJECT_PLAN.md)。

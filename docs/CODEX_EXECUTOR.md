@@ -29,7 +29,9 @@ launches the native CLI and records results; it never calls a model API. Only th
 
 These are portions of a TaskSpec, not a complete runnable specification. Explicit null means
 **native internal-turn hard ceiling unsupported**. Bridge enforces attempt/repair counts,
-wall deadlines and owned-process cancellation. It does not limit/count Codex's internal model
+wall deadlines and observed-process cancellation. P7 found a detached tool surviving cancellation;
+the runner correction requires native revalidation and is not OS containment (see WORKERS.md).
+It does not limit/count Codex's internal model
 steps, infer them from JSONL `turn.completed`, or describe this budget as equivalent to Claude's
 native turn cap. A parent numeric turn budget refuses such a child before dispatch; an unbounded
 turn aggregate reports `reserved_turns: null`, never zero. Attempt/wall reservations still apply.
@@ -67,7 +69,7 @@ reservation, with no silent provider switch or automatic retry.
 | Exact-session repair | Same task/repo/worktree/executor/requested pin; returned UUID must match; P7 real result separately recorded |
 | Turn hard limit | Unsupported for this route; explicit null opt-in, old numeric contracts refused |
 | Account/provider/config | Current native read-only preflight passed; default OpenAI + ChatGPT, per-call restrictions |
-| Wall/cancel/known exit | Shared runner contracts; native fault evidence is separately recorded in P7 |
+| Wall/cancel/known exit | Native cancel failed on detached tool; corrected runner awaiting native revalidation, see P7_RESULT |
 | Model identity/cost/quota | Unknown; no inference from requested pin or prose |
 
 ## Invocation and evidence handling
