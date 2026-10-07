@@ -1,0 +1,16 @@
+{
+  "evidence_level": "synthetic protocol peer; offline integration, not native model output",
+  "peer": "tests/helpers/zc_peer.py",
+  "contracts": "tests/contracts/test_zcode_adapter.py",
+  "integration": "tests/integration/test_zcode_stub_flow.py",
+  "shape_source": "read-only inspection of installed ZCode 0.16.9 protocol schemas and method handlers",
+  "bundle_sha256": "fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f",
+  "native_probe": "docs/ZCODE_PROTOCOL_PROBE.json",
+  "limitations": [
+    "Only runtime/capabilities was queried from an actual isolated native server",
+    "Session snapshots and lifecycle events are synthesized, not captured native session traffic",
+    "Provider names and model metadata do not establish a user's account access or billing",
+    "Offline cancellation proves the simulated process topology only"
+  ],
+  "contains_credentials_or_copied_vendor_bundle": false
+}

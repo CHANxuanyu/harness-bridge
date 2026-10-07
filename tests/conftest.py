@@ -2,9 +2,9 @@
 
 Every test runs with:
 * a temporary HOME / XDG_STATE_HOME and an isolated git config with a test identity, so no real
-  ``~/.claude``, ``~/.codex`` or user git configuration is read;
+  ``~/.claude``, ``~/.codex``, ZCode profile or user git configuration is read;
 * model / provider / cloud environment variables removed;
-* sentinel ``claude`` and ``codex`` executables first on PATH that record any invocation, so a
+* sentinel ``claude``, ``codex`` and ``zcode`` executables first on PATH record any invocation, so a
   test (or the code under test) accidentally spawning a real harness binary fails loudly (C11);
 * a process-level network guard (socket connects outside AF_UNIX raise). This guards the test
   process only, not its subprocesses; it is not an OS firewall.
@@ -26,7 +26,7 @@ import pytest
 from harness_bridge.demo_fixture import create_fixture_repo, make_task_spec, write_acceptance_script
 from harness_bridge.service import Bridge
 
-_SCRUB_PREFIXES = ("ANTHROPIC_", "CLAUDE", "CODEX", "OPENAI_", "HBRIDGE_", "GIT_")
+_SCRUB_PREFIXES = ("ANTHROPIC_", "CLAUDE", "CODEX", "ZCODE_", "ZAI_", "OPENAI_", "HBRIDGE_", "GIT_")
 _SCRUB_EXACT = ("GITHUB_TOKEN", "GH_TOKEN", "AWS_BEARER_TOKEN_BEDROCK", "XDG_STATE_HOME")
 
 SENTINEL = """#!/bin/sh
@@ -58,7 +58,7 @@ def isolated_env(
     bin_dir = root / "sentinel-bin"
     bin_dir.mkdir()
     marker = root / "sentinel-invocations.log"
-    for name in ("claude", "codex"):
+    for name in ("claude", "codex", "zcode"):
         exe = bin_dir / name
         exe.write_text(SENTINEL.format(marker=marker))
         exe.chmod(0o755)

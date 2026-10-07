@@ -5,6 +5,45 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+## P8 ZCode protocol adapter — 2026-10-07
+
+- **Native, model-free metadata only:** isolated ZCode0.16.9 stdio server returned
+  runtime/capabilities = independentPlanState true, then exited0 with empty stderr. No native
+  session, prompt, credentials read or inference. Earlier missing-config and Unix-socket-length
+  failures are preserved; the latter had outer exit0 despite initialization error, not a pass.
+  [Sanitized receipt](ZCODE_PROTOCOL_PROBE.json); private originals in takeover work/p8-protocol-probe/.
+- **T1/T2 synthetic:** separate frozen Flash/provider/permission contract, bounded bidirectional
+  client, create/read/send sequence, exact original-session repair, task cwd, managed background
+  replay, external fail→repair→pass review, budget admission, timeouts and confirmed cancellation
+  of both client and peer. No automatic permission grants or history-deleting session/close.
+- **Refusals:** missing/malformed/oversized/duplicate/late lifecycle data, wrong RPC ID, wrong
+  session/workspace/model/provider/mode, malformed snapshots, pending/active work, stale final
+  revision, RPC errors/permission requests and nonzero/unknown exit cannot become approved
+  delivery even if file checks pass. Raw synthetic history/error sentinels stay out of receipts.
+- **Live remains unavailable:** foreground/background opt-in is rejected before attempt reservation;
+  mock rejects missing/native-named/symlinked/relative executables. Null-turn ZCode children cannot
+  bypass a numeric goal turn ceiling. Account, effective native permission and native session/
+  resume/stop/desktop semantics remain unqualified. [Contract](ZCODE_EXECUTOR.md) and
+  [fixture provenance](../tests/fixtures/zcode_protocol/PROVENANCE.json) state these boundaries.
+
+Checks on macOS/Python3.11.16:
+
+| Check | Result |
+|---|---|
+| Pre-edit affected Codex/model baseline | 87 passed / 24.82s |
+| New ZCode contracts/integration + extended doctor case | 62 passed / 33.72s |
+| Existing model/Claude/Codex/goal/planning/worker/concurrency regressions | 235 passed / 117.44s |
+| Global ruff lint/format; strict mypy | 154 Python files; 42 runtime files, passed |
+
+Initial new run:38 passed/13 failed; fixed the actual empty resume-ID guard and corrected test
+fixtures/API assumptions and the distinction between independent verification and approval.
+Second run:52 passed/1 failed because the test's cleanup attempted to cancel an already-cancelled
+task; the actual child cancellation assertions passed. Cleanup now respects terminal state.
+Expanded final checks above pass; no cases deleted/skipped and no runtime gate weakened.
+No repeat of P7 full/native/GUI acceptance, no auth/profile/billing change, no new model calls.
+Schema revision10, installed plugin alpha.6 and source113b0a7 candidate remain unchanged.
+P8.1 is partial; P8.2 has an offline implementation; P8.3/P8.4 are not accepted.
+
 ## P8.0 routing contract and local interface discovery — 2026-10-07
 
 User-selected route: Codex Astra Advisor, Claude Code Opus5.5 for difficult work, ZCode

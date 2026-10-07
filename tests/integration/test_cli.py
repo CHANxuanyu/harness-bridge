@@ -73,6 +73,11 @@ def test_doctor_offline_is_non_inference(fx: Fixture) -> None:
     assert report["live_gate_preview"]["open"] is False
     statuses = {c["name"]: c["status"] for c in report["capabilities"]}
     assert statuses["claude_code_live_dispatch"] == "unknown"
+    assert statuses["zcode_executor_adapter"] == "offline_only"
+    zcode = next(
+        c["evidence"] for c in report["capabilities"] if c["name"] == "zcode_executor_adapter"
+    )
+    assert zcode["live_dispatch"] == "unavailable" and zcode["gaps"]
 
 
 def test_demo_success_and_bug_then_repair(fx: Fixture, tmp_path: Path) -> None:

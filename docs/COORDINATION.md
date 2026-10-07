@@ -34,7 +34,7 @@ The implementation is `coordination.py`, used by the CLI and the existing `Bridg
 | `max_repairs` | integer 0–100, default 1, subset of attempts |
 | `max_executor_wall_seconds` | optional positive finite total reserved executor-seconds ceiling, ≤ 8,640,000 |
 | `max_executor_turns` | optional integer 1–50,000, total requested-turn reservation ceiling |
-| `allowed_executors` | nonempty subset of `fake`, `claude-code`, `codex`; default `["fake"]`; Codex offline-only |
+| `allowed_executors` | nonempty subset of `fake`, `claude-code`, `codex`, `zcode`; default `["fake"]`; ZCode offline-only, native Claude/Codex remain gated |
 
 Goal acceptance/constraint summaries are frozen planning metadata. They are not executable
 integrated verification, an automatic policy compiler, or a claim that acceptance passed.

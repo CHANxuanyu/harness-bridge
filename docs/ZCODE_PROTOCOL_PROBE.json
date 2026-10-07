@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-07",
+  "evidence_level": "native model-free capability probe; not native session execution",
+  "application_version": "0.16.9",
+  "bundle_sha256": "fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f",
+  "isolation": "temporary HOME and data/config directories; built-in provider config explicitly selected; short temporary socket path",
+  "request": {"id": 1, "method": "runtime/capabilities", "params": {}},
+  "reply": {"id": 1, "result": {"independentPlanState": true}},
+  "notification_methods": ["startup/storageState"],
+  "exit_code": 0,
+  "stderr_empty": true,
+  "native_session_created": false,
+  "prompt_sent": false,
+  "model_calls": 0,
+  "earlier_probe_failures": [
+    "Missing builtin config with the initial isolated CLI invocation; exit 1",
+    "Unix socket path too long under the chat directory; initialization error despite outer exit 0"
+  ],
+  "private_evidence": "takeover chat work/p8-protocol-probe/",
+  "not_proven": ["account entitlement", "session methods", "model selection", "permissions", "resume", "native cancellation", "desktop history"]
+}

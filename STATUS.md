@@ -1,6 +1,44 @@
 # Status
 
-## P8 primary route fixed; model-free discovery — 2026-10-07
+## P8 ZCode offline protocol slice — 2026-10-07
+
+The selected route remains **Codex Astra Advisor → Claude Code Opus5.5 for difficult work +
+ZCode GLM5.3Flash for bounded simple work**. ZCode now has an offline adapter and bidirectional
+stdio client, a separate exact-model/account-provider task contract and explicit null-turn
+budgeting. Managed goal children/worktrees, background dispatch replay, same-session repair,
+independent verification/review, timeout and cancellation work with a simulated protocol peer.
+See [ZCODE_EXECUTOR.md](docs/ZCODE_EXECUTOR.md) for the implemented contract and native gaps.
+
+The isolated native ZCode0.16.9 `runtime/capabilities` probe returned successfully and exited
+cleanly, without creating a session or sending a prompt. Earlier missing-config and socket-path
+failures remain recorded. Session request/event shapes come from static installed schemas;
+the successful session/repair/cancel checks are **synthetic**, not native execution evidence.
+Model/provider/workspace/permission mismatches, malformed/duplicate/unrelated events, native
+permission requests and unknown process exits cannot become approved success. Raw snapshots,
+history and native error prose are not forwarded to receipts. No history-deleting session/close.
+
+Validation: pre-edit affected baseline **87 passed / 24.82s**. New ZCode/doctor checks **62 passed /
+33.72s**; affected models/Claude/Codex/goal planning/coordination/workers/concurrency **235 passed /
+117.44s**. Global lint/format (154 Python files) and strict mypy (42 runtime files) pass. This is
+scoped regression, not a repeat of the P7 full suite or paid/GUI acceptance. Initial checks found
+and fixed empty resume-ID admission; incorrect test setup/approval-state/cleanup assumptions
+were corrected against existing contracts. No failing cases removed or skipped.
+
+**Native ZCode dispatch stays unavailable before attempt reservation**, including background
+and explicit opt-in. Account entitlement/subscription provenance, effective permissions/hooks/MCP,
+native model/turn correlation/resume/stop and original desktop history still need qualification.
+Doctor reports this as offline-only. No current Advisor model change, new model call, authentication
+or billing setting change, host plugin update, state migration or release rebuild. P7 native
+allowance remains closed at8 executions/1 repair/975 reserved seconds; candidate stays113b0a7.
+
+Next: finish P8.1 account/permission and session-protocol qualification, then P8.3 Advisor routing
+and explicit escalation templates. Prepare the exact bounded P8.4 packet before any new model
+allowance is requested. Do not enable live merely because offline tests pass. The current source
+slice is ready for the already-authorized non-force push; release/tag/package publication remains
+outside scope. Private probes: takeover `work/p8-protocol-probe/`; public sanitized receipt:
+[ZCODE_PROTOCOL_PROBE.json](docs/ZCODE_PROTOCOL_PROBE.json).
+
+## Historical P8.0 route discovery — 2026-10-07
 
 The user selected **Codex Astra Advisor → Claude Code Opus5.5 for difficult work + ZCode
 GLM5.3Flash for simple bounded work**. See [ROUTING_PROFILE.md](docs/ROUTING_PROFILE.md) for

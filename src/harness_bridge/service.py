@@ -38,6 +38,7 @@ from harness_bridge.adapters.claude_code import (
 )
 from harness_bridge.adapters.codex import CodexAdapter, CodexSettings
 from harness_bridge.adapters.fake import FakeExecutorAdapter
+from harness_bridge.adapters.zcode import ZCodeAdapter
 from harness_bridge.artifacts import (
     atomic_write_json,
     fit_summary,
@@ -493,7 +494,13 @@ class Bridge:
             assert spec.executor.scenario is not None
             return FakeExecutorAdapter(spec.executor.scenario), None
         adapter: ExecutorAdapter
-        if spec.executor.kind == "codex":
+        if spec.executor.kind == "zcode":
+            if mode != "mock":
+                ZCodeAdapter.refuse_live()
+            adapter = ZCodeAdapter(spec.executor)
+            name = "zcode"
+            real = shutil.which(name, path=self.env.get("PATH"))
+        elif spec.executor.kind == "codex":
             adapter = CodexAdapter(
                 CodexSettings(spec.executor.requested_model, spec.executor.sandbox)
             )
@@ -522,14 +529,14 @@ class Bridge:
                     "for contract tests); live requires a supported adapter and the live gate",
                 )
             stub = os.path.realpath(executor_binary)
-            looks_real = os.path.basename(stub).lower().startswith(("claude", "codex")) or (
-                real is not None and os.path.realpath(real) == stub
-            )
+            looks_real = os.path.basename(stub).lower().startswith(
+                ("claude", "codex", "zcode")
+            ) or (real is not None and os.path.realpath(real) == stub)
             if not os.path.isabs(executor_binary) or looks_real:
                 raise BridgeError(
                     "PREFLIGHT_FAILED",
                     "--stub-binary must be an absolute path to a stand-in that is not the real "
-                    "harness executable (and not named 'claude*' or 'codex*')",
+                    "harness executable (and not named 'claude*', 'codex*' or 'zcode*')",
                 )
             if not os.access(stub, os.X_OK):
                 raise BridgeError("PREFLIGHT_FAILED", f"stub binary {stub} is not executable")
@@ -814,9 +821,13 @@ class Bridge:
             should_stop=self._should_stop_factory(task_id),
         )
         result = adapter.classify_completion(outcome, events)
-        if adapter.kind == "codex" and dropped and result.outcome is AttemptOutcome.SUCCEEDED:
+        if (
+            adapter.kind in ("codex", "zcode")
+            and dropped
+            and result.outcome is AttemptOutcome.SUCCEEDED
+        ):
             result.outcome = AttemptOutcome.PROTOCOL_ERROR
-            result.reason = "Codex events were dropped; completion cannot be confirmed"
+            result.reason = f"{adapter.kind} events were dropped; completion cannot be confirmed"
         result.protocol["events_dropped"] = dropped
         adir = self.attempt_dir(task_id, attempt_id)
         process = outcome.to_dict()
@@ -1283,7 +1294,10 @@ class Bridge:
     def _resume_session(self, task: TaskRecord, spec: TaskSpec) -> str | None:
         """A session id is reused only if this task's previous attempt observed it for the same
         executor kind, repository and worktree. Otherwise the repair starts a new session."""
-        if spec.executor.kind not in ("claude-code", "codex") or not spec.executor.resume_on_repair:
+        if (
+            spec.executor.kind not in ("claude-code", "codex", "zcode")
+            or not spec.executor.resume_on_repair
+        ):
             return None
         attempts = self.store.list_attempts(task.task_id)
         # A proven non-start cannot supersede the last observed session. In particular,

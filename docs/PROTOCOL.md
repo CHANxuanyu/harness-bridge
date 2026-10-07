@@ -29,8 +29,8 @@ For goal-linked tasks, mutating task commands require `--advisor-binding` and
 | `forbidden_paths` | globs | case-insensitive; default `.github/**`, `.env`, `.env.*`, `**/.env`, `**/.env.*`; wins over allowed |
 | `verification[]` | `{id, argv[], cwd=".", timeout_seconds, required=true, trust}` | `trust` ∈ `external-acceptance`, `repository-tests`; ≥1 required; argv only, no shell |
 | `limits` | `max_attempts` 3 (1..10), `max_repair_cycles` 2 (≤ max_attempts−1), `wall_timeout_seconds` 900, `max_turns_per_attempt` 20, `max_artifact_bytes` 10 MiB, `kill_grace_seconds` 5 | conservative project defaults, not vendor guarantees |
-| `executor.kind` | `fake` \| `claude-code` \| `codex` | Codex currently requires a mock stand-in; live unavailable |
-| `executor.requested_model` | string \| null | fake/Claude default `claude-opus-5-5`; Codex default null, observed model unknown |
+| `executor.kind` | `fake` \| `claude-code` \| `codex` \| `zcode` | Claude/Codex live gated; ZCode requires an explicit mock protocol stand-in |
+| `executor.requested_model` | string \| null | fake/Claude default `claude-opus-5-5`; Codex default null; ZCode exact `GLM-5.3-Flash` |
 | `executor.scenario` | fake only | `success`, `bug-then-repair`, `hang`, `crash`, `malformed-output`, `permission-denied`, `budget-exhausted`, `scope-violation`, `false-success-report`, `noisy`, `tamper-tests` |
 | `executor.permission_mode` | `acceptEdits` (default), `manual`, `dontAsk`, `plan` | legacy fake/Claude only; `bypassPermissions`/`auto` rejected |
 | `executor.allowed_tools` | list | legacy fake/Claude only; unrestricted `Bash` / `Bash(*)` rejected |
@@ -38,9 +38,13 @@ For goal-linked tasks, mutating task commands require `--advisor-binding` and
 | `executor.strict_mcp_config` | bool (true) | legacy fake/Claude only; Claude adds `--strict-mcp-config` |
 | `executor.sandbox` | `read-only` \| `workspace-write` (default) | Codex only; no full-access option |
 
-Codex uses a separate strict executor contract; old fake/Claude normalized JSON is unchanged.
-Its mandatory turn ceiling has no established native enforcement, so live dispatch is refused
-before reservation. See [Codex capability boundary](CODEX_EXECUTOR.md).
+Codex and ZCode use separate strict executor contracts; old fake/Claude normalized JSON is
+unchanged. Codex live tasks require explicit `max_turns_per_attempt: null` and native preflight;
+old numeric-turn tasks remain refused in live mode. ZCode tasks always require an explicit null
+turn ceiling and a frozen account-provider choice; their native dispatch remains unavailable.
+Both retain attempts/wall-time/cancel budgets; numeric goal turn ceilings refuse uncapped children.
+See [Codex capability boundary](CODEX_EXECUTOR.md) and [ZCode settings and evidence](ZCODE_EXECUTOR.md)
+for the separate permission/model fields and qualification limits.
 
 Core-generated: `task_id`, `task_version` (always 1 in V0.1), `created_at`, normalized spec
 digest, verifier digest, repo identity (git common dir), base SHA. `create` takes an

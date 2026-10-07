@@ -177,6 +177,26 @@ class CodexExecutorSpec(_Strict):
         return value
 
 
+class ZCodeExecutorSpec(_Strict):
+    """Narrow P8 offline profile; exact model/provider and explicit non-yolo permissions."""
+
+    kind: Literal["zcode"]
+    requested_model: Literal["GLM-5.3-Flash"] = "GLM-5.3-Flash"
+    provider_id: Literal[
+        "account:zai-individual-coding-plan",
+        "account:bigmodel-individual-coding-plan",
+        "account:zai-team-coding-plan",
+        "account:bigmodel-team-coding-plan",
+    ]
+    permission_mode: Literal["edit", "plan"] = "edit"
+    allowed_tools: list[Literal["Read", "Edit", "Write", "Glob", "Grep"]] = Field(
+        default=["Read", "Edit", "Write", "Glob", "Grep"],
+        min_length=1,
+        max_length=5,
+    )
+    resume_on_repair: bool = True
+
+
 class TaskDefinition(_Strict):
     """Task requirements without a repository/base; shared by plans and execution specs."""
 
@@ -186,7 +206,7 @@ class TaskDefinition(_Strict):
     forbidden_paths: list[str] = Field(default_factory=lambda: list(DEFAULT_FORBIDDEN_PATHS))
     verification: list[VerificationCommand] = Field(min_length=1, max_length=50)
     limits: Limits = Field(default_factory=Limits)
-    executor: ExecutorSpec | CodexExecutorSpec = Field(discriminator="kind")
+    executor: ExecutorSpec | CodexExecutorSpec | ZCodeExecutorSpec = Field(discriminator="kind")
 
     @field_validator("allowed_paths", "forbidden_paths")
     @classmethod
@@ -197,8 +217,13 @@ class TaskDefinition(_Strict):
 
     @model_validator(mode="after")
     def _verification_rules(self) -> TaskDefinition:
-        if self.limits.max_turns_per_attempt is None and self.executor.kind != "codex":
-            raise ValueError("only Codex may explicitly select a null native turn ceiling")
+        if self.limits.max_turns_per_attempt is None and self.executor.kind not in (
+            "codex",
+            "zcode",
+        ):
+            raise ValueError("only Codex/ZCode may explicitly select a null native turn ceiling")
+        if self.executor.kind == "zcode" and self.limits.max_turns_per_attempt is not None:
+            raise ValueError("ZCode requires an explicit null native turn ceiling")
         ids = [c.id for c in self.verification]
         if len(ids) != len(set(ids)):
             raise ValueError("verification ids must be unique")

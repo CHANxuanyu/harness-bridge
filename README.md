@@ -7,6 +7,12 @@
 > P7 acceptance is complete for the documented local scope, including Codex GUI restart/history persistence.
 > See the [V01–V15 acceptance matrix](docs/P7_CLOSEOUT.md) and [native evidence](docs/P7_RESULT.md).
 
+The selected next route is **Codex Astra Advisor → Claude Code Opus 5.5 for difficult work +
+ZCode GLM 5.3 Flash for bounded simple work**. The new [ZCode Executor](docs/ZCODE_EXECUTOR.md)
+now has an offline protocol adapter; native dispatch remains unavailable pending account,
+permission, session and desktop qualification. See the [routing contract](docs/ROUTING_PROFILE.md).
+The P7 packaged candidate remains pinned to `113b0a7`; this source development is not a new release.
+
 Harness Bridge aims to provide **one Advisor with one or more Executors across coding
 harnesses**: the Advisor inspects the repo, delegates tasks, reviews results and coordinates
 integration. The Bridge prepares each executor's workspace and records execution/evidence.
@@ -30,7 +36,7 @@ Advisor (an existing Codex or ZCode conversation)
 Harness Bridge  ── SQLite state + events ── bridge-owned git worktree
    │                                         independent verifier commands
    ▼                                         evidence manifest + approval gate
-Executor sessions: Claude Code | Codex (live, explicitly gated) | fake (offline)
+Executor sessions: Claude Code | Codex (live, gated) | ZCode (offline only) | fake
 ```
 
 ## Product and user entrypoints
@@ -137,5 +143,5 @@ better or cheaper than one (see [`docs/EVALUATION_PLAN.md`](docs/EVALUATION_PLAN
 `docs/PROJECT_PLAN.md` · `docs/PRODUCT_FORM.md` · `docs/PLUGIN_ALPHA_RESULT.md` ·
 `docs/CLOUD_EXECUTION_PLAN.md` (original requirements).
 
-Licensed under [Apache-2.0](LICENSE). Only a local release candidate is authorized; no remote
-push, package upload or marketplace publication is implied.
+Licensed under [Apache-2.0](LICENSE). Project-source push is authorized; the release candidate
+remains local. Package upload, tags, GitHub Release and marketplace publication are not implied.

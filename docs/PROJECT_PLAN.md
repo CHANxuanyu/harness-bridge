@@ -1,6 +1,6 @@
 # Harness Bridge 项目计划书
 
-**版本：1.3 · 日期：2026-10-07 · 状态：P7 基线已验收；P8 首发路线已由用户确定，尚非发布说明**
+**版本：1.4 · 日期：2026-10-07 · 状态：P7 基线已验收；P8 ZCode 离线适配已接入，尚非原生验收或发布说明**
 
 核心定义由用户明确：**Advisor 本身是一个 coding agent 会话，领导一个或多个运行于其他 harness 的 Executor 会话。**
 产品服务于同时订阅 ZCode/GLM、Claude Code、Codex 等工具的开发者，使其在主会话中使用跨 harness 的子 agent。
@@ -12,7 +12,7 @@
 **最新主路径：Codex Astra 作为 Advisor，Claude Code Opus 5.5 负责难任务，ZCode GLM 5.3 Flash
 负责简单任务。** 这是用户明确的分工，优先于下文 P0–P7 的历史路线默认。
 具体路由、升级边界、模型标识与 P8 实施/验收顺序见 [ROUTING_PROFILE.md](ROUTING_PROFILE.md)。
-现有 P7 验收保留；ZCode Executor 未实现，这条新主路径尚未闭环。
+现有 P7 验收保留；ZCode Executor 的离线协议实现已接入，真实入口未开放，这条新主路径尚未闭环。
 
 ## 1. 产品定义与已确定的边界
 
@@ -67,7 +67,7 @@ Bridge：总目标 G + 当前 Advisor 绑定 + 持久化事件
   ├─ 难任务 A → 工作区 WA → Claude Code / Opus 5.5 会话 EA
   │                            ├─ 尝试 A1：一个执行进程
   │                            └─ 尝试 A2：新进程，验证后恢复 EA
-  └─ 简单任务 B → 工作区 WB → ZCode / GLM 5.3 Flash 会话 EB（P8 待实现）
+  └─ 简单任务 B → 工作区 WB → ZCode / GLM 5.3 Flash 会话 EB（P8 离线实现；原生待验收）
                                └─ 尝试 B1：一个执行进程
             ↓ 通过审查的明确版本
          整合工作区 → 总目标验收 → 本地交付分支
@@ -306,7 +306,7 @@ V1 默认交付一个新的本地分支，不改当前 checkout。源仓库随�
 | Codex 插件 | alpha.2 实际配置安装/启用、原生技能目录加载、默认共享连接通过；当前窗口热刷新未观测 | 原会话完整真实委派、等待、返修、接管与交付 |
 | ZCode 插件 | alpha.2 实际安装、技能启用、缓存自检和默认共享连接通过；未触发模型 | Advisor 真实操作流程与宿主生命周期验收 |
 | Codex Executor | 离线适配与 stub 闭环已实现，真实派发关闭 | 内部回合上限、订阅/配置证据与原生恢复仍需逐项确认 |
-| ZCode Executor | P8.0 已只读核对本机 help、GLM-5.3-Flash 目录和协议符号；尚未实现 adapter | 用户首发主路径的 P8 必须项；原生契约/账号选择与真实行为待验收 |
+| ZCode Executor | P8.1 无模型能力探针通过；P8.2 离线 adapter 已覆盖模型/目录绑定、原会话返修、取消、预算和独立验收；见 [ZCODE_EXECUTOR.md](ZCODE_EXECUTOR.md) | 真实账号/权限、会话协议、停止和桌面行为待验收；live 仍拒绝 |
 
 每个 adapter 维护能力事实：启动方式、目录指定、流式输出、恢复、取消、限制、认证/计费路径及证据版本。
 “安装了 CLI”和“能按订阅安全完成本任务”分开判断。当前 live gate 保持原规则；新方向需要独立设计和验证，

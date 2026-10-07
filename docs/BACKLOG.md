@@ -7,10 +7,12 @@ This file indexes remaining work; it does not maintain a competing implementatio
 
 Codex Astra is the Advisor; Claude Code Opus 5.5 handles difficult work and ZCode GLM 5.3 Flash
 handles bounded simple work. P7 is accepted for its existing scope and source113b0a7 was pushed.
-P8.0 route/discovery is documented; **ZCode Executor is not implemented**. Follow
-[ROUTING_PROFILE.md](ROUTING_PROFILE.md): model/account/permission metadata, native adapter and
-offline contracts, Advisor routing and explicit escalation, then a newly authorized bounded
-real acceptance of the exact three-model route. Do not spend the closed P7 allowance.
+P8.0 route/discovery is documented. P8.1 has a model-free native capability probe; P8.2 has an
+**offline ZCode protocol adapter**, including same-session repair, managed cancellation and
+existing independent review. [ZCODE_EXECUTOR.md](ZCODE_EXECUTOR.md) separates this evidence from
+native support. Next qualify account/permission metadata and native session semantics, add
+Advisor routing/escalation templates, then prepare newly authorized bounded real acceptance
+of the exact three-model route. Native ZCode dispatch remains closed. Do not spend the P7 allowance.
 
 ## Completed baseline — reuse, do not redo for handoff
 

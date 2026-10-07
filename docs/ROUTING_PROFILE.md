@@ -60,8 +60,8 @@ P7 已验收 Codex Advisor → Claude Code/Codex Executors 的记录范围，源
 | 项目 | 当前状态与下一步 |
 |---|---|
 | P8.0 路线与接口发现 | 本文固定分工；已运行本机无推理 help 并只读检查 ZCode 安装包 |
-| P8.1 原生契约与启动前检查 | 确认逐会话精确模型、账号/套餐来源、权限、会话 ID、事件、停止和桌面持久化；先做无推理元数据探针 |
-| P8.2 ZCode adapter | 接入原生传输、工作区与会话绑定、事件解析、返修、确认退出和按能力预算；用模拟协议做离线检查 |
+| P8.1 原生契约与启动前检查 | 已完成隔离原生服务器的无模型能力查询；会话方法目前依据安装包静态契约，账号/权限/真实会话与桌面仍待核对 |
+| P8.2 ZCode adapter | 离线双向协议客户端和 adapter 已接入；覆盖工作区/模型/会话绑定、返修、预算、取消和外部验收；真实入口保持关闭 |
 | P8.3 Advisor 路由与交接 | 把本分工接入 Skill/任务模板；离线覆盖难度选择记录、失败回传、原会话修复、显式升级和整合 |
 | P8.4 目标路线真实验收 | 准备具体任务、模型/权限/预算和停止条件后，按新有界授权运行 Astra → Opus + Flash；验证双方原历史与桌面入口 |
 
@@ -72,8 +72,11 @@ GLM 5.3 Flash；两者执行模型和账号来源可核对、工作区正确、�
 
 ## ZCode 0.16.9 的零推理发现
 
-本轮只运行 `zcode --help` / `app-server --help`，并检查已安装 bundle 的协议符号与内置模型目录。
-没有创建原生会话、发送 prompt、启动原生协议服务器、读取凭据或改全局配置。以下不等同于行为已验证：
+P8.0 只运行 `zcode --help` / `app-server --help`，并检查已安装 bundle 的协议符号与内置模型目录。
+随后 P8.1 在隔离 HOME/数据目录中启动原生 stdio 服务器，只查询 `runtime/capabilities`，收到
+`independentPlanState: true` 后关闭连接并确认退出。没有创建原生会话、发送 prompt、读取凭据或改全局配置。
+探针前两次的缺失配置和 socket 路径过长失败保留；成功查询不把会话执行和权限行为变成已验证。
+见 [脱敏探针记录](ZCODE_PROTOCOL_PROBE.json)、[适配器契约](ZCODE_EXECUTOR.md)和[验收记录](VALIDATION_MATRIX.md)。
 
 - CLI help 提供 `--cwd`、`--resume`、`--surface`、`--mode`、`--json` 和 `app-server`。
 - **`--prompt` 的默认权限模式是 `yolo`。** 适配必须显式选择并验证受限模式，不能采用默认放权。
@@ -87,5 +90,6 @@ GLM 5.3 Flash；两者执行模型和账号来源可核对、工作区正确、�
 
 本机 bundle SHA-256：`fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f`。
 私有探针记录在接管会话的 `work/p8-routing-discovery/`；不把整份厂商 bundle 或用户配置放进 public repo。
+后续协议探针记录在 `work/p8-protocol-probe/`。离线模拟输出与原生探针分别标注来源。
 官方资料确认账号连接可使用 GLM-5.3-Flash 和既有 Coding Plan，具体账号授权仍以原生结果为准：
 [ZCode 模型与套餐](https://zcode.z.ai/cn/docs/configuration)。

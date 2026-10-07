@@ -22,6 +22,7 @@ from harness_bridge.adapters.claude_code import (
     help_flags,
 )
 from harness_bridge.adapters.codex import CodexAdapter, CodexSettings
+from harness_bridge.adapters.zcode import ZCodeAdapter
 from harness_bridge.config import (
     API_PROVIDER_ENV,
     CLOUD_ENV_MARKERS,
@@ -31,7 +32,7 @@ from harness_bridge.config import (
     present,
 )
 from harness_bridge.errors import BridgeError
-from harness_bridge.models import DEFAULT_MODEL
+from harness_bridge.models import DEFAULT_MODEL, ZCodeExecutorSpec
 
 
 def _claude_flag_check(
@@ -122,6 +123,13 @@ def run_doctor(state_dir: Path, *, offline: bool) -> dict[str, Any]:
             "name": "codex_executor_adapter",
             "status": "gated_wall_time_only",
             "evidence": CodexAdapter(CodexSettings()).describe_capabilities(),
+        },
+        {
+            "name": "zcode_executor_adapter",
+            "status": "offline_only",
+            "evidence": ZCodeAdapter(
+                ZCodeExecutorSpec(kind="zcode", provider_id="account:zai-individual-coding-plan")
+            ).describe_capabilities(),
         },
         {
             "name": "codex_supervisor_loop",
