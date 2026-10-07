@@ -1,5 +1,28 @@
 # Handoff
 
+## P7 final acceptance — 2026-10-07
+
+**P7 V01–V15 are accepted within the explicit evidence boundaries in
+[P7_CLOSEOUT.md](docs/P7_CLOSEOUT.md).** Runtime 0.1.0.dev2 / Advisor plugin alpha.5;
+Apache-2.0, local candidate only. No remote release/push or new model allowance.
+
+The human quit/reopened the Codex GUI. A detached, bounded observer recorded the main GUI
+absent at 13:02:39.231 UTC and a replacement process at 13:02:40.372 UTC. The same fake worker,
+goal, job and attempt remained RUNNING across that gap. Fresh-connection dispatch replay
+returned the same job; exactly one attempt existed. The observer cancelled the fake task,
+confirmed its exit and unchanged source. This Advisor reconnected after restart and found
+zero occupied slots; the isolated test goal was then closed as CANCELLED. No model ran.
+The human additionally confirmed “仍在列表，原历史也能打开” for the original Codex Executor.
+Post-restart Skill availability now includes installed alpha.5 in this Advisor's supplied catalog.
+
+Private evidence: takeover chat `work/p7-codex-gui-lifecycle/` (`result.json`,
+`advisor-reconnected.json`, `fixture-closed.json`, `desktop-persistence-human.json`).
+Do not rerun the helper or native packet. Preserve real histories/worktrees. The final native
+ledger stays 8 executions (4 per harness), 1 repair, 975 reserved wall seconds; all gates closed.
+This proves the tested GUI lifecycle; backend termination, sleep, logout and OS reboot remain
+outside the claim. Finished-session desktop handoff does not implement running-session control.
+See [GUI evidence](docs/P7_GUI_LIFECYCLE.md). No runtime change or repeated full suite was needed.
+
 ## Desktop continuation after unlock — 2026-10-07
 
 Runtime **0.1.0.dev2**, plugin **0.1.0-alpha.5**. Claude's original session is visible in its
@@ -33,25 +56,11 @@ Fresh native Codex skills/list resolves enabled alpha.5 for both repo and chat c
 No new Executor attempt/model message, provider/billing change or remote publication.
 Private receipts: takeover chat `work/p7-desktop-unlocked/result.json` and `work/p7-plugin-alpha5/`.
 
-**Remaining:** full Codex GUI quit/relaunch with a bounded fake job, plus checking the original
-Codex chat after that restart. Do not close this app through a refused automation route. The
-human performs the actual quit/reopen; a prepared observer records process identity and job
-continuity. Preserve all real task histories/worktrees. All native model allowances stay spent.
+**Completed:** the subsequent human-driven Codex GUI quit/relaunch retained exactly one fake
+attempt, followed by confirmed cancellation and fresh Advisor reconnection. The human confirmed
+the original Executor remained in the list with its original history. See [P7_GUI_LIFECYCLE.md](docs/P7_GUI_LIFECYCLE.md).
+All real task histories/worktrees remain intact and native model allowances stay spent.
 
-
-### Ready: one bounded GUI lifecycle observation
-
-The current continuation prepared exactly one **mock/fake** job under the takeover chat's
-`work/p7-codex-gui-lifecycle/`. Read `ready.json`, `progress.json`, then `result.json` when present.
-Original main GUI PID 88573 (birth retained in ready.json); observer PID 54527. The observer only
-reads GUI process identity, reconnects to the same mock job and cancels that owned fake task.
-It never quits/launches/controls the GUI. It waits at most 840 seconds after 2026-10-07 13:00:38 UTC;
-the fake attempt independently has a 900-second wall limit. **Do not launch the helper again.**
-The human must fully quit the app, wait five seconds, reopen and return to this chat. If the
-observer reports a timeout/missing evidence, retain NOT_ACCEPTED/NOT_COMPLETED; never infer pass
-from a new PID alone. If interrupted, inspect the saved job before any further mutation.
-All real model gates remain closed. After a passed result, confirm original Codex page/list
-persistence and finish the matrix, commit and fresh local candidate. Desktop fix commit: d3fd74a.
 
 ## Previous continuation (historical; superseded above)
 

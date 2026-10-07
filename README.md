@@ -4,7 +4,7 @@
 > Real Claude/Codex parallel work, exact-session repair and integrated local delivery passed.
 > The corrected Codex cancellation retest and Claude native turn-stop also passed.
 > Original Claude/Codex sessions are visible after desktop handoff.
-> P7 remains open for full Codex GUI quit/relaunch and post-restart persistence acceptance.
+> P7 acceptance is complete for the documented local scope, including Codex GUI restart/history persistence.
 > See the [V01–V15 acceptance matrix](docs/P7_CLOSEOUT.md) and [native evidence](docs/P7_RESULT.md).
 
 Harness Bridge aims to provide **one Advisor with one or more Executors across coding
@@ -47,10 +47,10 @@ distinguishes existing V0.1 code from proposed coordination and delivery capabil
 
 A [local Advisor plugin alpha.5](plugins/harness-bridge/README.md) packages one shared Skill
 for Codex/ZCode. Both actual host installations share the same runtime/state connection.
-Native clean install, upgrade, uninstall and reinstall preserve task data. ZCode full app quit
-and relaunch retained a fake worker; Codex tool PTY reconnection was verified earlier. Full
-Codex GUI shutdown and universal host survival are not claimed. See [local installation and
-support boundaries](docs/LOCAL_RELEASE.md) and [P7 evidence](docs/P7_RESULT.md).
+Native clean install, upgrade, uninstall and reinstall preserve task data. Both ZCode and Codex
+full GUI quit/relaunch retained a fake worker without duplication. Fresh Advisor reconnection
+and confirmed cancellation passed; OS sleep/reboot/logout remain unverified. See [local installation
+and support boundaries](docs/LOCAL_RELEASE.md) and [P7 evidence](docs/P7_RESULT.md).
 
 The [goal coordination reference](docs/COORDINATION.md) documents the implemented
 `goal create/status/takeover`, `projects` and `create --goal` commands. Linked tasks require
@@ -72,8 +72,9 @@ removes only selected clean owned worktrees after delivery, retaining refs/evide
 P4 local core, P5 Codex offline adapter and P6 model-free installed wiring are implemented;
 P7 bounded native collaboration, repair, delivery, cancellation retest and turn-stop passed.
 Finished-session desktop handoff now uses a bounded Claude terminal launcher or the documented
-Codex existing-thread link. Claude GUI and human-observed Codex visibility are recorded; full
-Codex app restart acceptance remains pending. See [desktop continuity](docs/DESKTOP_SESSIONS.md).
+Codex existing-thread link. Claude GUI and human-observed Codex visibility are recorded,
+including Codex history persistence
+after the accepted full GUI restart. See [desktop continuity](docs/DESKTOP_SESSIONS.md).
 See [Codex capability boundary](docs/CODEX_EXECUTOR.md). Approval alone
 does not deliver a goal.
 

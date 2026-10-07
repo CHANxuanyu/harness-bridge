@@ -65,8 +65,8 @@ Replaying left one sidebar item. The original failed pipe request remains record
 Native Codex navigation opened UUID `01a11375-1bfc-7ba3-a351-8d206887423c`, titled
 **Harness Bridge · P7 Codex Executor · 已交付**. The human replied “页面和左侧列表都能看到”.
 The list API still omitted it. Runtime URL dispatch/replay then passed after a version-prefix
-preflight correction (`codex-cli`, not `codex`). Post-restart persistence remains part of the
-full Codex GUI lifecycle check. No new Executor attempt/model message was sent.
+preflight correction (`codex-cli`, not `codex`). After full GUI quit/relaunch, the human confirmed “仍在列表，原历史也能打开”.
+The independent fake-worker lifecycle also passed; see [GUI evidence](P7_GUI_LIFECYCLE.md). No new Executor attempt/model message was sent.
 
 Actual alpha.5 caches match all 16 files in both hosts; 36-command checks resolve dev2 through
 the unchanged connection. Unrelated plugins are unchanged. Private receipts are retained in

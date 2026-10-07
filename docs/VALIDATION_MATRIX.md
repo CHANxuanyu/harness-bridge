@@ -5,6 +5,29 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+## P7 final acceptance — 2026-10-07
+
+**P7 V01–V15 are accepted within the explicit evidence boundaries in
+[P7_CLOSEOUT.md](P7_CLOSEOUT.md).** Runtime 0.1.0.dev2 / Advisor plugin alpha.5;
+Apache-2.0, local candidate only. No remote release/push or new model allowance.
+
+The human quit/reopened the Codex GUI. A detached, bounded observer recorded the main GUI
+absent at 13:02:39.231 UTC and a replacement process at 13:02:40.372 UTC. The same fake worker,
+goal, job and attempt remained RUNNING across that gap. Fresh-connection dispatch replay
+returned the same job; exactly one attempt existed. The observer cancelled the fake task,
+confirmed its exit and unchanged source. This Advisor reconnected after restart and found
+zero occupied slots; the isolated test goal was then closed as CANCELLED. No model ran.
+The human additionally confirmed “仍在列表，原历史也能打开” for the original Codex Executor.
+Post-restart Skill availability now includes installed alpha.5 in this Advisor's supplied catalog.
+
+Private evidence: takeover chat `work/p7-codex-gui-lifecycle/` (`result.json`,
+`advisor-reconnected.json`, `fixture-closed.json`, `desktop-persistence-human.json`).
+Do not rerun the helper or native packet. Preserve real histories/worktrees. The final native
+ledger stays 8 executions (4 per harness), 1 repair, 975 reserved wall seconds; all gates closed.
+This proves the tested GUI lifecycle; backend termination, sleep, logout and OS reboot remain
+outside the claim. Finished-session desktop handoff does not implement running-session control.
+See [GUI evidence](P7_GUI_LIFECYCLE.md). No runtime change or repeated full suite was needed.
+
 ## Desktop continuation after unlock — 2026-10-07
 
 Runtime **0.1.0.dev2**, plugin **0.1.0-alpha.5**. Claude's original session is visible in its
@@ -37,10 +60,10 @@ All 16 files per cache match, both 36-command checks pass, and Skill validation 
 No new Executor attempt/model message, provider/billing change or remote publication.
 Private receipts: takeover chat `work/p7-desktop-unlocked/result.json` and `work/p7-plugin-alpha5/`.
 
-**Remaining:** full Codex GUI quit/relaunch with a bounded fake job, plus checking the original
-Codex chat after that restart. Do not close this app through a refused automation route. The
-human performs the actual quit/reopen; a prepared observer records process identity and job
-continuity. Preserve all real task histories/worktrees. All native model allowances stay spent.
+**Completed:** the subsequent human-driven Codex GUI quit/relaunch retained exactly one fake
+attempt, followed by confirmed cancellation and fresh Advisor reconnection. The human confirmed
+the original Executor remained in the list with its original history. See [P7_GUI_LIFECYCLE.md](P7_GUI_LIFECYCLE.md).
+All real task histories/worktrees remain intact and native model allowances stay spent.
 
 **P7 distribution closeout (2026-10-07, baseline `4b0767d`):** required pre-edit checks reused
 the plugin compatibility surface: 26 passed / 17.47s. New distribution checks **12 passed /

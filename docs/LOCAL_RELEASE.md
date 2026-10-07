@@ -4,7 +4,7 @@ Runtime **0.1.0.dev2**, Advisor plugin **0.1.0-alpha.5**, protocol 1.0, store re
 Apache-2.0; see LICENSE and NOTICE. The user authorized a local candidate only on 2026-10-07.
 No package index upload, public marketplace listing, Git tag, release or push is included.
 Read `docs/P7_CLOSEOUT.md` in the candidate (linked from `ACCEPTANCE.md`) for measured capabilities and remaining limitations.
-P7 bounded native checks are completed. Desktop visibility has been observed after unlock; full Codex GUI restart/persistence remains unverified.
+P7 bounded native checks are completed. Original desktop visibility and Codex GUI restart/history persistence passed within the recorded scope.
 
 ## Product form
 
@@ -109,7 +109,7 @@ preserving one completed fake task, its goal, single attempt and retained approv
 | Surface | Validated boundary |
 | --- | --- |
 | macOS, Python 3.11, Git | Local core and process ownership/cancellation; recorded offline suite |
-| Codex CLI 0.160.0 Advisor plugin | Native install/upgrade/remove/reinstall and Skill catalog; tool PTY reconnect |
+| Codex CLI 0.160.0 Advisor plugin | Native install/upgrade/remove/reinstall and Skill catalog; tool PTY reconnect and full GUI quit/relaunch with one fake worker |
 | ZCode 0.16.9 Advisor plugin | Native install/upgrade/remove/reinstall; Skill UI and actual full app quit/relaunch with a fake worker |
 | Claude Code CLI 2.1.291 Executor | Prior real initial/repair evidence; P7 native limits/results in ACCEPTANCE.md |
 | Codex CLI 0.160.0 Executor | New tasks can explicitly choose attempts/wall/cancel budget; native metadata preflight checked; P7 real evidence in ACCEPTANCE.md |
@@ -159,7 +159,7 @@ revision; do not treat extracting the archive as restoring the original commit m
 Alpha.4 introduced the Advisor desktop follow-up and two additional model-free connection probes; alpha.5 carries the corrected native routes.
 Actual Codex/ZCode profiles were upgraded through native CLI commands, retained enabled state,
 matched all 16 plugin files and passed the 36-command checker. Other installed plugins and the
-shared connection were unchanged. Finished-session desktop visibility is observed; full Codex GUI restart remains pending. Installation alone
+shared connection were unchanged. Finished-session visibility and Codex GUI restart/history persistence are accepted. Installation alone
 never grants new Executor allowance.
 
 Dev2 fixes Claude terminal transport and supports the validated Codex app existing-thread URL. Alpha.5 requires dev2 and documents both routes. Original failed receipts are retained; only the narrowly confirmed legacy pipe refusal allows one explicit retry.

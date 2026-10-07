@@ -261,3 +261,5 @@ Each entry: decision — reason. Newest last.
 97. **P7 distribution closeout:** build the complete local candidate from one clean commit, include linked documentation/source plus a model-free standalone consistency verifier, and map V01–V15 to evidence levels; packaging success never converts deferred UI or unresolved Codex synchronization into acceptance.
 
 98. **Desktop native acceptance:** Claude requires an input-free bounded PTY; preserve legacy pipe failures with a one-shot explicit recovery only for the pinned pre-handoff exit-1 case. Codex uses a canonical existing-thread URL with app/binary/version guards. Native acknowledgements, tool-observed Claude UI and human-observed Codex UI remain distinct evidence.
+
+99. **P7 GUI closure:** a human-driven Codex main-GUI quit/relaunch with one bounded fake worker proves same-job survival/replay/confirmed cleanup; fresh Advisor reconnection and human post-restart original-history confirmation close V08/V15. Keep backend/OS lifecycle and running-session interaction outside this evidence.
