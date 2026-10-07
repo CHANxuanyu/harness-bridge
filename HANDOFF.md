@@ -38,6 +38,21 @@ Codex chat after that restart. Do not close this app through a refused automatio
 human performs the actual quit/reopen; a prepared observer records process identity and job
 continuity. Preserve all real task histories/worktrees. All native model allowances stay spent.
 
+
+### Ready: one bounded GUI lifecycle observation
+
+The current continuation prepared exactly one **mock/fake** job under the takeover chat's
+`work/p7-codex-gui-lifecycle/`. Read `ready.json`, `progress.json`, then `result.json` when present.
+Original main GUI PID 88573 (birth retained in ready.json); observer PID 54527. The observer only
+reads GUI process identity, reconnects to the same mock job and cancels that owned fake task.
+It never quits/launches/controls the GUI. It waits at most 840 seconds after 2026-10-07 13:00:38 UTC;
+the fake attempt independently has a 900-second wall limit. **Do not launch the helper again.**
+The human must fully quit the app, wait five seconds, reopen and return to this chat. If the
+observer reports a timeout/missing evidence, retain NOT_ACCEPTED/NOT_COMPLETED; never infer pass
+from a new PID alone. If interrupted, inspect the saved job before any further mutation.
+All real model gates remain closed. After a passed result, confirm original Codex page/list
+persistence and finish the matrix, commit and fresh local candidate. Desktop fix commit: d3fd74a.
+
 ## Previous continuation (historical; superseded above)
 
 - **Start from `docs/P7_CLOSEOUT.md`:** one current V01–V15 evidence matrix now separates completed native/offline scope from V08/V15 gaps. README and license/release status are reconciled. Do not rerun native checks or ask about unlocking while the user is away.
