@@ -1,6 +1,6 @@
 [project]
 name = "harness-bridge"
-version = "0.1.0.dev1"
+version = "0.1.0.dev2"
 description = "Local-first bridge for supervised coding across agent harnesses (experimental prototype)"
 readme = "README.md"
 license = { file = "LICENSE" }

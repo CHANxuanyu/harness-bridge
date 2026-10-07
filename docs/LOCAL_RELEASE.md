@@ -1,10 +1,10 @@
 # Local candidate: installation and retention
 
-Runtime **0.1.0.dev1**, Advisor plugin **0.1.0-alpha.4**, protocol 1.0, store revision 10.
+Runtime **0.1.0.dev2**, Advisor plugin **0.1.0-alpha.5**, protocol 1.0, store revision 10.
 Apache-2.0; see LICENSE and NOTICE. The user authorized a local candidate only on 2026-10-07.
 No package index upload, public marketplace listing, Git tag, release or push is included.
 Read `docs/P7_CLOSEOUT.md` in the candidate (linked from `ACCEPTANCE.md`) for measured capabilities and remaining limitations.
-P7 bounded native checks are completed. Desktop-list synchronization and full Codex GUI shutdown remain unverified.
+P7 bounded native checks are completed. Desktop visibility has been observed after unlock; full Codex GUI restart/persistence remains unverified.
 
 ## Product form
 
@@ -22,7 +22,7 @@ source repositories. Example paths are placeholders, not defaults to overwrite:
 
 ```sh
 uv venv /absolute/path/to/bridge-runtime
-uv pip install --python /absolute/path/to/bridge-runtime/bin/python /absolute/path/to/harness_bridge-0.1.0.dev1-py3-none-any.whl
+uv pip install --python /absolute/path/to/bridge-runtime/bin/python /absolute/path/to/harness_bridge-0.1.0.dev2-py3-none-any.whl
 /absolute/path/to/bridge-runtime/bin/hbridge --version
 ```
 
@@ -77,7 +77,7 @@ storage may therefore be indexed under that child directory, not the source repo
 The new `desktop status TASK` command exposes the exact session/cwd and supported handoff.
 For terminal Claude tasks in delivered goals, `desktop open TASK --idempotency-key KEY` uses
 the official same-session desktop handoff (validated CLI version 2.1.291); provide the current
-Advisor binding/epoch for linked tasks. Actual UI acceptance is pending. See `docs/DESKTOP_SESSIONS.md` in the candidate.
+Advisor binding/epoch for linked tasks. Claude UI acceptance passed after the PTY correction; Codex page/sidebar visibility was confirmed by the human. See `docs/DESKTOP_SESSIONS.md` in the candidate.
 Claude's locally verified CLI also supports `--resume <session-id>` to reopen a known conversation;
 opening/resuming in a host and sending a new message are separate actions. This candidate does
 not promise automatic appearance in any desktop conversation sidebar, and does not create a
@@ -156,8 +156,10 @@ The source archive includes build scripts/tests/lockfile, but no `.git` director
 environment, credentials or task store. Build from the matching Git checkout to preserve its
 revision; do not treat extracting the archive as restoring the original commit metadata.
 
-Alpha.4 adds the Advisor desktop follow-up and two additional model-free connection probes.
+Alpha.4 introduced the Advisor desktop follow-up and two additional model-free connection probes; alpha.5 carries the corrected native routes.
 Actual Codex/ZCode profiles were upgraded through native CLI commands, retained enabled state,
 matched all 16 plugin files and passed the 36-command checker. Other installed plugins and the
-shared connection were unchanged. Desktop UI acceptance remains deferred; installation alone
+shared connection were unchanged. Finished-session desktop visibility is observed; full Codex GUI restart remains pending. Installation alone
 never grants new Executor allowance.
+
+Dev2 fixes Claude terminal transport and supports the validated Codex app existing-thread URL. Alpha.5 requires dev2 and documents both routes. Original failed receipts are retained; only the narrowly confirmed legacy pipe refusal allows one explicit retry.

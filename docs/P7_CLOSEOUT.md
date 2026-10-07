@@ -1,15 +1,10 @@
 # P7 closeout matrix — 2026-10-07
 
-**The bounded native packet and local distribution work are complete. P7 is not fully accepted:**
-desktop session-list synchronization and the full Codex GUI lifecycle remain open. The user
-explicitly deferred UI work until returning home and unlocking the Mac. That deferral is not a
-passing test and does not reopen the spent model allowance.
-
-Current candidate: runtime **0.1.0.dev1**, Advisor plugin **0.1.0-alpha.4**, protocol 1.0,
-store revision 10, Apache-2.0. The product is a shared local runtime with thin plugins in
-existing Advisor conversations; at most two scoped Executors can run concurrently. Codex and
-ZCode are Advisor hosts; Claude Code and Codex are implemented native Executors. ZCode is not
-yet an Executor. This local candidate is not a remotely published release.
+**The bounded native packet and local distribution work are complete.** Desktop visibility is
+now observed for the original Claude and Codex sessions after unlock. Full Codex GUI lifecycle
+acceptance and persistence checks after that restart remain open; no spent model allowance is
+reopened. Current runtime **0.1.0.dev2**, plugin **0.1.0-alpha.5**, protocol 1.0, store revision 10,
+Apache-2.0, local candidate only. Codex/ZCode are Advisor hosts; Claude Code/Codex are Executors.
 
 ## Acceptance against the project plan
 
@@ -32,9 +27,9 @@ stops, remain in [P7_RESULT.md](P7_RESULT.md) and [VALIDATION_MATRIX.md](VALIDAT
 | V10 Conflicts/integration repair | Passed, offline | Existing P4 conflict, failed combined check, repair-child provenance and delivery-blocking cases are retained in the full regression. Native P7 integrated two nonconflicting inputs; no claim of a native conflict repair. |
 | V11 Exact local delivery | Passed, offline and native | Delivered `73f485d437bc5bcf1796f6bd141e0b3d1be0033f` to isolated fixture branch `bridge/p7-result`; exact approved tree/replay and unchanged source verified. No merge into the user's checkout or remote push. |
 | V12 One Advisor/two harnesses | Passed, native | Existing Advisor coordinated Claude implementation plus Codex diagnosis/repair, inspected both results and approved integrated delivery. |
-| V13 Installation/discovery/retention | Passed for measured host interfaces | Isolated native plugin install/upgrade/remove/reinstall and runtime retention passed. Actual alpha.4 caches match 16 files each; 36-command connection checks and Codex native Skill discovery pass. Current GUI hot refresh is unobserved. |
+| V13 Installation/discovery/retention | Passed for measured host interfaces | Isolated native plugin install/upgrade/remove/reinstall and runtime retention passed. Actual alpha.5 caches match 16 files each; 36-command connection checks and fresh Codex native Skill discovery pass. Current GUI hot refresh is unobserved. |
 | V14 Usage/permissions | Passed within accepted harness-specific contract | Codex attempts/wall/cancel budgeting explicitly approved; numeric old tasks stay refused. Stop receipts and explicit continuations retained. No provider/billing changes. Claude max-turns 1 returned native count 2; only the stop path is proven. |
-| V15 Desktop chat lists | **Not accepted** | Exact native histories exist. Claude handoff implemented/tested offline, actual handoff/UI deferred. Codex exec history is readable but omitted by default native listing; supported desktop sync route unresolved. |
+| V15 Desktop chat lists | Passed for finished original sessions; restart persistence pending | Claude PTY handoff followed by actual page/sidebar/history/worktree inspection passed. Codex original page/sidebar visibility was explicitly confirmed by the human; the guarded official existing-thread URL and receipt replay succeeded. Native list API omission is retained as a separate observation. |
 
 The final native ledger is **8 executions (Claude 4 / Codex 4), 1 repair, 975 reserved wall
 seconds**; observed native duration 145.629s is not billed usage. One additional reservation
@@ -44,8 +39,8 @@ is proven not to have started. All gates are closed. Nothing in this matrix gran
 
 | Item | Work remaining | Completion evidence |
 | --- | --- | --- |
-| Claude desktop | After manual unlock, use the existing delivered task's guarded handoff once; inspect its list entry and original history/worktree; replay the same request. No message needed. | Same native UUID/worktree, visible list item, full existing history and no duplicate; native open acknowledgement alone is insufficient. |
-| Codex desktop | Establish a supported route that exposes the **existing** exec session. The current filter diagnosis is not an implementation. Unlock may help inspect the UI but does not itself solve this gap. | Original UUID/history/worktree visible in the desktop list without copying a chat, rewriting vendor storage/source, or sending a model turn. |
+| Claude desktop | Completed after the PTY correction; original failure retained. | Same UUID/worktree, prompt/read/edit/denied-command/final history, one sidebar item and replay verified. |
+| Codex desktop | Native navigation plus explicit human page/sidebar confirmation; runtime now uses the documented existing-thread URL. Confirm persistence after the remaining restart. | Same original UUID, no prompt/fork/new-chat request; list API omission remains separately recorded. |
 | Codex full GUI lifecycle | A supported desktop test route must be available; preserve the prior computer-use refusal and avoid shutting down this active Advisor as a workaround. Use an isolated fake job if tested. | Full host exit and relaunch followed by same goal/job recovery and exactly one attempt, with confirmed cleanup. |
 
 Keep the delivered fixture state, original worktrees and native histories intact for these
@@ -65,8 +60,8 @@ upgrade/removal retention, supported versions and reconstruction limits.
 
 This closes the earlier packaging gap where the source archive and transport ZIP were added
 by a temporary chat script and copied acceptance notes had missing relative document links.
-The README now reflects the completed bounded checks and actual alpha.4 version. Runtime,
-plugin contents, existing state and native budget are unchanged by this packaging work.
+The README reflects the completed bounded checks and current dev2/alpha.5 versions. The
+packaging operation itself does not change runtime state or grant native execution allowance.
 
 ## Evidence locator
 
@@ -79,7 +74,8 @@ Raw local records are intentionally outside the public repository, under the tak
   under the same packet root — fresh authorized fault evidence, separate from the old failure.
 - `p7-host-lifecycle/` and `p6-desktop/` — measured ZCode GUI and Codex PTY behavior.
 - `p7-distribution/` — independent runtime retention and candidate consistency receipts.
-- `p7-plugin-alpha4/` — actual native cache, connection and Skill discovery checks.
+- `p7-plugin-alpha5/` — current native cache, connection and fresh Skill discovery checks.
+- `p7-desktop-unlocked/result.json` — native handoff receipts and observed desktop evidence.
 - `p7-codex-list-probe.json` — read-only exec/default-list diagnostic, no thread/turn creation.
 
 Evidence files contain local paths and may include native output. Do not publish the private

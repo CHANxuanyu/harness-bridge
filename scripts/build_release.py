@@ -100,7 +100,7 @@ def build(root: Path, output: Path) -> None:
         "See the [V01–V15 closeout matrix](docs/P7_CLOSEOUT.md), "
         "[native evidence](docs/P7_RESULT.md) and "
         "[desktop boundary](docs/DESKTOP_SESSIONS.md).\n\n"
-        "This is a local candidate; P7 desktop acceptance remains open.\n"
+        "This is a local candidate; consult the matrix for remaining host acceptance.\n"
     )
     shutil.copyfile(root / "scripts/verify_release.py", output / "VERIFY.py")
     subprocess.run(

@@ -27,8 +27,9 @@ hbridge --state-dir /absolute/state --json --advisor-binding BINDING --advisor-e
   desktop open TASK_ID --idempotency-key desktop-first-open
 ```
 
-Reuse that request on reconnection. Bridge records it before opening and never repeats it,
-even under a different key. Inspect the receipt's `status`, not just CLI `ok`:
+The runtime provides a bounded PTY for Claude's terminal-only launcher without writing input.
+Reuse that request on reconnection. Bridge records it before opening and normally never repeats
+it, even under a different key. Inspect the receipt's `status`, not just CLI `ok`:
 
 - `native_open_requested`: native CLI acknowledged the same-session handoff; desktop list
   visibility is still unverified. Inspect the host's list, history and workspace with its
@@ -38,6 +39,12 @@ even under a different key. Inspect the receipt's `status`, not just CLI `ok`:
 - `native_launch_failed`: report the retained launch failure; the current runtime does not
   provide a retry-reset operation.
 
+The only explicit retry exception is `legacy_pipe_retry_available: true`: dev1's pinned
+Claude 2.1.291 launcher returned exit 1 because the old transport redirected stdin/stdout,
+which it rejects before opening. After inspecting that exact receipt, use a fresh key and
+`--retry-legacy-pipe` once. The old failure stays recorded. This flag cannot retry missing-exit,
+timeout, acknowledged or newer PTY requests, and is never a general unknown-outcome reset.
+
 If the screen is locked, GUI access is unavailable, or the user deferred opening, keep this
 step pending and continue independent work. Never bypass that boundary. Preserve the original
 worktree until the user has finished inspecting it. Continuing interactively is a separate
@@ -45,12 +52,19 @@ user action; the old Bridge attempt budget does not govern a manually continued 
 
 ## Codex and other hosts
 
-Codex currently returns `native_history_only` and `codex_desktop_list_sync_unverified`.
-CLI Executor sessions have source `exec`; native default/interactive lists can omit them.
-Readability, successful title changes and section/pin acknowledgements do not establish
-desktop visibility. Report this remaining limitation with the existing session/workspace,
-without rewriting vendor storage/source classification, forking, creating a replacement
-chat or sending a turn. ZCode is an Advisor host, not a supported Executor.
+For Codex, `existing_thread_deep_link` uses the same `desktop open` command and ownership/
+terminal/delivery guards. On the validated Mac, runtime dev2 checks the installed app identity,
+version, URL registration and original embedded CLI, then asks that app to open
+`codex://threads/EXACT_UUID`. It passes no prompt, new-chat path, fork or turn request.
+Supported desktop version: ChatGPT/Codex 26.930.31730, embedded CLI 0.160.0. Other installations
+remain blocked pending validation. See the official [existing-chat link reference](https://learn.chatgpt.com/docs/reference/commands).
+
+Default native lists can omit `exec` sessions even when the desktop shows them. Do not infer
+failure from that filter or success from a native open receipt alone. Verify the original
+page/list/history/worktree using available UI access; a user's explicit visual confirmation
+is separate human-observed evidence if tools cannot inspect that host. Never bypass a tool's
+UI access refusal. Do not rewrite vendor storage/source classification or send a test turn.
+ZCode is an Advisor host, not a supported Executor; it can invoke the same runtime handoff.
 
 Report code delivery and desktop visibility separately. This workflow adds no background
 watcher, automatic model call, UI bypass, new billing mode or permission expansion.

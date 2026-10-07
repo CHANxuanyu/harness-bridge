@@ -168,6 +168,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p = desktop_sub.add_parser("open", parents=[common])
     p.add_argument("task_id")
     p.add_argument("--idempotency-key", required=True)
+    p.add_argument(
+        "--retry-legacy-pipe",
+        action="store_true",
+        help="explicitly retry a confirmed 2.1.291 legacy non-terminal refusal once",
+    )
 
     p = sub.add_parser("list", parents=[common], help="list recent tasks")
     p.add_argument("--limit", type=int, default=20)
@@ -365,7 +370,9 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
 
             desktop = DesktopSessions(bridge)
             if args.desktop_command == "open":
-                return desktop.open(args.task_id, args.idempotency_key)
+                return desktop.open(
+                    args.task_id, args.idempotency_key, retry_legacy_pipe=args.retry_legacy_pipe
+                )
             return desktop.status(args.task_id)
         if cmd == "list":
             return {

@@ -1,6 +1,44 @@
 # Handoff
 
-## Current continuation
+## Desktop continuation after unlock — 2026-10-07
+
+Runtime **0.1.0.dev2**, plugin **0.1.0-alpha.5**. Claude's original session is visible in its
+sidebar with the same UUID, full prompt/tool/final history and original worktree (verified
+through Claude and Finder accessibility). The human explicitly confirmed the original Codex
+page and sidebar item after native navigation. Its list API still omits the exec session:
+list-source filtering is not a reliable proxy for actual GUI visibility.
+
+Real acceptance exposed a Bridge defect: dev1 redirected Claude desktop-launcher streams;
+2.1.291 rejects that before opening. Preserve the initial exit-1/unknown receipt. The correction
+uses a bounded PTY with no input; one explicit, narrowly qualified legacy-pipe retry retains the
+old record. Native acknowledgement and GUI checks then passed, and receipt replay did not
+reopen. Missing exits, success, timeout and newer transports never qualify for that recovery.
+
+Codex uses the official existing-thread URL in the validated macOS app (26.930.31730,
+CLI 0.160.0), checking identity/URL registration and the original embedded executable. The
+first version probe refused because the implementation expected `codex` instead of the observed
+`codex-cli` version prefix; no request was reserved. Corrected the pin and independent fixture;
+the native URL request and replay then succeeded. No prompt/new/fork route or model turn.
+Official route: [existing-chat links](https://learn.chatgpt.com/docs/reference/commands).
+
+Checks: pre-edit desktop baseline **26 / 8.21s**; PTY/CLI **41 / 23.87s**; expanded desktop/
+Codex/CLI/plugin **73 / 52.42s**; dev2 plugin compatibility **26 / 24.44s**; corrected Codex
+version pin **6 / 2.56s**. Lint/format 146 files and strict mypy 40 runtime files pass.
+A mistyped test path collected zero tests before the corrected command. No failed test was
+removed/skipped. Prior full 732 remains reused; this is affected coverage, not another full run.
+
+Actual Codex/ZCode alpha.5 upgrades retain the connection and all 34/15 unrelated plugins.
+All 16 files per cache match, both 36-command checks pass, and Skill validation passes.
+Fresh native Codex skills/list resolves enabled alpha.5 for both repo and chat cwd; no thread or turn is created.
+No new Executor attempt/model message, provider/billing change or remote publication.
+Private receipts: takeover chat `work/p7-desktop-unlocked/result.json` and `work/p7-plugin-alpha5/`.
+
+**Remaining:** full Codex GUI quit/relaunch with a bounded fake job, plus checking the original
+Codex chat after that restart. Do not close this app through a refused automation route. The
+human performs the actual quit/reopen; a prepared observer records process identity and job
+continuity. Preserve all real task histories/worktrees. All native model allowances stay spent.
+
+## Previous continuation (historical; superseded above)
 
 - **Start from `docs/P7_CLOSEOUT.md`:** one current V01–V15 evidence matrix now separates completed native/offline scope from V08/V15 gaps. README and license/release status are reconciled. Do not rerun native checks or ask about unlocking while the user is away.
 - **Distribution no longer needs chat helpers:** from a clean committed checkout, `scripts/build_release.py --out ABSOLUTE_FRESH_DIR` creates source/docs/wheel/plugin/manifest/verifier and sibling ZIP; `VERIFY.py` checks a relocated candidate without installing anything. Twelve new synthetic release checks passed / 2.81s (144-file lint/format; mypy 40 runtime files). Core and actual alpha.4 plugin files are unchanged. Build receipt/candidate location is retained in the takeover chat's `work/p7-distribution/` and `outputs/`; rebuilding is not a release authorization.

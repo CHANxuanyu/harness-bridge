@@ -1,11 +1,48 @@
 # P7 result and local candidate — 2026-10-07
 
-**Current status: bounded native collaboration/fault packet completed; newly requested desktop-list synchronization is not yet accepted.**
+**Current status: bounded native packet complete; finished-session desktop visibility observed after unlock; full Codex GUI lifecycle remains open.**
 The [V01–V15 closeout matrix](P7_CLOSEOUT.md) is the concise current acceptance index; the
 chronological observations below preserve original failures and later authorized corrections.
-Runtime 0.1.0.dev1 / plugin 0.1.0-alpha.4. Apache-2.0, local candidate only; no remote
+Runtime 0.1.0.dev2 / plugin 0.1.0-alpha.5. Apache-2.0, local candidate only; no remote
 publication or push. This is the current result; the earlier synthetic rehearsal remains
 historical evidence in [P7_ACCEPTANCE.md](P7_ACCEPTANCE.md).
+
+## Desktop continuation after unlock — 2026-10-07
+
+Runtime **0.1.0.dev2**, plugin **0.1.0-alpha.5**. Claude's original session is visible in its
+sidebar with the same UUID, full prompt/tool/final history and original worktree (verified
+through Claude and Finder accessibility). The human explicitly confirmed the original Codex
+page and sidebar item after native navigation. Its list API still omits the exec session:
+list-source filtering is not a reliable proxy for actual GUI visibility.
+
+Real acceptance exposed a Bridge defect: dev1 redirected Claude desktop-launcher streams;
+2.1.291 rejects that before opening. Preserve the initial exit-1/unknown receipt. The correction
+uses a bounded PTY with no input; one explicit, narrowly qualified legacy-pipe retry retains the
+old record. Native acknowledgement and GUI checks then passed, and receipt replay did not
+reopen. Missing exits, success, timeout and newer transports never qualify for that recovery.
+
+Codex uses the official existing-thread URL in the validated macOS app (26.930.31730,
+CLI 0.160.0), checking identity/URL registration and the original embedded executable. The
+first version probe refused because the implementation expected `codex` instead of the observed
+`codex-cli` version prefix; no request was reserved. Corrected the pin and independent fixture;
+the native URL request and replay then succeeded. No prompt/new/fork route or model turn.
+Official route: [existing-chat links](https://learn.chatgpt.com/docs/reference/commands).
+
+Checks: pre-edit desktop baseline **26 / 8.21s**; PTY/CLI **41 / 23.87s**; expanded desktop/
+Codex/CLI/plugin **73 / 52.42s**; dev2 plugin compatibility **26 / 24.44s**; corrected Codex
+version pin **6 / 2.56s**. Lint/format 146 files and strict mypy 40 runtime files pass.
+A mistyped test path collected zero tests before the corrected command. No failed test was
+removed/skipped. Prior full 732 remains reused; this is affected coverage, not another full run.
+
+Actual Codex/ZCode alpha.5 upgrades retain the connection and all 34/15 unrelated plugins.
+All 16 files per cache match, both 36-command checks pass, and Skill validation passes.
+No new Executor attempt/model message, provider/billing change or remote publication.
+Private receipts: takeover chat `work/p7-desktop-unlocked/result.json` and `work/p7-plugin-alpha5/`.
+
+**Remaining:** full Codex GUI quit/relaunch with a bounded fake job, plus checking the original
+Codex chat after that restart. Do not close this app through a refused automation route. The
+human performs the actual quit/reopen; a prepared observer records process identity and job
+continuity. Preserve all real task histories/worktrees. All native model allowances stay spent.
 
 ## Explicit decisions and limits
 

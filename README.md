@@ -1,9 +1,10 @@
 # Harness Bridge
 
-> **Experimental local candidate:** runtime 0.1.0.dev1, Advisor plugin alpha.4, Apache-2.0.
+> **Experimental local candidate:** runtime 0.1.0.dev2, Advisor plugin alpha.5, Apache-2.0.
 > Real Claude/Codex parallel work, exact-session repair and integrated local delivery passed.
 > The corrected Codex cancellation retest and Claude native turn-stop also passed.
-> P7 remains open for desktop-list synchronization and full Codex GUI lifecycle acceptance.
+> Original Claude/Codex sessions are visible after desktop handoff.
+> P7 remains open for full Codex GUI quit/relaunch and post-restart persistence acceptance.
 > See the [V01–V15 acceptance matrix](docs/P7_CLOSEOUT.md) and [native evidence](docs/P7_RESULT.md).
 
 Harness Bridge aims to provide **one Advisor with one or more Executors across coding
@@ -44,7 +45,7 @@ sessions bound to child tasks. The [project plan](docs/PROJECT_PLAN.md) is the c
 scope, session/workspace contract, implementation sequence and acceptance checklist. It
 distinguishes existing V0.1 code from proposed coordination and delivery capabilities.
 
-A [local Advisor plugin alpha.4](plugins/harness-bridge/README.md) packages one shared Skill
+A [local Advisor plugin alpha.5](plugins/harness-bridge/README.md) packages one shared Skill
 for Codex/ZCode. Both actual host installations share the same runtime/state connection.
 Native clean install, upgrade, uninstall and reinstall preserve task data. ZCode full app quit
 and relaunch retained a fake worker; Codex tool PTY reconnection was verified earlier. Full
@@ -70,8 +71,9 @@ conflict/failed-check children to retained inputs and existing budgets; [cleanup
 removes only selected clean owned worktrees after delivery, retaining refs/evidence and user changes.
 P4 local core, P5 Codex offline adapter and P6 model-free installed wiring are implemented;
 P7 bounded native collaboration, repair, delivery, cancellation retest and turn-stop passed.
-Desktop synchronization remains open: Claude handoff is implemented but awaits UI acceptance;
-Codex's supported desktop-list route is still unresolved. See [desktop continuity](docs/DESKTOP_SESSIONS.md).
+Finished-session desktop handoff now uses a bounded Claude terminal launcher or the documented
+Codex existing-thread link. Claude GUI and human-observed Codex visibility are recorded; full
+Codex app restart acceptance remains pending. See [desktop continuity](docs/DESKTOP_SESSIONS.md).
 See [Codex capability boundary](docs/CODEX_EXECUTOR.md). Approval alone
 does not deliver a goal.
 

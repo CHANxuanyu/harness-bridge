@@ -1,8 +1,46 @@
 # Status
 
-_Latest: P7 non-UI distribution closeout; desktop session visibility and Codex GUI lifecycle remain open._
+_Latest: desktop sessions observed after unlock; Codex full GUI lifecycle is the remaining acceptance._
 
-## Current state
+## Desktop continuation after unlock — 2026-10-07
+
+Runtime **0.1.0.dev2**, plugin **0.1.0-alpha.5**. Claude's original session is visible in its
+sidebar with the same UUID, full prompt/tool/final history and original worktree (verified
+through Claude and Finder accessibility). The human explicitly confirmed the original Codex
+page and sidebar item after native navigation. Its list API still omits the exec session:
+list-source filtering is not a reliable proxy for actual GUI visibility.
+
+Real acceptance exposed a Bridge defect: dev1 redirected Claude desktop-launcher streams;
+2.1.291 rejects that before opening. Preserve the initial exit-1/unknown receipt. The correction
+uses a bounded PTY with no input; one explicit, narrowly qualified legacy-pipe retry retains the
+old record. Native acknowledgement and GUI checks then passed, and receipt replay did not
+reopen. Missing exits, success, timeout and newer transports never qualify for that recovery.
+
+Codex uses the official existing-thread URL in the validated macOS app (26.930.31730,
+CLI 0.160.0), checking identity/URL registration and the original embedded executable. The
+first version probe refused because the implementation expected `codex` instead of the observed
+`codex-cli` version prefix; no request was reserved. Corrected the pin and independent fixture;
+the native URL request and replay then succeeded. No prompt/new/fork route or model turn.
+Official route: [existing-chat links](https://learn.chatgpt.com/docs/reference/commands).
+
+Checks: pre-edit desktop baseline **26 / 8.21s**; PTY/CLI **41 / 23.87s**; expanded desktop/
+Codex/CLI/plugin **73 / 52.42s**; dev2 plugin compatibility **26 / 24.44s**; corrected Codex
+version pin **6 / 2.56s**. Lint/format 146 files and strict mypy 40 runtime files pass.
+A mistyped test path collected zero tests before the corrected command. No failed test was
+removed/skipped. Prior full 732 remains reused; this is affected coverage, not another full run.
+
+Actual Codex/ZCode alpha.5 upgrades retain the connection and all 34/15 unrelated plugins.
+All 16 files per cache match, both 36-command checks pass, and Skill validation passes.
+Fresh native Codex skills/list resolves enabled alpha.5 for both repo and chat cwd; no thread or turn is created.
+No new Executor attempt/model message, provider/billing change or remote publication.
+Private receipts: takeover chat `work/p7-desktop-unlocked/result.json` and `work/p7-plugin-alpha5/`.
+
+**Remaining:** full Codex GUI quit/relaunch with a bounded fake job, plus checking the original
+Codex chat after that restart. Do not close this app through a refused automation route. The
+human performs the actual quit/reopen; a prepared observer records process identity and job
+continuity. Preserve all real task histories/worktrees. All native model allowances stay spent.
+
+## Previous continuation (historical; superseded above)
 
 - **P7 closeout matrix:** `docs/P7_CLOSEOUT.md` maps V01–V15 to existing evidence. V08 is partial (Codex full GUI lifecycle), V15 is not accepted (desktop lists); all other items retain their stated offline/native scope. Claude awaits manual unlock; Codex still needs a supported existing-session list route, not merely an unlocked screen. The README's outdated alpha.3/cancellation/turn-stop status and the plan's unresolved-license row are corrected.
 - **Complete local build:** the repository builder now emits committed source, full docs, wheel, plugin, standalone verifier and transport ZIP. It refuses dirty source/collisions/concurrent edits and checks artifact/source consistency; session-local packaging helpers are no longer required. New synthetic distribution suite **12 passed / 2.81s**; lint/format 144 files and strict mypy 40 runtime files pass. Pre-edit compatibility baseline: 26 passed / 17.47s. Runtime, installed plugin, state and native allowance did not change; prior core/full evidence is reused.

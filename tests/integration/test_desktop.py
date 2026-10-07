@@ -6,7 +6,9 @@ No native harness, authentication, desktop app, network or model is used here.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
@@ -100,6 +102,11 @@ def native(monkeypatch: pytest.MonkeyPatch, outcome: str = "ack") -> list[list[s
         )
 
     monkeypatch.setattr(desktop.subprocess, "run", run)
+    monkeypatch.setattr(
+        desktop,
+        "run_handoff",
+        lambda argv, **kwargs: run(argv, stdin=subprocess.DEVNULL, **kwargs),
+    )
     return calls
 
 
@@ -195,11 +202,15 @@ def test_invalid_native_binding_never_opens(
     assert calls == []
 
 
-def test_codex_is_not_reported_as_synced(fx: Fixture, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_codex_unvalidated_app_is_not_reported_as_synced(
+    fx: Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     b, tid = synthetic(fx, "codex")
     calls = native(monkeypatch)
+    monkeypatch.setattr(desktop, "CODEX_APP", fx.base / "missing-app")
     d = DesktopSessions(b)
-    assert d.status(tid)["capability"] == "native_history_only"
+    assert d.status(tid)["capability"] == "existing_thread_deep_link"
+    assert d.status(tid)["desktop_visibility"] == "unverified"
     with pytest.raises(BridgeError):
         d.open(tid, "open")
     assert calls == []
@@ -347,3 +358,130 @@ def test_delivered_goal_can_request_without_changing_delivery_or_budget(
     before = b.store.get_task(tid)
     assert DesktopSessions(b).open(tid, "open")["status"] == "native_open_requested"
     assert b.store.get_task(tid) == before and len(calls) == 2
+
+
+def test_handoff_transport_is_terminal_on_all_streams_without_sending_input(tmp_path: Path) -> None:
+    result = desktop.run_handoff(
+        [sys.executable, "-c", "import os; print([os.isatty(fd) for fd in (0, 1, 2)])"],
+        cwd=str(tmp_path),
+        env=dict(os.environ),
+        timeout=5,
+    )
+    assert result.returncode == 0 and result.stdout.strip() == b"[True, True, True]"
+
+
+@pytest.mark.parametrize("failure", ["timeout", "flood"])
+def test_handoff_transport_bounds_output_and_stops_its_launcher(
+    tmp_path: Path,
+    failure: str,
+) -> None:
+    marker = tmp_path / "pid"
+    action = (
+        "time.sleep(60)" if failure == "timeout" else "os.write(1, b'x'*100000); time.sleep(60)"
+    )
+    program = f"import os, time; open({str(marker)!r}, 'w').write(str(os.getpid())); {action}"
+    with pytest.raises(subprocess.SubprocessError):
+        desktop.run_handoff(
+            [sys.executable, "-c", program],
+            cwd=str(tmp_path),
+            env=dict(os.environ),
+            timeout=0.5 if failure == "timeout" else 5,
+        )
+    with pytest.raises(ProcessLookupError):
+        os.kill(int(marker.read_text()), 0)
+
+
+def legacy_receipt(b: Bridge, tid: str, **overrides: Any) -> dict[str, Any]:
+    receipt = {
+        "task_id": tid,
+        "session_id": SID,
+        "worktree": b.store.get_task(tid).worktree_path,
+        "idempotency_key": "old-pipe",
+        "status": "request_outcome_unknown",
+        "desktop_visibility": "unverified",
+        "model_call_requested": False,
+        "native_exit_code": 1,
+        **overrides,
+    }
+    with b.store.transaction() as cur:
+        for event in ("desktop_open_requested", "desktop_open_result"):
+            b.store.add_event(cur, tid, event, receipt, attempt_id="att_fixture")
+    return receipt
+
+
+def test_known_legacy_pipe_refusal_has_one_explicit_retry_and_preserved_history(
+    fx: Fixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    b, tid = synthetic(fx)
+    old = legacy_receipt(b, tid)
+    before = b.store.get_task(tid)
+    calls = native(monkeypatch)
+    d = DesktopSessions(b)
+    assert d.status(tid)["legacy_pipe_retry_available"]
+    assert d.open(tid, "new")["replayed"] and calls == []
+    assert d.open(tid, "old-pipe", retry_legacy_pipe=True)["replayed"] and calls == []
+    fresh = d.open(tid, "pty-fix", retry_legacy_pipe=True)
+    assert fresh["status"] == "native_open_requested"
+    assert fresh["transport"] == "pty" and fresh["supersedes_key"] == "old-pipe"
+    assert not d.status(tid)["legacy_pipe_retry_available"]
+    assert d.open(tid, "third", retry_legacy_pipe=True) == {**fresh, "replayed": True}
+    assert len(calls) == 2 and b.store.get_task(tid) == before
+    results = [e for e in b.store.list_events(tid) if e["type"] == "desktop_open_result"]
+    assert len(results) == 2 and results[0]["payload"] == old
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"native_exit_code": None},
+        {"native_exit_code": 0},
+        {"native_exit_code": 2},
+        {"status": "native_open_requested"},
+        {"transport": "pty"},
+    ],
+)
+def test_explicit_legacy_retry_cannot_reopen_unknown_or_newer_requests(
+    fx: Fixture,
+    monkeypatch: pytest.MonkeyPatch,
+    override: dict[str, Any],
+) -> None:
+    b, tid = synthetic(fx)
+    old = legacy_receipt(b, tid, **override)
+    calls = native(monkeypatch)
+    assert DesktopSessions(b).open(tid, "retry", retry_legacy_pipe=True) == {
+        **old,
+        "replayed": True,
+    }
+    assert calls == []
+
+
+def test_legacy_retry_race_only_hands_off_once(
+    fx: Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    b, tid = synthetic(fx)
+    legacy_receipt(b, tid)
+    b.close()
+    calls = native(monkeypatch)
+    original = desktop.subprocess.run
+    barrier = Barrier(2)
+
+    def probe(argv: list[str], **kwargs: Any) -> Any:
+        result = original(argv, **kwargs)
+        if argv == ["/fixture/native", "--version"]:
+            barrier.wait(timeout=10)
+        return result
+
+    monkeypatch.setattr(desktop.subprocess, "run", probe)
+
+    def open_one(key: str) -> dict[str, Any]:
+        local = fx.bridge()
+        try:
+            return DesktopSessions(local).open(tid, key, retry_legacy_pipe=True)
+        finally:
+            local.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(open_one, ["retry-1", "retry-2"]))
+    assert sum(not r["replayed"] for r in results) == 1
+    assert sum("--desktop" in c for c in calls) == 1

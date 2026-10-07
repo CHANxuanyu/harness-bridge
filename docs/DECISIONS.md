@@ -259,3 +259,5 @@ Each entry: decision — reason. Newest last.
 
 96. **P7 alpha.4 Advisor continuity:** preserve a user's desktop-visibility request through delivery and perform supported follow-up before cleanup; compatibility probing requires desktop commands/Advisor flags without opening selected state. Native list-source filtering is diagnostic evidence, never permission to rewrite vendor history or invent replacement conversations.
 97. **P7 distribution closeout:** build the complete local candidate from one clean commit, include linked documentation/source plus a model-free standalone consistency verifier, and map V01–V15 to evidence levels; packaging success never converts deferred UI or unresolved Codex synchronization into acceptance.
+
+98. **Desktop native acceptance:** Claude requires an input-free bounded PTY; preserve legacy pipe failures with a one-shot explicit recovery only for the pinned pre-handoff exit-1 case. Codex uses a canonical existing-thread URL with app/binary/version guards. Native acknowledgements, tool-observed Claude UI and human-observed Codex UI remain distinct evidence.

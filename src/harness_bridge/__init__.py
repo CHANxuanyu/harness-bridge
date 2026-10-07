@@ -3,6 +3,6 @@
 Experimental prototype. See README.md for the current validation level.
 """
 
-__version__ = "0.1.0.dev1"
+__version__ = "0.1.0.dev2"
 
 SCHEMA_VERSION = "1.0"
