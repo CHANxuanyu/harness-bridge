@@ -11,6 +11,17 @@ import tomllib
 import zipfile
 from pathlib import Path
 
+try:
+    from .verify_release import verify
+except ImportError:  # Direct invocation from a checkout.
+    from verify_release import verify
+
+
+def git(root: Path, *args: str) -> str:
+    return subprocess.check_output(
+        ["git", "-c", "core.hooksPath=/dev/null", *args], cwd=root, text=True
+    ).strip()
+
 
 def build(root: Path, output: Path) -> None:
     root = root.resolve()
@@ -19,12 +30,21 @@ def build(root: Path, output: Path) -> None:
     output = output.resolve()
     if output.is_relative_to(root):
         raise ValueError("candidate output must be outside the checkout")
+    bundle = output.parent / (output.name + ".zip")
+    if bundle.exists() or bundle.is_symlink():
+        raise ValueError("candidate bundle already exists")
+    revision = git(root, "rev-parse", "HEAD")
+    if git(root, "status", "--porcelain", "--untracked-files=all"):
+        raise ValueError("commit or preserve checkout changes before building a candidate")
     project = tomllib.loads((root / "pyproject.toml").read_text())["project"]
     plugin = root / "plugins/harness-bridge"
     version = json.loads((plugin / "plugin.json").read_text())["version"]
     for manifest in (".codex-plugin/plugin.json", ".zcode-plugin/plugin.json"):
         if json.loads((plugin / manifest).read_text())["version"] != version:
             raise ValueError("plugin manifest versions differ")
+    catalog = json.loads((root / "marketplace.json").read_text())
+    if catalog["plugins"][0]["version"] != version:
+        raise ValueError("marketplace and plugin versions differ")
     # Explicit inventory prevents accidentally shipping local state, bytecode or credentials.
     inventory = [
         "plugin.json",
@@ -65,16 +85,49 @@ def build(root: Path, output: Path) -> None:
     for name in ("LICENSE", "NOTICE"):
         shutil.copyfile(root / name, output / name)
     shutil.copyfile(root / "docs/LOCAL_RELEASE.md", output / "INSTALL.md")
-    shutil.copyfile(root / "docs/P7_RESULT.md", output / "ACCEPTANCE.md")
-    shutil.copyfile(root / "docs/DESKTOP_SESSIONS.md", output / "DESKTOP_SESSIONS.md")
-    revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
-    dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=root))
+    # Preserve relative documentation links, including historical evidence referenced by P7.
+    for name in git(root, "ls-files", "-z", "--", "docs").split("\0"):
+        if not name:
+            continue
+        path = root / name
+        if not path.is_file() or path.is_symlink():
+            raise ValueError("missing or symbolic documentation member: " + name)
+        target = output / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, target)
+    (output / "ACCEPTANCE.md").write_text(
+        "# Candidate acceptance\n\n"
+        "See the [V01–V15 closeout matrix](docs/P7_CLOSEOUT.md), "
+        "[native evidence](docs/P7_RESULT.md) and "
+        "[desktop boundary](docs/DESKTOP_SESSIONS.md).\n\n"
+        "This is a local candidate; P7 desktop acceptance remains open.\n"
+    )
+    shutil.copyfile(root / "scripts/verify_release.py", output / "VERIFY.py")
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "archive",
+            "--format=tar.gz",
+            "--prefix=source/",
+            "--output=" + str(output / "harness-bridge-source.tar.gz"),
+            revision,
+        ],
+        cwd=root,
+        check=True,
+    )
+    if git(root, "rev-parse", "HEAD") != revision or git(
+        root, "status", "--porcelain", "--untracked-files=all"
+    ):
+        raise ValueError("checkout changed during build; candidate is incomplete")
     hashes = {
-        p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in sorted(output.iterdir())
+        p.relative_to(output).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in sorted(output.rglob("*"))
         if p.is_file()
     }
     manifest = {
+        "format_version": 1,
         "scope": "local-candidate-only",
         "published": False,
         "acceptance": "see ACCEPTANCE.md",
@@ -82,12 +135,28 @@ def build(root: Path, output: Path) -> None:
         "plugin_version": version,
         "license": "Apache-2.0",
         "source_revision": revision,
-        "source_dirty": dirty,
+        "source_dirty": False,
         "files_sha256": hashes,
         "plugin_members": [str(p.relative_to(root)) for p in sorted(paths)],
     }
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    print(json.dumps({"output": str(output), **manifest}, indent=2))
+    verified = verify(output)
+    # Exclusive creation avoids replacing an earlier candidate, including a competing build.
+    with zipfile.ZipFile(bundle, "x", zipfile.ZIP_DEFLATED) as archive_zip:
+        for path in sorted(output.rglob("*")):
+            if path.is_file():
+                archive_zip.write(path, output.name + "/" + path.relative_to(output).as_posix())
+    print(
+        json.dumps(
+            {
+                "output": str(output),
+                "bundle": str(bundle),
+                "verification": verified,
+                "bundle_sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

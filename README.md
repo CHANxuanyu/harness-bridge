@@ -1,10 +1,10 @@
 # Harness Bridge
 
-> **Experimental local candidate:** runtime 0.1.0.dev1, Advisor plugin alpha.3, Apache-2.0.
+> **Experimental local candidate:** runtime 0.1.0.dev1, Advisor plugin alpha.4, Apache-2.0.
 > Real Claude/Codex parallel work, exact-session repair and integrated local delivery passed.
-> P7 remains incomplete: native Codex cancellation left a detached tool alive. The runner fix
-> is under offline/native revalidation; Claude turn-cap acceptance remains open.
-> See [current P7 result](docs/P7_RESULT.md).
+> The corrected Codex cancellation retest and Claude native turn-stop also passed.
+> P7 remains open for desktop-list synchronization and full Codex GUI lifecycle acceptance.
+> See the [V01–V15 acceptance matrix](docs/P7_CLOSEOUT.md) and [native evidence](docs/P7_RESULT.md).
 
 Harness Bridge aims to provide **one Advisor with one or more Executors across coding
 harnesses**: the Advisor inspects the repo, delegates tasks, reviews results and coordinates
@@ -23,13 +23,13 @@ with explicit per-harness budget semantics and native configuration preflight. C
 internal-turn ceiling; new live tasks must explicitly select attempts/wall-time/cancel limits.
 
 ```text
-supervisor (Codex/Astra or a person)
-   │  hbridge create / run / artifacts / review          (JSON receipts)
+Advisor (an existing Codex or ZCode conversation)
+   │  installed Skill → hbridge goals / jobs / review / delivery
    ▼
 Harness Bridge  ── SQLite state + events ── bridge-owned git worktree
    │                                         independent verifier commands
    ▼                                         evidence manifest + approval gate
-executor: fake subprocess (offline)  |  claude -p … (live, explicitly gated; smoke-verified)
+Executor sessions: Claude Code | Codex (live, explicitly gated) | fake (offline)
 ```
 
 ## Product and user entrypoints
@@ -44,7 +44,7 @@ sessions bound to child tasks. The [project plan](docs/PROJECT_PLAN.md) is the c
 scope, session/workspace contract, implementation sequence and acceptance checklist. It
 distinguishes existing V0.1 code from proposed coordination and delivery capabilities.
 
-A [local Advisor plugin alpha.3](plugins/harness-bridge/README.md) packages one shared Skill
+A [local Advisor plugin alpha.4](plugins/harness-bridge/README.md) packages one shared Skill
 for Codex/ZCode. Both actual host installations share the same runtime/state connection.
 Native clean install, upgrade, uninstall and reinstall preserve task data. ZCode full app quit
 and relaunch retained a fake worker; Codex tool PTY reconnection was verified earlier. Full
@@ -69,7 +69,9 @@ READY_TO_DELIVER/DELIVERED projections. [Integration repairs](docs/INTEGRATION_R
 conflict/failed-check children to retained inputs and existing budgets; [cleanup](docs/CLEANUP.md)
 removes only selected clean owned worktrees after delivery, retaining refs/evidence and user changes.
 P4 local core, P5 Codex offline adapter and P6 model-free installed wiring are implemented;
-P7 real collaboration/delivery passed; native cancellation revalidation and turn-cap acceptance remain incomplete.
+P7 bounded native collaboration, repair, delivery, cancellation retest and turn-stop passed.
+Desktop synchronization remains open: Claude handoff is implemented but awaits UI acceptance;
+Codex's supported desktop-list route is still unresolved. See [desktop continuity](docs/DESKTOP_SESSIONS.md).
 See [Codex capability boundary](docs/CODEX_EXECUTOR.md). Approval alone
 does not deliver a goal.
 
@@ -122,7 +124,7 @@ limit. Follow [`docs/LOCAL_HANDOFF.md`](docs/LOCAL_HANDOFF.md) before the first 
 ## What it is not
 Not a sandbox (same-UID executor; see [`docs/SECURITY.md`](docs/SECURITY.md)), not a model
 client, not a daemon, not a scheduler, not a SaaS. It does not wake a supervisor up, does not
-auto-retry interrupted work, does not merge anything, and makes no claim that two models are
+auto-retry interrupted work or merge delivered results into the user's checkout, and makes no claim that two models are
 better or cheaper than one (see [`docs/EVALUATION_PLAN.md`](docs/EVALUATION_PLAN.md)).
 
 ## Project documents

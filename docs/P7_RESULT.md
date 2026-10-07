@@ -1,6 +1,8 @@
 # P7 result and local candidate — 2026-10-07
 
 **Current status: bounded native collaboration/fault packet completed; newly requested desktop-list synchronization is not yet accepted.**
+The [V01–V15 closeout matrix](P7_CLOSEOUT.md) is the concise current acceptance index; the
+chronological observations below preserve original failures and later authorized corrections.
 Runtime 0.1.0.dev1 / plugin 0.1.0-alpha.4. Apache-2.0, local candidate only; no remote
 publication or push. This is the current result; the earlier synthetic rehearsal remains
 historical evidence in [P7_ACCEPTANCE.md](P7_ACCEPTANCE.md).
@@ -255,3 +257,18 @@ is proven; the GUI query and a supported sync route remain open. No thread/turn,
 source rewrite or new real execution was performed. Evidence: private `work/p7-plugin-alpha4/`
 and `work/p7-codex-list-probe.json` in the takeover chat. Final native packet counts remain 8
 executions / 1 repair / 975 reserved seconds, gates closed.
+
+## Local distribution closeout
+
+The repository build now produces the committed source archive, complete linked documentation,
+standalone standard-library verifier and transport ZIP, alongside the runtime/plugin artifacts.
+It replaces the temporary chat-only packaging steps. A clean commit is required; mixed source,
+output collisions and changed build inputs are refused. Verification checks hashes and compares
+runtime, plugin, docs and license files against the source archive without installing or executing
+them. The README no longer incorrectly reports alpha.3 or unfinished cancellation/turn-stop checks.
+
+New isolated distribution suite: **12 passed / 2.81s**, lint/format 144 files and mypy 40 runtime
+files clean. Initial 6 failures exposed a legitimate Git archive root-directory handling bug,
+corrected without removing path/links checks. Runtime/plugin code and the native ledger are
+unchanged. Current remaining work is defined in [P7_CLOSEOUT.md](P7_CLOSEOUT.md); user-deferred
+UI acceptance and unresolved Codex sync are not upgraded by a successful build.

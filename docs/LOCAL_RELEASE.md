@@ -3,7 +3,7 @@
 Runtime **0.1.0.dev1**, Advisor plugin **0.1.0-alpha.4**, protocol 1.0, store revision 10.
 Apache-2.0; see LICENSE and NOTICE. The user authorized a local candidate only on 2026-10-07.
 No package index upload, public marketplace listing, Git tag, release or push is included.
-Read the accompanying `ACCEPTANCE.md` for measured capabilities and remaining limitations.
+Read `docs/P7_CLOSEOUT.md` in the candidate (linked from `ACCEPTANCE.md`) for measured capabilities and remaining limitations.
 P7 bounded native checks are completed. Desktop-list synchronization and full Codex GUI shutdown remain unverified.
 
 ## Product form
@@ -77,7 +77,7 @@ storage may therefore be indexed under that child directory, not the source repo
 The new `desktop status TASK` command exposes the exact session/cwd and supported handoff.
 For terminal Claude tasks in delivered goals, `desktop open TASK --idempotency-key KEY` uses
 the official same-session desktop handoff (validated CLI version 2.1.291); provide the current
-Advisor binding/epoch for linked tasks. Actual UI acceptance is pending. See DESKTOP_SESSIONS.md.
+Advisor binding/epoch for linked tasks. Actual UI acceptance is pending. See `docs/DESKTOP_SESSIONS.md` in the candidate.
 Claude's locally verified CLI also supports `--resume <session-id>` to reopen a known conversation;
 opening/resuming in a host and sending a new message are separate actions. This candidate does
 not promise automatic appearance in any desktop conversation sidebar, and does not create a
@@ -124,15 +124,37 @@ an authoritative native receipt establishes them. This candidate makes no cost/q
 
 ## Rebuild locally
 
-From the checkout with the build backend cached, run:
+From a clean, committed Git checkout with Python 3.11+ and the build backend cached, run:
 
 ```sh
-python3 scripts/build_release.py --out /absolute/path/to/new-candidate-directory
+python3.11 scripts/build_release.py --out /absolute/path/to/new-candidate-directory
 ```
 
-The fresh-only builder creates a wheel, an explicitly inventoried marketplace ZIP, installation
-and acceptance notes, license/notice and SHA-256 manifest. It records source revision/dirty
-state and never installs, publishes, dispatches a model, or upgrades acceptance status.
+The fresh-only builder creates a wheel, an explicitly inventoried marketplace ZIP, committed
+source archive, complete tracked documentation, installation/acceptance entrypoints,
+license/notice and SHA-256 manifest, plus a sibling `new-candidate-directory.zip` for transport.
+It refuses uncommitted source, output collisions and changes during the build. An incomplete
+directory after a failed build is not a candidate; fix the error and choose a fresh output.
+Ignored/untracked local state is not exported by the committed source archive. It never installs,
+publishes, dispatches a model or upgrades acceptance status. It replaces the old session-local
+steps that separately added the source archive and outer ZIP.
+
+After unpacking or relocating the candidate, check it without the checkout or installed runtime:
+
+```sh
+python3.11 /absolute/path/to/candidate/VERIFY.py /absolute/path/to/candidate
+```
+
+The standard-library verifier reads archives without extracting or executing their contents.
+It checks every inventoried checksum, rejects extra/missing/linked files, verifies source
+revision and compares wheel modules, plugin files, documentation and licenses to the included
+source. This detects a damaged or mixed candidate; hashes are not a publisher signature and
+verification does not mean desktop acceptance passed. Keep the candidate manifest/revision when
+reporting an issue: several local candidates share this experimental runtime/plugin version.
+
+The source archive includes build scripts/tests/lockfile, but no `.git` directory, Python
+environment, credentials or task store. Build from the matching Git checkout to preserve its
+revision; do not treat extracting the archive as restoring the original commit metadata.
 
 Alpha.4 adds the Advisor desktop follow-up and two additional model-free connection probes.
 Actual Codex/ZCode profiles were upgraded through native CLI commands, retained enabled state,

@@ -1,8 +1,11 @@
 # Status
 
-_Latest: P7 bounded native checks completed; desktop session visibility in progress._
+_Latest: P7 non-UI distribution closeout; desktop session visibility and Codex GUI lifecycle remain open._
 
 ## Current state
+
+- **P7 closeout matrix:** `docs/P7_CLOSEOUT.md` maps V01–V15 to existing evidence. V08 is partial (Codex full GUI lifecycle), V15 is not accepted (desktop lists); all other items retain their stated offline/native scope. Claude awaits manual unlock; Codex still needs a supported existing-session list route, not merely an unlocked screen. The README's outdated alpha.3/cancellation/turn-stop status and the plan's unresolved-license row are corrected.
+- **Complete local build:** the repository builder now emits committed source, full docs, wheel, plugin, standalone verifier and transport ZIP. It refuses dirty source/collisions/concurrent edits and checks artifact/source consistency; session-local packaging helpers are no longer required. New synthetic distribution suite **12 passed / 2.81s**; lint/format 144 files and strict mypy 40 runtime files pass. Pre-edit compatibility baseline: 26 passed / 17.47s. Runtime, installed plugin, state and native allowance did not change; prior core/full evidence is reused.
 
 - **Advisor desktop follow-up installed:** plugin alpha.4 is enabled in actual Codex and ZCode profiles. It carries the user's requested desktop visibility through delivery, queries exact child bindings, handles the supported handoff and reports pending/unsupported results separately. Both cached packages match all 16 source files, both connection checks pass 36 command surfaces without opening selected state; 34 other Codex plugins / 15 other ZCode plugins and the shared connection are unchanged. Native Codex skills/list loads alpha.4 for repo and chat cwd; current GUI refresh remains unobserved.
 - **Codex diagnostic:** a read-only worktree-scoped native probe confirms source `exec`; default/interactive lists omit the session, while explicit exec filtering returns its exact UUID. No new session/turn, resume, import or metadata mutation was used. This demonstrates native filtering, not a completed desktop synchronization route.

@@ -5,6 +5,21 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+**P7 distribution closeout (2026-10-07, baseline `4b0767d`):** required pre-edit checks reused
+the plugin compatibility surface: 26 passed / 17.47s. New distribution checks **12 passed /
+2.81s**; lint/format 144 Python files and mypy 40 runtime files pass. Tests build synthetic
+wheels in isolated Git fixtures, verify a relocated candidate after removing its source,
+compare the transport ZIP, preserve ignored state, refuse dirty/concurrently changed source
+and existing destinations, and reject corruption, missing/extra/linked files and a rehashed
+wheel that differs from its source. No network, auth or native Executor invocation.
+Initial run: 6 passed / 6 failed because the verifier rejected Git's root directory entry
+`source` (tarfile strips its trailing slash). Corrected only that exact directory allowance;
+path traversal and linked/special entries remain refused. No tests removed/skipped.
+Runtime/plugin execution code is unchanged; prior 732 full plus desktop/plugin affected
+coverage is reused. A clean committed real candidate is built/verified separately by the
+same repository tooling, with its receipt kept outside the public repo. This is distribution
+consistency evidence, not desktop-list or full Codex GUI acceptance. See [P7_CLOSEOUT.md](P7_CLOSEOUT.md).
+
 **P7 alpha.4 entrypoint continuation (2026-10-07, baseline `5aaaa47`):** plugin suite **26
 passed / 17.22s**, 2 new old-runtime/missing-Advisor-option refusals, lint/format 142 files,
 mypy 40 runtime files, Skill Creator validator pass. No new core/full-suite run. Actual native
