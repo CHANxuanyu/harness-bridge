@@ -39,6 +39,7 @@ def build(root: Path, output: Path) -> None:
         "skills/harness-bridge/references/workflow.md",
         "skills/harness-bridge/scripts/check_connection.py",
         "skills/harness-bridge/references/delivery.md",
+        "skills/harness-bridge/references/desktop.md",
         "skills/harness-bridge/references/goal.example.json",
         "skills/harness-bridge/references/task.example.json",
         "skills/harness-bridge/references/plan.example.json",

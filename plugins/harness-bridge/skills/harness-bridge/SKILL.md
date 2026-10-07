@@ -60,6 +60,12 @@ to compose all required children, run total-goal checks, review that exact integ
 the agreed new local result branch. Only a verified delivery receipt means `DELIVERED`; it never
 means push, PR, merge into the source checkout, or deployment. Cleanup is preview-first and explicit.
 
+When the user requests desktop conversation visibility, read
+[desktop.md](references/desktop.md). Preserve this preference during delivery: inspect each
+child's native session and handle supported handoff yourself before workspace cleanup. Keep
+native history, an acknowledged open request and observed desktop visibility distinct. A
+delivery can succeed while desktop synchronization remains pending.
+
 Return concise results/blockers plus the connection/state root, goal/task/job IDs, current Advisor
 claim and event cursor needed for continuation. Reuse existing work on the next turn. Do not claim
 automatic conversation transfer, model savings or unsupported execution routes.

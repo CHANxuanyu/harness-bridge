@@ -71,6 +71,10 @@ it never resets a changed result branch. A pending unproved intent may be explic
 
 ## Retention
 
+If desktop conversation visibility was requested, perform the supported follow-up in
+[desktop.md](desktop.md) before cleanup. Keep any worktree still needed for native inspection;
+an outstanding desktop check does not change the delivered code receipt.
+
 `goal cleanup GOAL_ID` previews eligibility without deleting anything. Under explicit cleanup scope,
 copy its exact `request_template` (or select a subset), then apply `goal cleanup GOAL_ID --file
 cleanup.json --idempotency-key cleanup-1` with the current claim. Inspect `cleanup CLEANUP_ID`.

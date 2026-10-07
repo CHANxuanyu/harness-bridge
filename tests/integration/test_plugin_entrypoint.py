@@ -186,7 +186,10 @@ def test_invalid_connection_refused_before_probe(
     assert not (tmp_path / "state").exists()
 
 
-@pytest.mark.parametrize("failure", ["version", "command", "option", "doctor", "json", "list"])
+@pytest.mark.parametrize(
+    "failure",
+    ["version", "command", "option", "desktop_command", "desktop_claim", "doctor", "json", "list"],
+)
 def test_incompatible_runtime_never_reports_connection(
     package: Path, runtime: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
 ) -> None:
@@ -202,11 +205,16 @@ def test_incompatible_runtime_never_reports_connection(
             out = "hbridge obsolete" if failure == "version" else "hbridge 0.1.0.dev1"
         elif argv[-1] == "--help":
             code = 2 if failure == "command" and "goal" in argv else 0
+            if failure == "desktop_command" and "desktop" in argv:
+                code = 2
             out = (
                 ""
                 if failure == "option"
                 else "--background --idempotency-key --after --wait --integration --branch"
+                " --advisor-binding --advisor-epoch"
             )
+            if failure == "desktop_claim" and "desktop" in argv:
+                out = out.replace("--advisor-binding", "")
         else:
             assert argv[-2:] == ["doctor", "--offline"]
             out = json.dumps(

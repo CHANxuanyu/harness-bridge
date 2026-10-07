@@ -32,6 +32,8 @@ COMMANDS = (
     ("job",),
     ("events",),
     ("status",),
+    ("desktop", "status"),
+    ("desktop", "open"),
     ("artifacts",),
     ("review",),
     ("verify",),
@@ -135,6 +137,7 @@ def probe(runtime: Path, state: Path) -> dict[str, Any]:
                 ("run",): ("--background", "--idempotency-key"),
                 ("events",): ("--after", "--wait"),
                 ("goal", "deliver"): ("--integration", "--branch"),
+                ("desktop", "open"): ("--idempotency-key", "--advisor-binding", "--advisor-epoch"),
             }.get(command, ())
             if any(flag not in help_text for flag in required):
                 raise ConnectionError(f"runtime lacks required options: {' '.join(command)}")

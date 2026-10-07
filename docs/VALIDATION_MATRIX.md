@@ -5,6 +5,15 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+**P7 alpha.4 entrypoint continuation (2026-10-07, baseline `5aaaa47`):** plugin suite **26
+passed / 17.22s**, 2 new old-runtime/missing-Advisor-option refusals, lint/format 142 files,
+mypy 40 runtime files, Skill Creator validator pass. No new core/full-suite run. Actual native
+Codex/ZCode updates and enabled metadata pass; 16 matching files per cache, 36-command checks,
+unchanged shared connection and 34/15 unrelated plugin entries. Native Codex skills/list loads
+alpha.4 for repo and chat cwd. Read-only thread/list proves the existing Executor appears under
+explicit exec filtering but not default/interactive filtering. This is no-model native metadata
+evidence, not desktop GUI synchronization. User deferred GUI until returning home and unlocking.
+
 **Latest P7 bounded completion (2026-10-07, real cases on `113b538`):** explicitly authorized
 Codex cancellation retest passed, 11.694s, six sampled descendants exited and independent fixture
 survivor check empty. Claude native `error_max_turns` passed, 4.442s: configured 1, reported 2,

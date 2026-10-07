@@ -256,3 +256,5 @@ Each entry: decision — reason. Newest last.
 
 94. **P7 final bounded allowance:** explicit continuation accepts the already-proposed +1 Codex / 90s expansion; after the final two executions, 8 executions / 975 reserved seconds are spent. Retain prior stops/failures and native turn-count discrepancies; no automatic retry or renewed allowance.
 95. **Desktop continuity requirement:** preserve native UUID/worktree; same-session visibility is a product requirement, separate from execution success. First slice is explicit Claude handoff after terminal/delivered state, with durable once-only receipt and Advisor fencing. Native acknowledgement never means verified UI visibility; Codex source/list limitations remain open, with no vendor-history edits or artificial model turns.
+
+96. **P7 alpha.4 Advisor continuity:** preserve a user's desktop-visibility request through delivery and perform supported follow-up before cleanup; compatibility probing requires desktop commands/Advisor flags without opening selected state. Native list-source filtering is diagnostic evidence, never permission to rewrite vendor history or invent replacement conversations.

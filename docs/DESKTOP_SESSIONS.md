@@ -15,8 +15,9 @@ hbridge --state-dir /absolute/state --json desktop open TASK_ID \
 
 The Advisor performs these actions for the user. Status does not invoke a native harness.
 Open is explicit: it never follows automatically from worker completion, review or delivery.
-It creates no Executor attempt and sends no prompt. The installed alpha.3 plugin has not yet
-been updated to automate this new step; current code work is the runtime vertical slice.
+It creates no Executor attempt and sends no prompt. The installed alpha.4 plugin now carries requested desktop visibility through delivery and
+performs the supported follow-up itself. It does not open anything while the user has deferred
+GUI work or report native acknowledgement as UI acceptance.
 
 Only terminal tasks with confirmed exits and a valid native session binding are eligible.
 Linked tasks also require a currently DELIVERED parent and its current Advisor claim; approval
@@ -67,11 +68,25 @@ title remains. No replacement conversation or new model turn was created.
 
 After manual unlock, open the already delivered Claude session once, confirm its list entry,
 original UUID, complete history and exact worktree. Sending a message is unnecessary. Confirm
-receipt replay creates no duplicate. Establish and verify a supported Codex route, then add
-the validated completion step to the Advisor plugin. Live display during execution and
+receipt replay creates no duplicate. Establish and verify a supported Codex route. The alpha.4 Advisor follow-up is installed,
+but it continues to report that unsupported route explicitly. Live display during execution and
 bidirectional interactive takeover require separate ownership/capability work; neither is
 implemented by this finished-session handoff.
 
 Tests use synthetic rows/native acknowledgements, real SQLite/fresh CLI processes, racing
 callers, invalid bindings, active states, stale Advisors and interruption. They never read
 native credentials or launch native applications/models. Existing state schema remains 10.
+
+## Alpha.4 native entrypoint evidence
+
+The installed Codex and ZCode packages are alpha.4; all 16 cached files match source, their
+connection checkers pass 36 command surfaces without opening selected state, and unrelated
+plugins/connection are unchanged. Native Codex skills/list resolves the updated Skill for the
+repository and Advisor chat cwd. This is metadata loading, not GUI refresh evidence.
+
+A native read-only probe against Codex 0.160.0 found the existing Executor's source is `exec`.
+For its exact worktree, default and explicit interactive lists return zero results; explicit
+`sourceKinds: ["exec"]` returns the original session. This establishes native filtering and is
+consistent with the desktop-list omission; it does not prove which query the GUI currently uses.
+No resume, new thread, turn, source rewrite or import was used. The user is away from home and
+has explicitly deferred GUI work until manual unlock.

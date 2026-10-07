@@ -2,12 +2,15 @@
 
 ## Current continuation
 
+- **Advisor desktop follow-up installed:** plugin alpha.4 is enabled in actual Codex and ZCode profiles. It carries the user's requested desktop visibility through delivery, queries exact child bindings, handles the supported handoff and reports pending/unsupported results separately. Both cached packages match all 16 source files, both connection checks pass 36 command surfaces without opening selected state; 34 other Codex plugins / 15 other ZCode plugins and the shared connection are unchanged. Native Codex skills/list loads alpha.4 for repo and chat cwd; current GUI refresh remains unobserved.
+- **Codex diagnostic:** a read-only worktree-scoped native probe confirms source `exec`; default/interactive lists omit the session, while explicit exec filtering returns its exact UUID. No new session/turn, resume, import or metadata mutation was used. This demonstrates native filtering, not a completed desktop synchronization route.
+- **This slice's checks:** plugin suite 26 passed / 17.22s, including two new incompatible-runtime refusals; Skill Creator validator passes; lint/format 142 files and mypy 40 runtime files pass. Runtime/source execution logic is unchanged, so prior full/desktop evidence is reused.
 - **P7 bounded native packet completed.** The approved final two executions passed: fixed Codex cancellation stopped all observed descendants (independent fixture survivor check empty); Claude stopped with native `error_max_turns`. Real dual-harness collaboration, same-session repair, integrated review and exact local delivery remain passed. Preserve the earlier failed cancellation and permission stop as historical evidence.
 - **Final allowance accounting:** 8 actual executions (Claude 4 / Codex 4), 1 repair, 975 reserved wall seconds; observed native duration 145.629s, not billed usage. One older Codex reservation is a proven non-start. All validation gates are closed; no additional real execution is authorized or needed for this packet.
 - **New desktop requirement remains open.** `desktop status` locates the original native session without invoking a harness. `desktop open` adds a once-only Claude CLI-to-desktop handoff for terminal tasks / delivered goals, with current Advisor guards, exact binding and version checks. No prompt or new attempt. Native acknowledgement is not desktop visibility. Codex is explicitly `native_history_only`: title/section/pin metadata probes did not make the Executor appear in the app list; the temporary section was removed.
-- **UI verification deferred by the user:** Mac locked; the user chose to finish CLI/code first. No Claude desktop handoff has been run. Full Codex GUI shutdown remains unverified. ZCode quit/relaunch with a fake worker, native plugin lifecycle and independent runtime retention evidence remain valid.
+- **UI verification deferred by the user:** the user is away from home and will unlock the Mac after returning; continue CLI/code only meanwhile. No Claude desktop handoff has been run. Full Codex GUI shutdown remains unverified. ZCode quit/relaunch with a fake worker, native plugin lifecycle and independent runtime retention evidence remain valid.
 - **Validation:** reuse the pre-change full **732 passed / 922.88s**. New desktop/CLI/coordination run **55 passed / 37.69s**, including 26 new desktop cases; lint/format 141 files and strict mypy 40 runtime files pass. Final native-session selection hardening: 26 desktop cases passed / 6.98s. This is affected coverage, not a new full-suite run.
-- **Distribution:** runtime 0.1.0.dev1 / installed plugin alpha.3 / schema 10. Apache-2.0, local candidate only. No push, tag, publication, provider/billing change, shared-state migration, plugin-cache edit or new model turn for desktop visibility. See `docs/P7_RESULT.md` and `docs/DESKTOP_SESSIONS.md`.
+- **Distribution:** runtime 0.1.0.dev1 / installed plugin alpha.4 / schema 10. Apache-2.0, local candidate only. No push, tag, publication, provider/billing change, shared-state migration, new model turn for desktop visibility. See `docs/P7_RESULT.md` and `docs/DESKTOP_SESSIONS.md`.
 
 The latest human continuation accepted the already-proposed 2 executions / 150 seconds,
 adding exactly one Codex execution / 90 seconds to the original envelope. Both are spent.
@@ -25,7 +28,9 @@ Codex task `tsk_190c432213004a20863a`, native session `01a11375-1bfc-7ba3-a351-8
 Their state is `work/p7-live-20261007/dual-recovered/state`. Both exact bindings are confirmed
 by the new read-only desktop status command. Do not create another native session.
 
-Continue desktop acceptance after manual Mac unlock. The user explicitly chose CLI/code first;
+Latest plugin receipts: takeover chat `work/p7-plugin-alpha4/result.json` and `codex-native-skills.json`; native source-filter proof: `work/p7-codex-list-probe.json`.
+
+Continue desktop acceptance after manual Mac unlock. Do not ask again while the user remains away. The user explicitly chose CLI/code first;
 do not bypass the lock or prior Codex computer-use refusal. Claude's official handoff is ready
 but NOT_RUN. Codex app read_thread can read the Executor; list_threads still omitted it after
 successful metadata operations. Its helpful title is retained; section/pin experiments were

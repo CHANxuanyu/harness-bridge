@@ -1,7 +1,7 @@
 # P7 result and local candidate — 2026-10-07
 
 **Current status: bounded native collaboration/fault packet completed; newly requested desktop-list synchronization is not yet accepted.**
-Runtime 0.1.0.dev1 / plugin 0.1.0-alpha.3. Apache-2.0, local candidate only; no remote
+Runtime 0.1.0.dev1 / plugin 0.1.0-alpha.4. Apache-2.0, local candidate only; no remote
 publication or push. This is the current result; the earlier synthetic rehearsal remains
 historical evidence in [P7_ACCEPTANCE.md](P7_ACCEPTANCE.md).
 
@@ -230,3 +230,28 @@ and independent check artifacts. These logs are
 not inherently safe to publish; only this manually reviewed summary is committed.
 
 Final desktop session selection rejects a later executed attempt with missing identity, rather than silently opening an older session. Affected desktop rerun: **26 passed / 6.98s**; no additional full run.
+
+## Alpha.4 delivery follow-up
+
+The Advisor plugin now handles requested desktop continuity after delivery, before cleanup,
+using exact native bindings and status-specific reporting. A locked/unavailable desktop stays
+pending. Unsupported Codex synchronization never falls back to a replacement chat or model turn.
+The user explicitly remains away from home; no GUI handoff has been attempted.
+
+Plugin regression: **26 passed / 17.22s** (24 existing plus 2 new incompatible-runtime refusal
+cases); Skill Creator validator passed using cached PyYAML after the repo venv lacked that
+validation-only dependency. No dependency was added to the project. Lint/format 142 files and
+mypy 40 runtime files pass. Core runtime did not change and prior core checks were not repeated.
+
+Native upgrades enabled alpha.4 in both actual host profiles. Each cache matches 16 files;
+each model-free checker covers 36 commands without inspecting selected state. All 34 unrelated
+Codex and 15 unrelated ZCode plugin entries and the connection file are unchanged. A fresh
+native Codex skills/list resolves the enabled alpha.4 Skill for repo and chat cwd, with no error.
+Current desktop refresh is unobserved.
+
+Read-only Codex 0.160.0 probing verifies `source: exec`: its exact worktree has zero default/
+interactive results, one explicit exec result with the original UUID. Native source filtering
+is proven; the GUI query and a supported sync route remain open. No thread/turn, resume, import,
+source rewrite or new real execution was performed. Evidence: private `work/p7-plugin-alpha4/`
+and `work/p7-codex-list-probe.json` in the takeover chat. Final native packet counts remain 8
+executions / 1 repair / 975 reserved seconds, gates closed.

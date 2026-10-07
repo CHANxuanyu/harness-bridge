@@ -1,6 +1,6 @@
 # Local candidate: installation and retention
 
-Runtime **0.1.0.dev1**, Advisor plugin **0.1.0-alpha.3**, protocol 1.0, store revision 10.
+Runtime **0.1.0.dev1**, Advisor plugin **0.1.0-alpha.4**, protocol 1.0, store revision 10.
 Apache-2.0; see LICENSE and NOTICE. The user authorized a local candidate only on 2026-10-07.
 No package index upload, public marketplace listing, Git tag, release or push is included.
 Read the accompanying `ACCEPTANCE.md` for measured capabilities and remaining limitations.
@@ -133,3 +133,9 @@ python3 scripts/build_release.py --out /absolute/path/to/new-candidate-directory
 The fresh-only builder creates a wheel, an explicitly inventoried marketplace ZIP, installation
 and acceptance notes, license/notice and SHA-256 manifest. It records source revision/dirty
 state and never installs, publishes, dispatches a model, or upgrades acceptance status.
+
+Alpha.4 adds the Advisor desktop follow-up and two additional model-free connection probes.
+Actual Codex/ZCode profiles were upgraded through native CLI commands, retained enabled state,
+matched all 16 plugin files and passed the 36-command checker. Other installed plugins and the
+shared connection were unchanged. Desktop UI acceptance remains deferred; installation alone
+never grants new Executor allowance.
