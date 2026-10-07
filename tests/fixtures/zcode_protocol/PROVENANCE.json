@@ -7,10 +7,24 @@
   "bundle_sha256": "fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f",
   "native_probe": "docs/ZCODE_PROTOCOL_PROBE.json",
   "limitations": [
-    "Only runtime/capabilities was queried from an actual isolated native server",
-    "Session snapshots and lifecycle events are synthesized, not captured native session traffic",
+    "Native capability and isolated blank create/read/usage were queried; no prompt/model execution",
+    "Peer session/lifecycle traffic is synthetic; selected native blank fields are recorded separately",
     "Provider names and model metadata do not establish a user's account access or billing",
     "Offline cancellation proves the simulated process topology only"
   ],
-  "contains_credentials_or_copied_vendor_bundle": false
+  "contains_credentials_or_copied_vendor_bundle": false,
+  "additional_native_evidence": {
+    "file": "native_blank_projection.json",
+    "collection_date": "2026-10-07",
+    "source": "isolated native create/read/usage, followed by reopen/resume",
+    "redactions": [
+      "session UUID",
+      "workspace path"
+    ],
+    "projection": "selected observed fields only; omitted raw messages and projection",
+    "requested_mode": "plan",
+    "observed_mode": "build",
+    "model_requests": 0,
+    "resume_error_code": -32004
+  }
 }

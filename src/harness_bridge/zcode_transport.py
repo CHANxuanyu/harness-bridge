@@ -59,6 +59,7 @@ class Peer:
         self.messages: deque[dict[str, Any]] = deque()
         self.notifications: deque[dict[str, Any]] = deque()
         self.serial = 0
+        self.materialized_session: str | None = None
 
     def receive(self) -> dict[str, Any]:
         while not self.messages:
@@ -108,6 +109,7 @@ class Peer:
 
     def call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         self.serial += 1
+        preferences_answered = False
         assert self.proc.stdin
         self.proc.stdin.write(
             json.dumps({"id": self.serial, "method": method, "params": params}).encode() + b"\n"
@@ -115,6 +117,39 @@ class Peer:
         self.proc.stdin.flush()
         while True:
             msg = self.receive()
+            if msg.get("method") == "session/requestRuntimePreferences" and "id" in msg:
+                request = msg.get("params")
+                if (
+                    method not in ("session/create", "session/resume")
+                    or preferences_answered
+                    or type(msg["id"]) not in (int, str)
+                    or not isinstance(request, dict)
+                    or set(request) != {"sessionId", "scope"}
+                    or request["scope"] != "runtime-materialization"
+                    or session_id(request["sessionId"]) is None
+                    or (method == "session/resume" and request["sessionId"] != params["sessionId"])
+                ):
+                    raise Refused("permission_denied")
+                self.materialized_session = request["sessionId"]
+                preferences_answered = True
+                # This one host callback configures bounded initialization, not tool approval.
+                # Never trigger the native compatibility fallback (automatic input resolution).
+                self.proc.stdin.write(
+                    json.dumps(
+                        {
+                            "id": msg["id"],
+                            "result": {
+                                "nativeSearchEnhancementsEnabled": False,
+                                "memoryEnabled": False,
+                                "askUserQuestionAutoResolutionEnabled": False,
+                                "modelContextBudgetStrategy": "preflight-v1",
+                            },
+                        }
+                    ).encode()
+                    + b"\n"
+                )
+                self.proc.stdin.flush()
+                continue
             if "id" not in msg or "method" in msg:
                 self.notification(msg)
                 continue
@@ -234,7 +269,9 @@ def execute(peer: Peer, data: dict[str, Any], settings: ZCodeExecutorSpec) -> No
             titleGenerationEnabled=False,
         )
         result = peer.call("session/create", params)
-    sid, revision = snapshot(result, workspace, settings, resume)
+    if peer.materialized_session is None:
+        raise Refused()
+    sid, revision = snapshot(result, workspace, settings, resume or peer.materialized_session)
     if peer.notifications:
         raise Refused()  # Unqualified initialization side effects must not silently disappear.
     result = peer.call("session/read", {"sessionId": sid})

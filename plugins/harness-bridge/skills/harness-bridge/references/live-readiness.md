@@ -45,4 +45,12 @@ External hook files/custom routing are refused. Plugins, auxiliary agents, MCP, 
 notification commands are disabled for that execution; saved user configuration is not changed.
 No credentials, account identifiers or raw config are retained. Requested model configuration is
 evidence of the pin, not independently observed model identity or a guarantee of remaining quota.
-ZCode execution is unimplemented. Installing an Advisor plugin does not authorize a live call.
+ZCode has an offline protocol adapter in newer source but no qualified live path. Static model
+names and a UI showing a ready plan do not prove the worker's authenticated provider, remaining
+quota or effective permissions. The exact provider matters: Start Plan and individual/team
+Coding Plan are separate profiles, and Z.ai/BigModel are separate families. Never silently switch.
+Installed ZCode0.16.9 also requests initialization preferences; empty MCP and false feature fields
+alone do not prove isolation. The new client handles only the bounded initialization callback,
+never tool approval, and refuses mismatched snapshots. Blank native session creation returned
+build for a requested plan mode, and reopening that empty session was not found; these are open
+qualification findings, not reasons to loosen guards. Installing a plugin authorizes no model call.

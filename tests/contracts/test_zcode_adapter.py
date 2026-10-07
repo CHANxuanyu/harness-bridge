@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -12,11 +13,37 @@ from harness_bridge.adapters.zcode import ZCodeAdapter
 from harness_bridge.errors import BridgeError
 from harness_bridge.models import ZCodeExecutorSpec, parse_task_spec
 from harness_bridge.runner import ProcessOutcome
+from harness_bridge.zcode_transport import Refused, snapshot
 from tests.contracts.test_claude_adapter import packet
 from tests.contracts.test_codex_adapter import context
 from tests.unit.test_models import spec
 
 SID = "sess_0199a213-81c0-7800-8aa1-bbab2a035a53"
+
+
+@pytest.mark.parametrize(
+    "inject_model,category", [(False, "model_mismatch"), (True, "permission_denied")]
+)
+def test_native_blank_projection_is_not_dispatch_ready(inject_model: bool, category: str) -> None:
+    evidence = json.loads(
+        (
+            Path(__file__).parents[1] / "fixtures/zcode_protocol/native_blank_projection.json"
+        ).read_text()
+    )
+    value = evidence["snapshot"]
+    selected = ZCodeExecutorSpec(
+        kind="zcode", provider_id="account:bigmodel-start-plan", permission_mode="plan"
+    )
+    if inject_model:
+        # Deliberately synthetic variant: even a correct model cannot hide the observed
+        # plan-request/build-response mismatch. The original capture has current=null.
+        value["settings"]["model"]["current"] = {
+            "providerId": selected.provider_id,
+            "modelId": selected.requested_model,
+        }
+    with pytest.raises(Refused) as error:
+        snapshot(value, "/redacted/isolated/workspace", selected, value["session"]["sessionId"])
+    assert error.value.category == category
 
 
 def settings() -> ZCodeExecutorSpec:

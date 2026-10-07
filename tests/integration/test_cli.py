@@ -78,6 +78,7 @@ def test_doctor_offline_is_non_inference(fx: Fixture) -> None:
         c["evidence"] for c in report["capabilities"] if c["name"] == "zcode_executor_adapter"
     )
     assert zcode["live_dispatch"] == "unavailable" and zcode["gaps"]
+    assert zcode["protocol_profile_revision"] == 2
 
 
 def test_demo_success_and_bug_then_repair(fx: Fixture, tmp_path: Path) -> None:

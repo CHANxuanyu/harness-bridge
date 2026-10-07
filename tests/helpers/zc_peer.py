@@ -13,7 +13,10 @@ from cc_stub import BUGGY, CORRECT
 
 MODE = os.environ.get("HBRIDGE_ZC_MODE", "success")
 WORKSPACE = os.getcwd()
-MODEL = {"providerId": "account:zai-individual-coding-plan", "modelId": "GLM-5.3-Flash"}
+MODEL = {
+    "providerId": os.environ.get("HBRIDGE_ZC_PROVIDER", "account:zai-individual-coding-plan"),
+    "modelId": "GLM-5.3-Flash",
+}
 SID = "sess_" + str(uuid.uuid4())
 REVISION = 1
 READS = 0
@@ -112,6 +115,32 @@ def main() -> None:
             else:
                 assert params["mode"] == "edit" and params["model"] == MODEL
                 assert params["titleGenerationEnabled"] is False
+            if MODE != "missing-preferences":
+                callback = {
+                    "id": "host-preferences",
+                    "method": "session/requestRuntimePreferences",
+                    "params": {
+                        "sessionId": "latest" if MODE == "bad-preference-session" else SID,
+                        "scope": "user-execution"
+                        if MODE == "bad-preference-scope"
+                        else "runtime-materialization",
+                    },
+                }
+                write(callback)
+                response = json.loads(sys.stdin.readline())
+                assert response == {
+                    "id": "host-preferences",
+                    "result": {
+                        "nativeSearchEnhancementsEnabled": False,
+                        "memoryEnabled": False,
+                        "askUserQuestionAutoResolutionEnabled": False,
+                        "modelContextBudgetStrategy": "preflight-v1",
+                    },
+                }
+                if MODE == "duplicate-preferences":
+                    write(callback)
+                if MODE == "preference-binding-mismatch":
+                    SID = "sess_" + str(uuid.uuid4())
             result = snapshot()
         elif method == "session/read":
             READS += 1

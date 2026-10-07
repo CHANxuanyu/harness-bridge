@@ -46,6 +46,9 @@ Adapt [plan.example.json](plan.example.json): each child has `key`, `depends_on`
 The TaskDefinition omits `repo`/`schema_version`: Bridge assigns the goal's pinned repo and
 composed dependency baseline. Freeze narrow write paths and independent acceptance commands.
 The bundled fake implementation is specifically for the tagnorm fixture, not arbitrary work.
+For the optional Astra/Opus/Flash profile, use [routing.md](routing.md) and its separate templates;
+the original fake examples remain model-free defaults. ZCode examples require the offline
+capability and a simulated protocol executable; they do not open a native route.
 For authorized real work use `claude-code` or explicitly bounded `codex` and the live-readiness
 reference. Do not substitute a manually opened chat. Default project concurrency is one; at most two
 requires explicit runtime configuration and provably disjoint declared scopes.

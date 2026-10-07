@@ -14,6 +14,13 @@ native support. Next qualify account/permission metadata and native session sema
 Advisor routing/escalation templates, then prepare newly authorized bounded real acceptance
 of the exact three-model route. Native ZCode dispatch remains closed. Do not spend the P7 allowance.
 
+Current continuation: native blank-session probes found the initialization-preference callback,
+plan/build mismatch and unavailable empty-session resume. Offline profile revision2 handles the
+bound initialization and explicit Start Plan choices; source plugin alpha.7 supplies the selected
+route templates. Installed alpha.6 remains unchanged. Before claiming explicit failure escalation,
+implement reviewed partial-work transfer/task supersession: today's integration requires every
+child approved, so an unapproved failed child cannot simply be replaced or omitted.
+
 ## Completed baseline — reuse, do not redo for handoff
 
 - V0.1 task/review contracts, store, worktrees, runner, verifier and recovery foundation.

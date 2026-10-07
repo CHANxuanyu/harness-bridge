@@ -11,6 +11,8 @@ The selected next route is **Codex Astra Advisor → Claude Code Opus 5.5 for di
 ZCode GLM 5.3 Flash for bounded simple work**. The new [ZCode Executor](docs/ZCODE_EXECUTOR.md)
 now has an offline protocol adapter; native dispatch remains unavailable pending account,
 permission, session and desktop qualification. See the [routing contract](docs/ROUTING_PROFILE.md).
+Source plugin **alpha.7** adds this optional routing profile and templates; installed hosts remain
+alpha.6. [Native preflight findings](docs/ZCODE_NATIVE_PREFLIGHT.md) explain the remaining gaps.
 The P7 packaged candidate remains pinned to `113b0a7`; this source development is not a new release.
 
 Harness Bridge aims to provide **one Advisor with one or more Executors across coding
@@ -51,7 +53,7 @@ sessions bound to child tasks. The [project plan](docs/PROJECT_PLAN.md) is the c
 scope, session/workspace contract, implementation sequence and acceptance checklist. It
 distinguishes existing V0.1 code from proposed coordination and delivery capabilities.
 
-A [local Advisor plugin alpha.6](plugins/harness-bridge/README.md) packages one shared Skill
+A [local Advisor plugin](plugins/harness-bridge/README.md) packages one shared Skill
 for Codex/ZCode. Both actual host installations share the same runtime/state connection.
 Native clean install, upgrade, uninstall and reinstall preserve task data. Both ZCode and Codex
 full GUI quit/relaunch retained a fake worker without duplication. Fresh Advisor reconnection

@@ -187,6 +187,8 @@ class ZCodeExecutorSpec(_Strict):
         "account:bigmodel-individual-coding-plan",
         "account:zai-team-coding-plan",
         "account:bigmodel-team-coding-plan",
+        "account:zai-start-plan",
+        "account:bigmodel-start-plan",
     ]
     permission_mode: Literal["edit", "plan"] = "edit"
     allowed_tools: list[Literal["Read", "Edit", "Write", "Glob", "Grep"]] = Field(

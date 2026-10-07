@@ -71,7 +71,20 @@ def test_initial_repair_same_session_external_verification(fx: Fixture, peer: Pa
 
 @pytest.mark.parametrize(
     "mode",
-    ["model", "workspace", "permission", "busy", "wrong-id", "bad-runtime", "bad-projection"],
+    [
+        "model",
+        "workspace",
+        "permission",
+        "busy",
+        "wrong-id",
+        "bad-runtime",
+        "bad-projection",
+        "missing-preferences",
+        "bad-preference-session",
+        "bad-preference-scope",
+        "duplicate-preferences",
+        "preference-binding-mismatch",
+    ],
 )
 def test_identity_and_permissions_refuse_before_prompt(fx: Fixture, peer: Path, mode: str) -> None:
     log = fx.base / "rpc.jsonl"
@@ -237,4 +250,25 @@ def test_numeric_goal_turn_budget_cannot_be_bypassed(fx: Fixture, peer: Path) ->
     assert error.value.code == "BUDGET_EXHAUSTED"
     assert not b.store.list_attempts(tid)
     assert b.coordination.status(g["goal_id"])["budget"]["attempts"] == 0
+    b.close()
+
+
+@pytest.mark.parametrize("provider", ["account:bigmodel-start-plan", "account:zai-start-plan"])
+def test_start_plan_is_explicit_and_observed_without_coding_plan_fallback(
+    fx: Fixture, peer: Path, provider: str
+) -> None:
+    log = fx.base / "rpc.jsonl"
+    b = bridge(fx, HBRIDGE_ZC_PROVIDER=provider, HBRIDGE_ZC_LOG=str(log))
+    spec = zc_spec(fx)
+    spec["executor"]["provider_id"] = provider
+    tid = b.create(spec, "k")["task_id"]
+    result = b.run(tid, executor_binary=str(peer))
+    assert result["executor_outcome"] == "succeeded"
+    assert result["verification_status"] == "passed"
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    create = next(x for x in calls if x["method"] == "session/create")
+    send = next(x for x in calls if x["method"] == "session/send")
+    assert create["params"]["model"]["providerId"] == provider
+    assert send["params"]["modelSelection"]["providerId"] == provider
+    assert b.store.list_attempts(tid)[0].session_binding
     b.close()

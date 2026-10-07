@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "objective": "Deliver the core behavior and its CLI entrypoint",
+  "repo": {
+    "path": "/absolute/path/to/repo",
+    "base_ref": "HEAD"
+  },
+  "advisor": {
+    "host": "codex",
+    "native_session_ref": null
+  },
+  "constraints": [
+    "User-selected Advisor model: Astra; verify the current host model separately",
+    "Keep executor models and account providers frozen per child"
+  ],
+  "acceptance": [
+    "Independent total-goal checks cover the core and CLI together"
+  ],
+  "max_attempts": 4,
+  "max_repairs": 2,
+  "max_executor_wall_seconds": 840,
+  "max_executor_turns": null,
+  "allowed_executors": [
+    "claude-code",
+    "zcode"
+  ]
+}

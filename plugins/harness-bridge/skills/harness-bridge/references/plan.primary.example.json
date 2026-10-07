@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "children": [
+    {
+      "key": "core",
+      "depends_on": [],
+      "task": {
+        "goal": "Implement the agreed core compatibility contract",
+        "requirements": [
+          "Route: difficult work → Claude Code Opus 5.5; compatibility decisions need investigation",
+          "Preserve documented behavior and return concrete regression evidence"
+        ],
+        "allowed_paths": [
+          "src/core/**"
+        ],
+        "verification": [
+          {
+            "id": "acceptance",
+            "argv": [
+              "python3",
+              "-B",
+              "/absolute/trusted/check_core.py"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 60,
+            "required": true,
+            "trust": "external-acceptance"
+          }
+        ],
+        "limits": {
+          "max_attempts": 2,
+          "max_repair_cycles": 1,
+          "wall_timeout_seconds": 300,
+          "max_turns_per_attempt": 10,
+          "max_artifact_bytes": 10485760,
+          "kill_grace_seconds": 5
+        },
+        "executor": {
+          "kind": "claude-code",
+          "requested_model": "claude-opus-5-5",
+          "permission_mode": "acceptEdits",
+          "allowed_tools": [
+            "Read",
+            "Edit",
+            "Write",
+            "Glob",
+            "Grep"
+          ],
+          "strict_mcp_config": true,
+          "resume_on_repair": true
+        }
+      }
+    },
+    {
+      "key": "cli",
+      "depends_on": [
+        "core"
+      ],
+      "task": {
+        "goal": "Connect the approved core behavior to the existing CLI",
+        "requirements": [
+          "Route: bounded simple work → ZCode GLM 5.3 Flash; reuse the approved core interface",
+          "Use the fixed approved dependency baseline; escalate uncertainty to the Advisor"
+        ],
+        "allowed_paths": [
+          "src/cli/**"
+        ],
+        "verification": [
+          {
+            "id": "acceptance",
+            "argv": [
+              "python3",
+              "-B",
+              "/absolute/trusted/check_cli.py"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 60,
+            "required": true,
+            "trust": "external-acceptance"
+          }
+        ],
+        "limits": {
+          "max_attempts": 2,
+          "max_repair_cycles": 1,
+          "wall_timeout_seconds": 120,
+          "max_turns_per_attempt": null,
+          "max_artifact_bytes": 10485760,
+          "kill_grace_seconds": 5
+        },
+        "executor": {
+          "kind": "zcode",
+          "requested_model": "GLM-5.3-Flash",
+          "provider_id": "account:bigmodel-start-plan",
+          "permission_mode": "edit",
+          "allowed_tools": [
+            "Read",
+            "Edit",
+            "Write",
+            "Glob",
+            "Grep"
+          ],
+          "resume_on_repair": true
+        }
+      }
+    }
+  ]
+}

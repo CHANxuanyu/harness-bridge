@@ -16,7 +16,8 @@ from typing import Any
 import pytest
 
 from harness_bridge.cli import _build_parser
-from harness_bridge.coordination import GoalSpec
+from harness_bridge.coordination import AdvisorClaim, GoalSpec
+from harness_bridge.errors import BridgeError
 from harness_bridge.models import TaskSpec
 from harness_bridge.planning import PlanBatch
 from harness_bridge.workspace import checkout_fingerprint, git
@@ -101,6 +102,50 @@ def test_copied_manifests_references_examples_and_documented_commands(package: P
     GoalSpec.model_validate(read(references / "goal.example.json"))
     PlanBatch.model_validate(read(references / "plan.example.json"))
     TaskSpec.model_validate(read(references / "task.example.json"))
+    GoalSpec.model_validate(read(references / "goal.primary.example.json"))
+    PlanBatch.model_validate(read(references / "plan.primary.example.json"))
+
+
+def test_primary_profile_freezes_routes_budget_and_approved_dependency(
+    package: Path, fx: Fixture
+) -> None:
+    refs = package / "skills/harness-bridge/references"
+    goal = read(refs / "goal.primary.example.json")
+    goal["repo"] = fx.spec()["repo"]
+    batch = read(refs / "plan.primary.example.json")
+    parsed = PlanBatch.model_validate(batch)
+    assert goal["max_executor_turns"] is None
+    assert sum(c.task.limits.max_attempts for c in parsed.children) == goal["max_attempts"]
+    assert (
+        sum(
+            c.task.limits.max_attempts * c.task.limits.wall_timeout_seconds for c in parsed.children
+        )
+        == goal["max_executor_wall_seconds"]
+    )
+    for child in batch["children"]:
+        child["task"]["verification"] = fx.spec()["verification"]
+    b = fx.bridge()
+    try:
+        created = b.coordination.create(goal, "goal")
+        b.advisor_claim = AdvisorClaim.model_validate(created["advisor_claim"])
+        receipt = b.plans.submit(created["goal_id"], batch, "plan", b.advisor_claim)
+        ids = {p["key"]: p["child_id"] for p in receipt["children"]}
+        core = b.materialize(ids["core"])
+        frozen = b._spec(b.store.get_task(core["task_id"]))
+        assert frozen.executor.kind == "claude-code"
+        assert frozen.executor.requested_model == "claude-opus-5-5"
+        assert b.plans.status(ids["cli"])["state"] == "WAITING_DEPENDENCIES"
+        with pytest.raises(BridgeError):
+            b.materialize(ids["cli"])
+        assert len(b.store.list_tasks()) == 1
+        assert b.coordination.status(created["goal_id"])["budget"]["attempts"] == 0
+        batch["children"][1]["task"]["executor"]["provider_id"] = "account:zai-start-plan"
+        with pytest.raises(BridgeError) as conflict:
+            b.plans.submit(created["goal_id"], batch, "plan", b.advisor_claim)
+        assert conflict.value.code == "IDEMPOTENCY_CONFLICT"
+        assert not b.store.list_attempts(core["task_id"])
+    finally:
+        b.close()
 
 
 @pytest.mark.parametrize("existing", [False, True])

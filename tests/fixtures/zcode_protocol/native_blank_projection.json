@@ -1,0 +1,44 @@
+{
+  "source": "selected native blank-session response fields; identity/path redacted; not model inference",
+  "requested_mode": "plan",
+  "requested_model": null,
+  "snapshot": {
+    "protocol": {
+      "name": "ZCode Protocol",
+      "version": 1
+    },
+    "session": {
+      "sessionId": "sess_00000000-0000-4000-8000-000000000001",
+      "status": "idle",
+      "workspace": {
+        "workspacePath": "/redacted/isolated/workspace",
+        "workspaceKey": "/redacted/isolated/workspace"
+      }
+    },
+    "settings": {
+      "mode": {
+        "current": "build"
+      },
+      "model": {
+        "current": null
+      },
+      "permission": {
+        "mode": "build"
+      }
+    },
+    "runtime": {
+      "stateRevision": 0,
+      "activeTurnId": null,
+      "pendingRequestIds": []
+    }
+  },
+  "usage": {
+    "modelRequestCount": 0,
+    "totalTokens": 0,
+    "modelErrorCount": 0
+  },
+  "after_reopen": {
+    "method": "session/resume",
+    "error_code": -32004
+  }
+}

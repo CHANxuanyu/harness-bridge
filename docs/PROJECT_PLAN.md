@@ -1,6 +1,6 @@
 # Harness Bridge 项目计划书
 
-**版本：1.4 · 日期：2026-10-07 · 状态：P7 基线已验收；P8 ZCode 离线适配已接入，尚非原生验收或发布说明**
+**版本：1.5 · 日期：2026-10-07 · 状态：P7 已验收；P8 离线 profile2 与路由模板已接入，原生及失败任务替代未完成**
 
 核心定义由用户明确：**Advisor 本身是一个 coding agent 会话，领导一个或多个运行于其他 harness 的 Executor 会话。**
 产品服务于同时订阅 ZCode/GLM、Claude Code、Codex 等工具的开发者，使其在主会话中使用跨 harness 的子 agent。
@@ -13,6 +13,9 @@
 负责简单任务。** 这是用户明确的分工，优先于下文 P0–P7 的历史路线默认。
 具体路由、升级边界、模型标识与 P8 实施/验收顺序见 [ROUTING_PROFILE.md](ROUTING_PROFILE.md)。
 现有 P7 验收保留；ZCode Executor 的离线协议实现已接入，真实入口未开放，这条新主路径尚未闭环。
+本轮原生空会话核对见 [ZCODE_NATIVE_PREFLIGHT.md](ZCODE_NATIVE_PREFLIGHT.md)；源码插件 alpha.7
+新增路由模板，实际安装仍为 alpha.6。未批准子任务的跨 harness 替代需要补充运行时契约，
+不能借用只接受已批准快照的依赖机制，或把整合返修当作绕过失败子任务的通道。
 
 ## 1. 产品定义与已确定的边界
 

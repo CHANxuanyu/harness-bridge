@@ -1,12 +1,12 @@
 {
   "name": "harness-bridge",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "description": "Coordinate bounded coding goals, Executor jobs, review and local delivery through a separate Harness Bridge runtime.",
   "skills": "./skills/",
   "interface": {
     "displayName": "Harness Bridge",
     "shortDescription": "Coordinate coding agents from this conversation",
-    "longDescription": "Use this existing conversation as the Advisor for local goals, isolated Executor workspaces, evidence review and local result branches. Requires a separate hbridge runtime. Claude Code has a gated live route; Codex requires explicit wall-time budgets and native preflight; ZCode is an Advisor host.",
+    "longDescription": "Use this existing conversation as the Advisor for local coding goals, isolated Executor workspaces, evidence review and local result branches. Optional Astra/Opus/Flash routing profile; ZCode Executor remains offline-only. Requires a separate hbridge runtime and capability checks.",
     "developerName": "Xuanyu CHAN",
     "category": "Developer Tools"
   }

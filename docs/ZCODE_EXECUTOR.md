@@ -24,8 +24,9 @@ The new executor object is separate from Claude/Codex options:
 }
 ```
 
-`provider_id` is required: the accepted static account-provider names are Z.ai/BigModel
-individual/team Coding Plan providers. Choosing a string does **not** prove account entitlement,
+`provider_id` is required: the accepted account-provider names are Z.ai/BigModel
+individual/team Coding Plan **or Start Plan** providers (`account:zai-start-plan` and
+`account:bigmodel-start-plan`). These are distinct choices; no automatic fallback. Choosing a string does **not** prove account entitlement,
 subscription charging, or model availability. No account is selected or changed in native ZCode.
 Only the exact Flash model is admitted; non-Flash, FlashX, generic/custom providers, yolo,
 shell tools and foreign harness options are rejected. Permission mode may be `edit` or `plan`;
@@ -49,6 +50,9 @@ Installed ZCode 0.16.9 schema symbols inform this narrow sequence:
 1. Request `runtime/capabilities`.
 2. Create a session with exact workspace/model and explicit controls, or resume the frozen
    `sess_UUID`. Resuming does not overwrite persisted model/mode.
+   Handle exactly one `session/requestRuntimePreferences` callback for initialization only,
+   disabling memory, search enhancements and automatic input resolution. Bind its session ID
+   to the resumed ID or following created snapshot; all other server requests remain refused.
 3. Validate the returned snapshot, then read it again. Session ID, workspace path/key, provider,
    exact model, permission mode, idle state and absence of pending/active work must match.
 4. Send the task with exact model selection, attempt input/query ID and expected state revision.
@@ -74,7 +78,11 @@ The [model-free probe receipt](ZCODE_PROTOCOL_PROBE.json) confirms only newline 
 framing and `runtime/capabilities` on the installed application. It used an isolated HOME/data
 directory and explicit built-in config, did not create a session or send a prompt, and ended
 with exit zero and empty stderr. Earlier missing-config and Unix-socket-path failures are retained.
-This probe does not test any of the session methods above.
+The initial capability probe did not test session methods. Subsequent
+[native preflight findings](ZCODE_NATIVE_PREFLIGHT.md) add isolated create/read/zero-usage evidence,
+a requested-plan/observed-build mismatch and failed empty-session resume. They do not qualify
+model dispatch, effective permissions or histories after real work. The offline profile is now
+revision2; use the doctor capability revision, not only the unchanged runtime version string.
 
 The [fixture provenance](../tests/fixtures/zcode_protocol/PROVENANCE.json) identifies the separate
 synthetic peer used for all adapter/integration checks. It exercises real Bridge state, Git
@@ -87,7 +95,8 @@ Before native dispatch can be enabled, P8 still needs:
 - Effective tool permissions, hooks, MCP and inherited configuration isolation.
 - Native create/read/send event correlation, exact-model observation and same-session resume.
 - Native bounded stop, confirmed descendants/exit, original history and desktop continuity.
-- Advisor routing/escalation templates and a concrete newly authorized bounded acceptance packet.
+- Native route acceptance and a concrete newly authorized bounded acceptance packet. Advisor
+  templates are prepared in source plugin alpha.7; superseding an unapproved child remains open.
 
 No new model calls are authorized by this slice. The old P7 allowance remains closed, and the P7
 release candidate stays pinned to source `113b0a7`. Source development here does not replace that

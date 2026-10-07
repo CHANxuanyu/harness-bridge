@@ -58,11 +58,15 @@ class ZCodeAdapter:
     def describe_capabilities(self) -> dict[str, Any]:
         return {
             "kind": self.kind,
+            "protocol_profile_revision": 2,
             "modes": ["mock with explicit protocol stand-in"],
             "live_dispatch": "unavailable",
             "evidence": "installed protocol symbols and offline simulated execution",
             "transport": "bounded bidirectional stdio through a managed child process",
             "resume": "exact sess_UUID and workspace/model/permission checks",
+            "initialization": (
+                "bound runtime preferences; memory/search/automatic input resolution off"
+            ),
             "turn_ceiling": "unsupported; requires explicit null",
             "gaps": list(LIVE_GAPS),
         }

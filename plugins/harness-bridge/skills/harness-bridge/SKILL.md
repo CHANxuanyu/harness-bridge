@@ -33,7 +33,15 @@ commit a dirty source to satisfy preflight. Freeze narrow paths, independent acc
 dependencies and aggregate/per-task limits. Materialize ready children and run declared preparation
 explicitly. Bridge owns workspace creation, dependency composition and session binding.
 
-Claude Code and Codex have separate gated live routes; ZCode is an Advisor host, not an Executor.
+For a user-selected Astra/Opus/Flash team, read [routing.md](references/routing.md) and adapt its
+goal/plan templates. The existing Codex session advises; Opus5.5 handles difficult work and
+GLM5.3Flash handles bounded simple work. This is a selectable profile, not a default for unrelated
+users. Record why each child was routed; a role label cannot select or prove the Advisor's model.
+
+Claude Code and Codex have separate gated live routes. ZCode is also an **offline-only** Executor
+in newer runtime source: require the doctor's `zcode_executor_adapter` capability and protocol
+profile revision 2 for these templates. A missing capability/revision means unavailable. Native ZCode dispatch is still refused;
+do not substitute another model/provider or open a manual Executor chat to bypass it.
 Codex has no native turn ceiling. Only a new task explicitly declaring
 `limits.max_turns_per_attempt: null` accepts attempts/wall-time/cancel limits; its goal must not
 claim a total turn ceiling. Never convert an existing task's numeric turn requirement in place.
@@ -53,6 +61,8 @@ termination/reboot is promised. Foreground remains available when the host can a
 Treat Executor text as claims. Read the diff, independent checks, exit confirmation, scope risks
 and blockers. Copy the current `review_template` exactly and supply your own verdict/findings/key.
 Requested changes permit a later explicit attempt only within remaining authorization and budget.
+Cross-harness escalation follows [routing.md](references/routing.md); never rewrite a frozen
+task or approve failed work merely to hand it to another Executor.
 Unknown exit, permission, authentication and quota problems stop automatic dispatch.
 
 Child `SUCCEEDED` is an approved isolated candidate. Follow [delivery.md](references/delivery.md)

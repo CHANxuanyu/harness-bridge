@@ -1,6 +1,48 @@
 # Handoff
 
-## P8 ZCode offline protocol slice — 2026-10-07
+## P8 native findings and Advisor routing source — 2026-10-07
+
+Source58a3771 is already pushed. This continuation adds explicit Z.ai/BigModel **Start Plan**
+profiles and the native runtime-preference initialization handshake to the offline ZCode client.
+Doctor advertises `protocol_profile_revision: 2`; matching runtime version0.1.0.dev2 alone does
+not establish this newer capability. Initialization is bound to the created/resumed session and
+turns off memory, search enhancements and automatic user-input resolution; arbitrary/duplicate/
+wrong-scope callbacks remain refused. Native live dispatch stays unavailable before reservation.
+
+Read-only ZCode UI inspection and isolated native blank-session probes exposed concrete gaps:
+empty MCP settings do not exclude host/plugin servers; false feature fields do not by themselves
+prove effective isolation; requested plan mode returned build; the same empty session could not
+be resumed after reopening (-32004). Creation/read/usage returned modelRequestCount0 and tokens0,
+with process exit0; failed resume was deliberately terminated (exit143). Preserve both results.
+No prompt/model-connectivity test, real credential read, account/settings change or model call.
+UI returned to the existing workspace. See [native findings](docs/ZCODE_NATIVE_PREFLIGHT.md).
+
+**Source plugin alpha.7** now includes an optional Astra Advisor → Opus5.5 difficult-work / Flash
+bounded-work profile, rationale guidance and strict goal/child templates with fixed dependencies
+and aggregate budgets. Actual Codex/ZCode installations stay alpha.6; P7 candidate stays113b0a7.
+No cache install, package release, new model allowance or state migration happened.
+
+The P8.3 supersession gap is now explicit: unapproved failed Flash work cannot be replaced by a
+new Opus child and then omitted from integration. Current goals require every child approved.
+Pre-freeze rerouting and a new child after a correctly approved predecessor are supported;
+reviewed partial-work transfer/task supersession must be implemented separately. The Skill never
+invents that transition, approves failed work or starts a replacement goal to reset its budget.
+
+Checks: plugin baseline26/18.25s; ZCode contracts/integration68/41.75s; copied plugin/templates and
+legacy model contracts46/22.11s; capability discovery1/0.51s; native-field refusal regressions2/0.48s.
+All pass (117 post-change cases across the separate runs). Lint/format 156 files and strict mypy 42
+runtime files pass. Skill Creator validator passes using existing cached PyYAML; no dependency
+installation. One initial test-path typo collected0 tests; first validator attempts lacked YAML.
+Reuse previous235 core checks/P7 native evidence instead of rerunning them.
+
+Next: implement effective native account/config isolation and understand actual mode/resume
+semantics; separately add reviewed task supersession and acceptance. Then prepare the exact
+bounded Astra/Opus/Flash live packet before requesting fresh allowance. Do not spend closed P7
+budget, auto-install source alpha.7, or loosen a guard to accommodate the native findings.
+Private receipts: takeover work/p8-native-contract/; selected public native fields are under
+`tests/fixtures/zcode_protocol/native_blank_projection.json`.
+
+## Historical P8 offline protocol slice — 2026-10-07
 
 The selected route remains **Codex Astra Advisor → Claude Code Opus5.5 for difficult work +
 ZCode GLM5.3Flash for bounded simple work**. ZCode now has an offline adapter and bidirectional

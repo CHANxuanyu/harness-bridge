@@ -8,14 +8,15 @@ client, MCP server, auto-run hook or Executor harness.
 Claude Code supports the gated live route. New Codex tasks can explicitly select an
 attempt/wall-time/cancel budget with native configuration preflight; see the bundled
 [live readiness](skills/harness-bridge/references/live-readiness.md) and runtime acceptance notes.
-ZCode execution is unimplemented. A Claude Advisor must respect the nested-session gate;
+ZCode has an offline-only Executor adapter in newer source; native dispatch is unavailable. A Claude Advisor must respect the nested-session gate;
 it may inspect evidence, but must not strip markers to launch another Claude session.
 
 ## Development installation
 
 1. In the Bridge checkout, install its locked environment with `uv sync --frozen`. Record the
    absolute `.venv/bin/hbridge` path. The plugin cache is not the runtime checkout. Runtime is
-   `0.1.0.dev2`, protocol `1.0`; this plugin is `0.1.0-alpha.6`.
+   `0.1.0.dev2`, protocol `1.0`; this source plugin is `0.1.0-alpha.7`; existing host installations remain alpha.6 until explicitly updated.
+   The version string alone does not establish ZCode capability; inspect the offline doctor report.
 2. Choose an absolute state directory outside the target repository/plugin cache. Reuse that
    directory across Advisor hosts. Keep validation state separate; live gates default closed.
 3. For Codex, register the checkout's `.agents/plugins/marketplace.json` using
@@ -39,6 +40,10 @@ The package can be copied to a host cache; every Skill reference stays inside it
 locations are resolved independently from trusted local connection metadata.
 
 ## Use
+
+The optional [Astra/Opus/Flash profile](skills/harness-bridge/references/routing.md) supplies
+routing rationale, strict goal/child examples and explicit escalation limits. It grants no model
+allowance; native ZCode and superseding an unapproved child remain unsupported.
 
 - “Use Harness Bridge to inspect this project's existing goals and jobs.”
 - “Delegate this bounded change to Claude Code and review the result; allow one repair.”

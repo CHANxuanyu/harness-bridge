@@ -5,6 +5,46 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+## P8 native initialization / Start Plan / route templates — 2026-10-07
+
+**Native non-inference, separate from T3/T4:** read-only account/model/MCP/hooks UI plus two
+isolated stdio server launches, no real credentials or session/send. Blank create/read/usage
+succeeded, parent process exit0, stderr empty, modelRequestCount0/tokens0. Requested plan returned
+build with no model available. Reopen/resume of that same empty session returned -32004, then
+bounded termination exit143. Resume failure is preserved; no real-work history claim follows.
+[Findings](ZCODE_NATIVE_PREFLIGHT.md), [selected redacted fields](../tests/fixtures/zcode_protocol/native_blank_projection.json).
+Public evidence contains no account identifiers/quota/expiry or private conversation contents.
+
+**T1/T2:** explicit Z.ai/BigModel Start Plan settings; exactly one session-bound initialization
+callback with memory/search/automatic input resolution off; missing/wrong-scope/wrong-ID/duplicate
+callbacks refused before prompt. Same-session repair, managed cancellation, budget/live refusals
+and independent review remain simulated checks. Native empty model and mode mismatch projections
+are rejected; the mode-isolation test explicitly injects a synthetic model into captured fields.
+
+**Source plugin alpha.7, not installed:** copied-cache references and strict primary goal/plan
+examples validate; fixed Opus route, approved dependency wait, aggregate ceilings and refusal to
+rewrite a frozen Flash provider are exercised without dispatch. Optional route instructions
+preserve existing host choice, model allowance and independent acceptance. They explicitly refuse
+to invent a failed-child supersession path: current integration requires every child approved.
+
+| Check | Result |
+|---|---|
+| Pre-edit plugin baseline | 26 passed / 18.25s |
+| ZCode contracts/integration, including7 additional cases | 68 passed / 41.75s |
+| Plugin/template and legacy model regressions | 46 passed / 22.11s |
+| ZCode capability revision discovery | 1 passed / 0.51s |
+| Native blank projection refusal variants | 2 passed / 0.48s |
+| Ruff lint/format / strict mypy | 156 Python files / 42 runtime files, passed |
+| Skill Creator validator | Passed using existing cached PyYAML; no installation |
+
+117 post-change cases passed across those runs; no full-suite rerun. An initial wrong test path
+collected0 tests before correction; two validator interpreters lacked YAML before the cached
+package was used. Initial lint formatting failures were fixed before tests. No cases removed or
+skipped, no unknown converted to passed. P7 allowance8/1/975 stays closed; runtime version and
+schema unchanged, installed alpha.6/candidate113b0a7 retained, no model turn or release operation.
+P8.1 remains partial; offline profile2 and source routing templates exist; native execution and
+unapproved-child supersession are still unaccepted.
+
 ## P8 ZCode protocol adapter — 2026-10-07
 
 - **Native, model-free metadata only:** isolated ZCode0.16.9 stdio server returned
