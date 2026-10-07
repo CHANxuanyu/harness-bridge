@@ -56,7 +56,8 @@ For Codex, `existing_thread_deep_link` uses the same `desktop open` command and 
 terminal/delivery guards. On the validated Mac, runtime dev2 checks the installed app identity,
 version, URL registration and original embedded CLI, then asks that app to open
 `codex://threads/EXACT_UUID`. It passes no prompt, new-chat path, fork or turn request.
-Supported desktop version: ChatGPT/Codex 26.930.31730, embedded CLI 0.160.0. Other installations
+Supported desktop versions: ChatGPT/Codex 26.930.31730 and 26.930.51102, both with embedded
+CLI 0.160.0. Other installations
 remain blocked pending validation. See the official [existing-chat link reference](https://learn.chatgpt.com/docs/reference/commands).
 
 Default native lists can omit `exec` sessions even when the desktop shows them. Do not infer

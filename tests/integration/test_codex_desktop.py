@@ -19,14 +19,16 @@ from tests.conftest import Fixture
 from tests.integration.test_desktop import SID, synthetic
 
 
-def codex_fixture(fx: Fixture, b: Bridge, monkeypatch: pytest.MonkeyPatch) -> Path:
+def codex_fixture(
+    fx: Fixture, b: Bridge, monkeypatch: pytest.MonkeyPatch, app_version: str = "26.930.31730"
+) -> Path:
     app = fx.base / "ChatGPT.app"
     (app / "Contents").mkdir(parents=True)
     (app / "Contents/Info.plist").write_bytes(
         plistlib.dumps(
             {
                 "CFBundleIdentifier": "com.openai.codex",
-                "CFBundleShortVersionString": desktop.CODEX_APP_VERSION,
+                "CFBundleShortVersionString": app_version,
                 "CFBundleURLTypes": [{"CFBundleURLSchemes": ["codex"]}],
             }
         )
@@ -43,14 +45,16 @@ def codex_fixture(fx: Fixture, b: Bridge, monkeypatch: pytest.MonkeyPatch) -> Pa
     return binary
 
 
+@pytest.mark.parametrize("app_version", ["26.930.31730", "26.930.51102"])
 @pytest.mark.parametrize("exit_code", [0, 1])
 def test_codex_only_opens_existing_uuid_and_replays_without_new_turn(
     fx: Fixture,
     monkeypatch: pytest.MonkeyPatch,
     exit_code: int,
+    app_version: str,
 ) -> None:
     b, tid = synthetic(fx, "codex")
-    binary = codex_fixture(fx, b, monkeypatch)
+    binary = codex_fixture(fx, b, monkeypatch, app_version)
     calls: list[list[str]] = []
     original = subprocess.run
 

@@ -1,6 +1,6 @@
 {
   "name": "harness-bridge",
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-alpha.6",
   "description": "Coordinate bounded coding goals, Executor jobs, review and local delivery through a separate Harness Bridge runtime.",
   "author": {
     "name": "Xuanyu CHAN"

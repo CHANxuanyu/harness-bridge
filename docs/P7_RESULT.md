@@ -3,14 +3,46 @@
 **Current status: bounded native packet complete; finished-session desktop visibility observed after unlock; full Codex GUI lifecycle and post-restart history persistence passed.**
 The [V01–V15 closeout matrix](P7_CLOSEOUT.md) is the concise current acceptance index; the
 chronological observations below preserve original failures and later authorized corrections.
-Runtime 0.1.0.dev2 / plugin 0.1.0-alpha.5. Apache-2.0, local candidate only; no remote
+Runtime 0.1.0.dev2 / plugin 0.1.0-alpha.6. Apache-2.0, local candidate only; no remote
 publication or push. This is the current result; the earlier synthetic rehearsal remains
 historical evidence in [P7_ACCEPTANCE.md](P7_ACCEPTANCE.md).
+
+## Final local closure after app update — 2026-10-07
+
+Original-repository write access and its separately protected Git directory were restored
+through scoped permission grants. The retained P7 acceptance commit was fast-forwarded into
+the original branch; no replacement checkout, force update or remote publication.
+
+The GUI restart also updated the app from 26.930.31730 to 26.930.51102 (build 13100); embedded
+CLI remains 0.160.0. The restricted command returned LaunchServices -10827 although the
+executable existed. The exact same original-thread URL command succeeded (exit 0) in the
+explicitly approved system execution context. Preserve the restricted failures separately;
+no native task/open receipt was reset, and no model turn or replacement chat was created.
+Only these two observed app versions are accepted; identity, scheme, embedded CLI and original
+binding guards remain. Fresh runtime status has no blockers for either original Executor.
+
+The applied code/test diff exactly matches the prior 8-pass / 2.10s compatibility patch;
+its 6-pass / 2.17s baseline is retained. No repeated paid, GUI-lifecycle or full-suite tests.
+Final lint/format (147 files) and strict mypy (40 runtime files) pass. Prior full 732 and affected
+73/26/6 checks retain their original labels and dates.
+
+Advisor plugin **alpha.6** documents both supported app versions and still requires runtime
+**0.1.0.dev2**. Actual native upgrades in Codex/ZCode preserve enabled state, the connection,
+all 34/15 unrelated plugins, and match all 16 package files per host. Both 36-command checkers
+pass without opening selected state; fresh Codex skills/list loads enabled alpha.6 for repo/chat.
+No plugin model or native Executor was invoked. The original 8-execution allowance stays closed.
+
+Private receipts: takeover chat `work/p7-finalization/app-update-compatible-confirmed.json`,
+`tested-patch-identity.json`, `current-runtime-status.json`, and `work/p7-plugin-alpha6/`.
+No remaining planned P7 acceptance or repository-write blocker. Preserve the earlier failures,
+original real worktrees/histories, and the completed fake lifecycle records. See the current
+[P7 closeout matrix](P7_CLOSEOUT.md) for scope; OS/backend restart and running-session control
+remain outside the tested contract. The new candidate is distinguished by its source revision.
 
 ## P7 final acceptance — 2026-10-07
 
 **P7 V01–V15 are accepted within the explicit evidence boundaries in
-[P7_CLOSEOUT.md](P7_CLOSEOUT.md).** Runtime 0.1.0.dev2 / Advisor plugin alpha.5;
+[P7_CLOSEOUT.md](P7_CLOSEOUT.md).** Runtime 0.1.0.dev2 / Advisor plugin alpha.6;
 Apache-2.0, local candidate only. No remote release/push or new model allowance.
 
 The human quit/reopened the Codex GUI. A detached, bounded observer recorded the main GUI

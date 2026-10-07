@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 CLAUDE_VERSION = "2.1.291 (Claude Code)"
 CODEX_VERSION = "codex-cli 0.160.0"
 CODEX_APP = Path("/Applications/ChatGPT.app")
-CODEX_APP_VERSION = "26.930.31730"
+CODEX_APP_VERSIONS = frozenset({"26.930.31730", "26.930.51102"})
 
 
 def codex_app() -> Path:
@@ -43,7 +43,7 @@ def codex_app() -> Path:
         valid = (
             not CODEX_APP.is_symlink()
             and info.get("CFBundleIdentifier") == "com.openai.codex"
-            and info.get("CFBundleShortVersionString") == CODEX_APP_VERSION
+            and info.get("CFBundleShortVersionString") in CODEX_APP_VERSIONS
             and "codex" in schemes
         )
     except (OSError, ValueError, TypeError, AttributeError, plistlib.InvalidFileException):

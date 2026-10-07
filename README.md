@@ -1,6 +1,6 @@
 # Harness Bridge
 
-> **Experimental local candidate:** runtime 0.1.0.dev2, Advisor plugin alpha.5, Apache-2.0.
+> **Experimental local candidate:** runtime 0.1.0.dev2, Advisor plugin alpha.6, Apache-2.0.
 > Real Claude/Codex parallel work, exact-session repair and integrated local delivery passed.
 > The corrected Codex cancellation retest and Claude native turn-stop also passed.
 > Original Claude/Codex sessions are visible after desktop handoff.
@@ -45,7 +45,7 @@ sessions bound to child tasks. The [project plan](docs/PROJECT_PLAN.md) is the c
 scope, session/workspace contract, implementation sequence and acceptance checklist. It
 distinguishes existing V0.1 code from proposed coordination and delivery capabilities.
 
-A [local Advisor plugin alpha.5](plugins/harness-bridge/README.md) packages one shared Skill
+A [local Advisor plugin alpha.6](plugins/harness-bridge/README.md) packages one shared Skill
 for Codex/ZCode. Both actual host installations share the same runtime/state connection.
 Native clean install, upgrade, uninstall and reinstall preserve task data. Both ZCode and Codex
 full GUI quit/relaunch retained a fake worker without duplication. Fresh Advisor reconnection

@@ -1,6 +1,6 @@
 # Local candidate: installation and retention
 
-Runtime **0.1.0.dev2**, Advisor plugin **0.1.0-alpha.5**, protocol 1.0, store revision 10.
+Runtime **0.1.0.dev2**, Advisor plugin **0.1.0-alpha.6**, protocol 1.0, store revision 10.
 Apache-2.0; see LICENSE and NOTICE. The user authorized a local candidate only on 2026-10-07.
 No package index upload, public marketplace listing, Git tag, release or push is included.
 Read `docs/P7_CLOSEOUT.md` in the candidate (linked from `ACCEPTANCE.md`) for measured capabilities and remaining limitations.
@@ -162,4 +162,4 @@ matched all 16 plugin files and passed the 36-command checker. Other installed p
 shared connection were unchanged. Finished-session visibility and Codex GUI restart/history persistence are accepted. Installation alone
 never grants new Executor allowance.
 
-Dev2 fixes Claude terminal transport and supports the validated Codex app existing-thread URL. Alpha.5 requires dev2 and documents both routes. Original failed receipts are retained; only the narrowly confirmed legacy pipe refusal allows one explicit retry.
+Dev2 fixes Claude terminal transport and supports the validated Codex app existing-thread URL. Alpha.5 introduced both routes; alpha.6 documents the additionally validated app 26.930.51102, alongside 26.930.31730. Both use embedded CLI 0.160.0. Original failed receipts are retained; only the narrowly confirmed legacy pipe refusal allows one explicit retry.

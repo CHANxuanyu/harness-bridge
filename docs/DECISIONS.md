@@ -263,3 +263,5 @@ Each entry: decision — reason. Newest last.
 98. **Desktop native acceptance:** Claude requires an input-free bounded PTY; preserve legacy pipe failures with a one-shot explicit recovery only for the pinned pre-handoff exit-1 case. Codex uses a canonical existing-thread URL with app/binary/version guards. Native acknowledgements, tool-observed Claude UI and human-observed Codex UI remain distinct evidence.
 
 99. **P7 GUI closure:** a human-driven Codex main-GUI quit/relaunch with one bounded fake worker proves same-job survival/replay/confirmed cleanup; fresh Advisor reconnection and human post-restart original-history confirmation close V08/V15. Keep backend/OS lifecycle and running-session interaction outside this evidence.
+
+100. **Qualified desktop app update:** retain restricted LaunchServices failures, verify the identical original-thread URL in an explicitly approved execution context, and add only the observed 26.930.51102 version beside 26.930.31730; CLI/identity/session guards and closed native budgets are unchanged. Alpha.6 carries the matching Advisor documentation.

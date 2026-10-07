@@ -15,7 +15,7 @@ it may inspect evidence, but must not strip markers to launch another Claude ses
 
 1. In the Bridge checkout, install its locked environment with `uv sync --frozen`. Record the
    absolute `.venv/bin/hbridge` path. The plugin cache is not the runtime checkout. Runtime is
-   `0.1.0.dev2`, protocol `1.0`; this plugin is `0.1.0-alpha.5`.
+   `0.1.0.dev2`, protocol `1.0`; this plugin is `0.1.0-alpha.6`.
 2. Choose an absolute state directory outside the target repository/plugin cache. Reuse that
    directory across Advisor hosts. Keep validation state separate; live gates default closed.
 3. For Codex, register the checkout's `.agents/plugins/marketplace.json` using

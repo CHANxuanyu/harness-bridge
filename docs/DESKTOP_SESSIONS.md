@@ -1,6 +1,6 @@
 # Desktop session continuity
 
-Runtime **0.1.0.dev2**, plugin **0.1.0-alpha.5**. This opens a finished Executor's existing
+Runtime **0.1.0.dev2**, plugin **0.1.0-alpha.6**. This opens a finished Executor's existing
 conversation without a prompt or new task. Native history, native open acknowledgement and
 observed desktop visibility are separate evidence. Running-session display and bidirectional
 interactive takeover are not part of this handoff.
@@ -28,7 +28,7 @@ Executor budget or frozen task is changed. Raw native output is not persisted.
 | Executor | Validated route | Actual evidence |
 | --- | --- | --- |
 | Claude Code | macOS, CLI 2.1.291; `--desktop --resume UUID` on a bounded PTY without input | Original UUID/sidebar/history/worktree verified by computer use |
-| Codex | macOS app 26.930.31730, embedded CLI 0.160.0; `codex://threads/UUID` | Original page/sidebar confirmed by the human; subsequent runtime URL and replay acknowledged |
+| Codex | macOS apps 26.930.31730 / 26.930.51102, embedded CLI 0.160.0; `codex://threads/UUID` | Original page/sidebar confirmed by the human; subsequent runtime URL and replay acknowledged |
 | ZCode | Advisor using the shared runtime | Not an implemented Executor |
 
 Claude rejects redirected input/output before opening. Dev2 supplies terminal descriptors,
@@ -72,3 +72,13 @@ Actual alpha.5 caches match all 16 files in both hosts; 36-command checks resolv
 the unchanged connection. Unrelated plugins are unchanged. Private receipts are retained in
 the takeover chat's `work/p7-desktop-unlocked/` and `work/p7-plugin-alpha5/`. Store revision
 stays 10. Tests use isolated synthetic apps/launchers, never native credentials or real models.
+
+## App update compatibility closure
+
+The host updated from 26.930.31730 to 26.930.51102 during the accepted GUI restart. Native CLI
+stayed 0.160.0, and the human confirmed the original list/history. A restricted system-open
+probe returned LaunchServices -10827 despite the executable being present; the exact same URL
+command then returned exit 0 in an explicitly approved system context. This is native-open
+acknowledgement, separate from the human UI evidence. Existing Bridge receipts were untouched.
+Both exact app versions now pass the version gate; arbitrary future versions remain refused.
+Alpha.6 updates both installed Advisor references. No new task, turn or model call was made.

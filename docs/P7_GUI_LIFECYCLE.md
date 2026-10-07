@@ -44,7 +44,9 @@ Do not rerun the launcher against that existing root. No broad/core tests were r
 this final observation changed no runtime code. The previous affected checks and full regression
 remain separately labeled in [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md).
 
-The boundary is the tested macOS Codex main GUI (26.930.31730) lifecycle with a fake worker.
+The boundary is the tested macOS Codex main GUI lifecycle with a fake worker. The running
+app before quit was 26.930.31730; after restart the installed app was 26.930.51102 (build 13100),
+with the same CLI 0.160.0. The original history survived that update.
 It is not evidence of backend-process termination, logout, sleep, OS reboot, arbitrary host
 versions or live-model survival across every failure. Existing stale-Advisor and takeover
 semantics are covered separately by offline integration tests. The native packet remains

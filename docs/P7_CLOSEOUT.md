@@ -3,8 +3,12 @@
 **P7 V01–V15 are accepted within the documented local scope.** The bounded native packet,
 local distribution, original desktop-session visibility, full Codex GUI lifecycle and
 post-restart original-history persistence are complete. No spent model allowance is reopened.
-Current runtime **0.1.0.dev2**, plugin **0.1.0-alpha.5**, protocol 1.0, store revision 10,
+Current runtime **0.1.0.dev2**, plugin **0.1.0-alpha.6**, protocol 1.0, store revision 10,
 Apache-2.0, local candidate only. Codex/ZCode are Advisor hosts; Claude Code/Codex are Executors.
+
+The app update to 26.930.51102 was additionally qualified without a model call. Both recorded
+app versions remain supported with embedded CLI 0.160.0; original-repository permissions and
+final writeback are resolved.
 
 ## Acceptance against the project plan
 
@@ -27,7 +31,7 @@ stops, remain in [P7_RESULT.md](P7_RESULT.md) and [VALIDATION_MATRIX.md](VALIDAT
 | V10 Conflicts/integration repair | Passed, offline | Existing P4 conflict, failed combined check, repair-child provenance and delivery-blocking cases are retained in the full regression. Native P7 integrated two nonconflicting inputs; no claim of a native conflict repair. |
 | V11 Exact local delivery | Passed, offline and native | Delivered `73f485d437bc5bcf1796f6bd141e0b3d1be0033f` to isolated fixture branch `bridge/p7-result`; exact approved tree/replay and unchanged source verified. No merge into the user's checkout or remote push. |
 | V12 One Advisor/two harnesses | Passed, native | Existing Advisor coordinated Claude implementation plus Codex diagnosis/repair, inspected both results and approved integrated delivery. |
-| V13 Installation/discovery/retention | Passed for measured host interfaces | Isolated native plugin install/upgrade/remove/reinstall and runtime retention passed. Actual alpha.5 caches match 16 files each; 36-command connection checks and fresh Codex native Skill discovery pass. After restart, alpha.5 is present in this Advisor's supplied Skill catalog; pre-restart hot refresh is not claimed. |
+| V13 Installation/discovery/retention | Passed for measured host interfaces | Isolated native plugin install/upgrade/remove/reinstall and runtime retention passed. Actual alpha.6 caches match 16 files each; 36-command connection checks and fresh Codex native Skill discovery pass. After restart, alpha.5 is present in this Advisor's supplied Skill catalog; pre-restart hot refresh is not claimed. |
 | V14 Usage/permissions | Passed within accepted harness-specific contract | Codex attempts/wall/cancel budgeting explicitly approved; numeric old tasks stay refused. Stop receipts and explicit continuations retained. No provider/billing changes. Claude max-turns 1 returned native count 2; only the stop path is proven. |
 | V15 Desktop chat lists | Passed for finished original sessions, including Codex restart persistence | Claude PTY handoff followed by actual page/sidebar/history/worktree inspection passed. Codex original page/sidebar visibility was explicitly confirmed by the human; the guarded official existing-thread URL and receipt replay succeeded. The human also confirmed original list/history persistence after restart. Native list API omission remains a separate observation. |
 
@@ -63,7 +67,7 @@ upgrade/removal retention, supported versions and reconstruction limits.
 
 This closes the earlier packaging gap where the source archive and transport ZIP were added
 by a temporary chat script and copied acceptance notes had missing relative document links.
-The README reflects the completed bounded checks and current dev2/alpha.5 versions. The
+The README reflects the completed bounded checks and current dev2/alpha.6 versions. The
 packaging operation itself does not change runtime state or grant native execution allowance.
 
 ## Evidence locator
@@ -79,7 +83,9 @@ Raw local records are intentionally outside the public repository, under the tak
 - `p7-codex-gui-lifecycle/` — Codex GUI absence/relaunch, same-job replay, confirmed cleanup,
   Advisor reconnection and explicit human post-restart history confirmation.
 - `p7-distribution/` — independent runtime retention and candidate consistency receipts.
-- `p7-plugin-alpha5/` — current native cache, connection and fresh Skill discovery checks.
+- `p7-plugin-alpha6/` — current native cache, connection and fresh Skill discovery checks.
+- `p7-finalization/app-update-compatible-confirmed.json` — same original-thread URL opens
+  successfully on app 26.930.51102 with approved system execution; earlier restricted failures retained.
 - `p7-desktop-unlocked/result.json` — native handoff receipts and observed desktop evidence.
 - `p7-codex-list-probe.json` — read-only exec/default-list diagnostic, no thread/turn creation.
 
