@@ -159,6 +159,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("status", parents=[common], help="show task state")
     p.add_argument("task_id")
 
+    p = sub.add_parser(
+        "desktop", parents=[common], help="inspect or open an existing native session"
+    )
+    desktop_sub = p.add_subparsers(dest="desktop_command", required=True)
+    p = desktop_sub.add_parser("status", parents=[common])
+    p.add_argument("task_id")
+    p = desktop_sub.add_parser("open", parents=[common])
+    p.add_argument("task_id")
+    p.add_argument("--idempotency-key", required=True)
+
     p = sub.add_parser("list", parents=[common], help="list recent tasks")
     p.add_argument("--limit", type=int, default=20)
 
@@ -350,6 +360,13 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
             )
         if cmd == "status":
             return bridge.status(args.task_id)
+        if cmd == "desktop":
+            from harness_bridge.desktop import DesktopSessions
+
+            desktop = DesktopSessions(bridge)
+            if args.desktop_command == "open":
+                return desktop.open(args.task_id, args.idempotency_key)
+            return desktop.status(args.task_id)
         if cmd == "list":
             return {
                 "tasks": [

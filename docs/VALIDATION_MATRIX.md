@@ -5,6 +5,24 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+**Latest P7 bounded completion (2026-10-07, real cases on `113b538`):** explicitly authorized
+Codex cancellation retest passed, 11.694s, six sampled descendants exited and independent fixture
+survivor check empty. Claude native `error_max_turns` passed, 4.442s: configured 1, reported 2,
+one assistant Read, no Write, no permission/quota error. Final 8 executions (4 each), 1 repair,
+975 reserved seconds, 145.629 observed native seconds; all gates closed. Original failed
+cancellation is retained. No further model allowance. This completes the bounded native packet,
+not full Codex GUI shutdown or newly requested desktop-list acceptance.
+
+**Desktop continuation:** 26 new synthetic cases plus CLI/coordination regression **55 passed /
+37.69s**. Lint/format 141 files and mypy 40 runtime files pass. First affected run: 26 pass / 2
+fixture failures (CLI envelope and synthetic allowed-executor list); corrected desktop run 23 /
+5.92s before adding three concurrency/Advisor cases. Read-only native task binding checks pass.
+Actual Claude handoff/UI still NOT_RUN because the user deferred unlocking; Codex native
+read/name succeeds but section/pin probes still do not appear in the list API. Temporary
+organization changes undone. No model/auth call in desktop tests; baseline full 732 reused.
+
+**The continuation below is historical and superseded only by the fresh cases above.**
+
 **P7 continuation (2026-10-07, baseline `695503c`):** exact native Codex repair returned the
 same UUID, worktree and recalled mnemonic; independent input/combined checks, exact approval,
 local fixture delivery and replay passed. Source/acceptance scripts remained unchanged.
@@ -554,3 +572,5 @@ Final affected `scripts/check.sh` on both Codex suites: **68 passed / 0 failed /
 20.87s, lint/format clean (121 files), strict mypy clean (37 source files). Existing case count
 remains 642; this records a full regression followed by a targeted final correction, not a claimed
 single full green run on the corrected adapter. No further broad rerun was needed.
+
+Final desktop session selection rejects a later executed attempt with missing identity, rather than silently opening an older session. Affected desktop rerun: **26 passed / 6.98s**; no additional full run.

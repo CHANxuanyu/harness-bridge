@@ -65,6 +65,7 @@ def build(root: Path, output: Path) -> None:
         shutil.copyfile(root / name, output / name)
     shutil.copyfile(root / "docs/LOCAL_RELEASE.md", output / "INSTALL.md")
     shutil.copyfile(root / "docs/P7_RESULT.md", output / "ACCEPTANCE.md")
+    shutil.copyfile(root / "docs/DESKTOP_SESSIONS.md", output / "DESKTOP_SESSIONS.md")
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=root))
     hashes = {

@@ -4,7 +4,7 @@ Runtime **0.1.0.dev1**, Advisor plugin **0.1.0-alpha.3**, protocol 1.0, store re
 Apache-2.0; see LICENSE and NOTICE. The user authorized a local candidate only on 2026-10-07.
 No package index upload, public marketplace listing, Git tag, release or push is included.
 Read the accompanying `ACCEPTANCE.md` for measured capabilities and remaining limitations.
-P7 is not fully accepted: native cancellation revalidation and Claude turn-cap testing remain open.
+P7 bounded native checks are completed. Desktop-list synchronization and full Codex GUI shutdown remain unverified.
 
 ## Product form
 
@@ -74,7 +74,11 @@ may need its host's supported refresh/reopen flow before discovering an updated 
 Executors run through native CLI sessions in their assigned Bridge worktrees. Native transcript
 storage may therefore be indexed under that child directory, not the source repository. Bridge
 `status`/`artifacts` reports the task worktree and observed session ID without launching a model.
-Claude's locally verified CLI supports `--resume <session-id>` to reopen a known conversation;
+The new `desktop status TASK` command exposes the exact session/cwd and supported handoff.
+For terminal Claude tasks in delivered goals, `desktop open TASK --idempotency-key KEY` uses
+the official same-session desktop handoff (validated CLI version 2.1.291); provide the current
+Advisor binding/epoch for linked tasks. Actual UI acceptance is pending. See DESKTOP_SESSIONS.md.
+Claude's locally verified CLI also supports `--resume <session-id>` to reopen a known conversation;
 opening/resuming in a host and sending a new message are separate actions. This candidate does
 not promise automatic appearance in any desktop conversation sidebar, and does not create a
 model turn merely to make such an item appear.

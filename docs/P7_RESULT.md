@@ -1,6 +1,6 @@
 # P7 result and local candidate — 2026-10-07
 
-**Current status: real collaboration delivered; native cancellation acceptance failed and needs revalidation.**
+**Current status: bounded native collaboration/fault packet completed; newly requested desktop-list synchronization is not yet accepted.**
 Runtime 0.1.0.dev1 / plugin 0.1.0-alpha.3. Apache-2.0, local candidate only; no remote
 publication or push. This is the current result; the earlier synthetic rehearsal remains
 historical evidence in [P7_ACCEPTANCE.md](P7_ACCEPTANCE.md).
@@ -65,7 +65,7 @@ completion of every P7 fault case.
 | Codex exact-session repair | Same UUID/cwd, recalled mnemonic, clean assigned diff and external check | Passed |
 | Codex running cancellation | Tool start observed; CLI ended after cancel; old receipt said CANCELLED/confirmed, but secondary OS audit found its separately grouped Python sleeper alive | **Failed** |
 | Claude wall timeout | Tool start observed; timeout at 15.576s for a 15s limit; finish absent, no matching sleeper remained in OS audit | Timeout path observed; no successful task claim |
-| Claude native turn cap | Not launched after cancellation defect discovery | **NOT_RUN** |
+| Claude native turn cap (initial stop) | Not launched before explicit continuation | Historical NOT_RUN; completed below |
 | Combined integration and exact local delivery | Both required inputs, frozen combined check, exact review/commit and replay | Passed |
 
 The detached Codex sleeper had a different process group and was reparented to PID 1. Its
@@ -75,16 +75,26 @@ case into a pass. Preserve the old native/job receipt alongside the contradictor
 Claude timeout was already in flight when the secondary audit discovered the Codex survivor;
 it finished under its existing bound. No further real Executor was started after discovery.
 
-**Spent: 6 actual executions (Claude 3/Codex 3), 1 repair, 825 reserved wall seconds.**
-Observed native Executor durations total 129.493s; this is not billed usage. One additional
-Codex reservation remains a proven non-start, retained in history. All isolated live gates are
-closed. The first failed goal is preserved; the replacement collaboration goal is delivered.
+## Final authorized bounded checks
 
-Prepared remaining proposal: one new Codex cancellation retest (90s) plus the original unused
-Claude turn-cap case (60s), maximum two executions / 150s. This would increase global ceilings
-from 7 / 885 to **8 / 975**, adding exactly one Codex execution / 90s. It requires explicit
-budget expansion and stop-resume; no automatic retry, new implementation or repair is proposed.
-No model allowance is renewed by testing, state inspection, documentation or packaging.
+The user accepted the concrete remaining proposal on 2026-10-07: two executions / 150 seconds,
+adding exactly one Codex execution / 90 seconds beyond the original envelope. The distinct
+new receipt preserves the previously unauthorized proposal and all frozen historical tasks.
+
+- **Codex cancellation retest passed:** 11.694s; tool start observed, finish absent; six observed
+  descendants, five individually signalled, no known survivor and no inspection failure.
+  Independent OS inspection found no matching fixture sleeper. The old failed case stays failed.
+- **Claude native turn-stop passed:** 4.442s; native `error_max_turns`, exit 1, no permission
+  denials, rate-limit status allowed. The configured value was 1; native `num_turns` was **2**.
+  The stream contains one assistant Read tool, no Write and no completion marker. This proves
+  native stopping behavior, not that the numeric report or internal call count is at most 1.
+  The task remains AWAITING_REVIEW with failed Executor outcome, as expected for fault injection.
+
+**Final spent: 8 actual executions (Claude 4 / Codex 4), 1 repair, 975 reserved wall seconds.**
+Observed native duration totals 145.629s, not billed usage. One additional Codex reservation is
+proven non-start. All gates are closed. No further native execution is required or authorized.
+The bounded packet is complete; full Codex GUI shutdown and the newly requested desktop-list
+experience are separate, still unverified product acceptance boundaries.
 
 ## Runner correction after the failed cancellation
 
@@ -99,8 +109,8 @@ Ten new offline cases exercise closed-pipe detached children during cancel/timeo
 TERM, normal root exit with a surviving detached child, failed observation and PID reuse.
 These use ordinary local Python subprocesses and no model/auth/network calls. They are not
 native Codex acceptance. Sampling is not OS containment: an unobserved fork/reparent between
-samples can be missed, and identity check plus signal is not an atomic OS handle. Native
-cancellation retest and these documented lifecycle limits remain release considerations.
+samples can be missed, and identity check plus signal is not an atomic OS handle. The separate
+native cancellation retest passed; these sampling limits remain release considerations.
 
 ## Why Claude Desktop did not show an obvious new conversation
 
@@ -125,8 +135,8 @@ is recorded as a product follow-up.
   credential/account/config values are never persisted by the preflight. It reads no credential
   file directly. Actual model identity, subscription balance and charges remain unknown.
 - Claude **2.1.291**: existing native login reports claude.ai / firstParty / Pro; no provider,
-  cloud or nested marker was present. Prior native flag-acceptance evidence was reused; native
-  turn-limit enforcement still requires the pending fault case; wall timeout was observed above.
+  cloud or nested marker was present. Native turn-stop and wall-timeout behavior were observed
+  above; the configured/reported turn-count discrepancy remains explicitly recorded.
 
 ## Actual host lifecycle
 
@@ -191,6 +201,25 @@ mypy passes on 39 runtime files.
 Additional exact worker provider-change/digest-change checks are in the validation matrix. No ordinary test reads actual auth, makes network requests
 or spawns a real Claude/Codex binary. Native probes and real acceptance are separate evidence.
 
+## Desktop session continuity (new user requirement)
+
+The user explicitly requested desktop chat-list synchronization, then chose CLI/code work while
+the Mac is locked. `desktop status` now reads exact native session/worktree bindings; `desktop
+open` implements the official Claude same-session handoff without a prompt. Terminal task,
+delivered parent, confirmed exits, current Advisor, binding integrity and validated CLI version
+are required. Durable requests make repeated/racing/interrupted calls avoid duplicate handoffs.
+No task, approval, delivery or Executor budget is changed; no vendor transcript/DB is edited.
+Native acknowledgement remains separate from verified desktop visibility. Actual Claude handoff
+and UI-list verification are NOT_RUN. Codex metadata probes could read/name the original Executor
+but section/pin changes did not expose it in list_threads; those organization changes were undone.
+See [DESKTOP_SESSIONS.md](DESKTOP_SESSIONS.md).
+
+Affected desktop/CLI/coordination checks: **55 passed / 37.69s**, including 26 new cases; lint/format
+141 files and mypy 40 runtime files pass. Initial test run had 26 pass / 2 fixture assertion failures
+(CLI adds `ok`; synthetic goal omitted allowed executor), both corrected. Earlier corrected desktop
+run: 23 passed / 5.92s, before adding race/Advisor-probe checks. Full 732-case baseline is reused;
+no new full-suite claim and no real model was used for desktop code/tests.
+
 ## Evidence location
 
 Private raw evidence remains outside the public repository, in the takeover chat's
@@ -199,3 +228,5 @@ Records include authorization, immutable packet hashes, stop receipt, failed fir
 replacement delivered goal, native invocation receipts, descendant failure/cleanup observations
 and independent check artifacts. These logs are
 not inherently safe to publish; only this manually reviewed summary is committed.
+
+Final desktop session selection rejects a later executed attempt with missing identity, rather than silently opening an older session. Affected desktop rerun: **26 passed / 6.98s**; no additional full run.
