@@ -27,11 +27,18 @@ project's code directly when asked to.
   CLI. Conversation view: only the harness's own structured protocol — Claude Code
   `-p --input-format stream-json --output-format stream-json --permission-prompt-tool stdio`
   (the SDK control protocol, permission answers from the user) and `codex app-server`. Never add
-  `--bare`, `--permission-mode`, `--dangerously-skip-permissions`,
-  `--dangerously-bypass-approvals-and-sandbox` or approval/sandbox overrides; never send a message
-  or answer a permission the user did not; never read/store login tokens or answer an auth-token
-  refresh; strip API/provider env vars (reporting names only); refuse real sessions when the App
-  itself runs inside another agent session or a cloud agent environment.
+  `--bare`, `--dangerously-skip-permissions`, `--dangerously-bypass-approvals-and-sandbox`,
+  `bypassPermissions` or Codex full access (`never` + `danger-full-access`). Model, effort and
+  permission mode are passed only when the user explicitly chose them in the App, only with the
+  harness's own requests/flags (Claude: `set_model`, `apply_flag_settings` `effortLevel`,
+  `set_permission_mode`, or `--model/--effort/--permission-mode` for the terminal; Codex:
+  `thread/start`/`thread/resume`/`turn/start` parameters, or `-m/-c/-a/-s`), validated against the
+  catalog the CLI itself reported (never a hard-coded list), and shown as in force only after the
+  harness reports it back; a refused choice stays refused (no silent substitute, no send with
+  another model). Never send a message or answer a permission/question the user did not; never
+  read/store login tokens or answer an auth-token refresh; strip API/provider env vars (reporting
+  names only); refuse real sessions when the App itself runs inside another agent session or a
+  cloud agent environment.
 - The conversation view is built only from native structured messages and native history (Codex
   `thread/turns/list`, the Claude Code session transcript). Never parse terminal output into chat.
   Changing view releases the connection at an idle point and reconnects with the native resume;

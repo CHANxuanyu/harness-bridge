@@ -1,5 +1,39 @@
 # Handoff
 
+## W8 controls, attachments and native forms done offline; real acceptance next — 2026-10-08
+
+Read [WORKBENCH.md](docs/WORKBENCH.md) (W8 sections, the three support categories) and DECISIONS
+139–146 first. Where things are:
+
+- `workbench/controls.py`: catalog normalisation (Claude `initialize`, Codex `model/list` +
+  requirements), mode lists (bypass / full access deliberately absent), choice validation and
+  re-validation on model change, host-report matching.
+- `workbench/structured.py`: Claude `control_wait` (control_response correlation),
+  `apply_settings` (set_model / apply_flag_settings effortLevel / set_permission_mode),
+  `read_settings` (get_settings), `message_start.model` and `system/init` reports, image blocks and
+  uuid-matched echo; Codex `_load_catalog`, `connect_settings` → thread/start|resume params,
+  `turn/start` overrides, `read_settings` (thread/read after turn/started, loaded-thread
+  thread/resume after turn/completed), `model/rerouted`; `probe_catalog` (no session, no turn);
+  Codex question/form answers.
+- `workbench/service.py`: per-session `settings_json` (schema 3, additive), `choose_settings`,
+  `_apply_now` (model first, dependents roll back), `_on_settings` (confirm/fail by authoritative
+  source per harness), `_connect_settings`, `connect_failures` (blocks a send), terminal flags via
+  `harness.claude_setting_flags` / `codex_setting_flags`, attachments (`add_attachment`, image
+  detection by bytes, size limits), `search_files`, catalog cache/probe.
+- `server.py`: `POST /api/sessions/<id>/settings|attachments`, `GET /api/sessions/<id>/files`,
+  `POST /api/catalog/<harness>/refresh`, `POST /api/native/pick-files` (native open panel), larger
+  body limit only for uploads.
+- `static/composer.js` (new): composer, selectors and pickers, attachments, `@` / `/` popups,
+  question and form cards. `app.js` wires it in; `#dev=model|effort|mode|attach` open pickers for
+  snapshots; dev mode disables animations (`.dev-still`).
+- Stubs keep model/effort/mode state, log every control request / RPC (`claude-controls.log`,
+  `codex-rpc.log` in WB_STUB_HOME) and honour acceptEdits/dontAsk. Offline Codex behaviour probe with a
+  local fake Responses endpoint: scratch scripts only (not in the repo); results in DECISIONS 140.
+
+Real acceptance (approved batch, ≤ 6 short turns per harness including any already used): see
+WORKBENCH.md “W8 真实验收” combined with “W6/W7 真实验收”. Record results per item; do not re-count
+turns after fixes.
+
 ## W6/W7 conversation view and desktop continuation done offline; real acceptance next — 2026-10-08
 
 Code: branch `claude/repobridge-product-direction-8e26f9`, draft

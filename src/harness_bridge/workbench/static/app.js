@@ -70,7 +70,7 @@ function h(tag, props, ...children) {
     else if (k === 'dataset') Object.assign(el.dataset, v);
     else el.setAttribute(k, v === true ? '' : v);
   }
-  for (const c of children.flat()) {
+  for (const c of children.flat(Infinity)) {
     if (c === null || c === undefined || c === false) continue;
     el.append(c instanceof Node ? c : document.createTextNode(String(c)));
   }
@@ -308,6 +308,9 @@ function onState(state) {
     if (!first && before !== `${S.prefs.appearance}|${S.prefs.terminal_theme}|${S.prefs.terminal_font_size}`) applyTheme();
   }
   if (first) {
+    // Development snapshots must not depend on animation frames (a covered window or a
+    // sleeping display does not advance them, leaving fade-ins at opacity 0).
+    if (state.dev) document.documentElement.classList.add('dev-still');
     applyTheme();
     updateWindowTitle(true);
     const want = S.prefs.selected_session && findSession(S.prefs.selected_session);
@@ -702,7 +705,8 @@ function itemNode(s, it) {
   if (!it) return null;
   if (it.type === 'user') {
     const meta = it.status === 'sending' ? '发送中…' : it.status === 'failed' ? '没有发送成功' : null;
-    return h('div', { class: `msg user selectable ${it.status === 'failed' ? 'failed' : ''}`, dataset: { id: it.id } }, it.text, meta ? h('div', { class: 'meta' }, meta) : null);
+    const atts = (it.attachments || []).length ? h('div', { class: 'msg-atts' }, it.attachments.map((a) => h('span', { class: 'att-chip small', title: a.name }, icon(a.kind === 'image' ? 'image' : 'file'), h('span', { class: 'att-name' }, a.name)))) : null;
+    return h('div', { class: `msg user selectable ${it.status === 'failed' ? 'failed' : ''}`, dataset: { id: it.id } }, atts, it.text || null, meta ? h('div', { class: 'meta' }, meta) : null);
   }
   if (it.type === 'assistant') {
     const md = renderMarkdown(it.text || '', { onCopy: (code) => copyText(code, '已复制代码') });
@@ -728,6 +732,7 @@ function itemNode(s, it) {
         h('b', {}, '这一轮没有完成'), it.error ? `：${it.error}` : '',
         auth ? h('div', { class: 'hint', style: 'margin-top:4px' }, `看起来是登录问题。请在普通终端里用 ${HARNESS[s.harness].label} 自己的登录命令处理；RepoBridge 不读取也不保存登录信息。`) : null));
     }
+    if (it.model) return h('div', { class: 'turn-model', title: '这一轮回复里，模型 API 报告的模型名' }, it.model);
     return null;
   }
   if (it.type === 'notice') return h('div', { class: `note-line ${it.level || ''}`, role: it.level === 'error' ? 'alert' : null }, it.text);
@@ -787,48 +792,31 @@ function showFileDiff(s, path) {
   loadDiff(s.session_id, rel).then(() => loadChanges(s.session_id));
 }
 
-const PERM_KIND = { command: '运行命令', file: '修改文件', permissions: '额外权限', question: '回答问题', plan: '确认计划' };
+const PERM_KIND = { command: '运行命令', file: '修改文件', permissions: '额外权限', question: '回答问题', plan: '确认计划', form: '填写信息' };
 
 function permissionNode(s, it) {
   const label = HARNESS[s.harness].label;
   if (it.status !== 'pending') {
-    const text = { allowed: '已允许', denied: '已拒绝', cancelled: '已取消（这一轮已结束或请求已撤回）', expired: '已失效（这一轮已结束）' }[it.status] || it.status;
+    const answered = it.kind === 'question' || it.kind === 'form';
+    const text = { allowed: answered ? '已回答' : '已允许', denied: answered ? '没有回答' : '已拒绝', cancelled: '已取消（这一轮已结束或请求已撤回）', expired: '已失效（这一轮已结束）' }[it.status] || it.status;
     const ok = it.status === 'allowed';
     return h('div', { class: `perm-done ${ok ? 'allowed' : it.status === 'denied' ? 'denied' : ''}`, dataset: { id: it.id } },
       icon(ok ? 'check' : 'close'), h('span', {}, `${text}：${it.tool}${it.title && it.title !== it.tool ? ` · ${relText(s, it.title)}` : ''}`));
   }
   const what = PERM_KIND[it.kind] || `使用 ${it.tool}`;
-  const card = h('div', { class: 'perm-card', role: 'group', 'aria-label': `${label} 请求${what}`, dataset: { id: it.id } },
-    h('div', { class: 'perm-head' }, icon('warning'), `${label} 请求${what}`));
-  if (it.title && it.kind !== 'question') card.append(h('div', { class: 'mono selectable', style: 'font:12.5px var(--mono);overflow-wrap:anywhere' }, relText(s, it.title)));
+  const who = it.kind === 'form' ? `${it.tool}（经 ${label}）` : label;
+  const card = h('div', { class: 'perm-card', role: 'group', 'aria-label': `${who} 请求${what}`, dataset: { id: it.id } },
+    h('div', { class: 'perm-head' }, icon('warning'), `${who} 请求${what}`));
+  if (it.kind === 'form') card.append(h('div', { class: 'selectable' }, it.title));
+  else if (it.title && it.kind !== 'question') card.append(h('div', { class: 'mono selectable', style: 'font:12.5px var(--mono);overflow-wrap:anywhere' }, relText(s, it.title)));
   if (it.kind === 'plan' && it.detail) card.append(h('div', { class: 'selectable', style: 'max-height:320px;overflow:auto' }, renderMarkdown(it.detail)));
   else if (it.diff) card.append(diffInline(relText(s, it.diff)));
   else if (it.detail && it.detail !== it.title && it.kind !== 'question') card.append(h('pre', { class: 'selectable' }, relText(s, it.detail)));
   if (it.reason) card.append(h('div', { class: 'why' }, `原因：${it.reason}`));
   if (it.grant_root) card.append(h('div', { class: 'why' }, `“本会话内都允许”会覆盖：${homeify(it.grant_root)}`));
   const answer = (decision, answers) => guarded(`perm:${it.id}`, () => api('POST', `/api/sessions/${s.session_id}/permission`, { request_id: it.request_id, decision, answers }));
-  if (it.kind === 'question') {
-    const chosen = new Map();
-    const submit = h('button', { class: 'btn btn-primary btn-small', type: 'button', disabled: true }, '提交回答');
-    const qs = (it.questions || []).map((q) => {
-      const multi = !!q.multiSelect;
-      const opts = h('div', { class: 'q-opts' }, (q.options || []).map((o) => {
-        const b = h('button', { class: 'btn btn-small', type: 'button', 'aria-pressed': 'false', title: o.description || null }, o.label);
-        b.addEventListener('click', () => {
-          const cur = chosen.get(q.question) || [];
-          let next = multi ? (cur.includes(o.label) ? cur.filter((x) => x !== o.label) : [...cur, o.label]) : [o.label];
-          chosen.set(q.question, next);
-          for (const other of opts.querySelectorAll('button')) other.setAttribute('aria-pressed', String(next.includes(other.textContent)));
-          submit.disabled = (it.questions || []).some((x) => !(chosen.get(x.question) || []).length);
-        });
-        return b;
-      }));
-      return h('div', { class: 'q' }, h('div', { class: 'q-title' }, q.question), opts);
-    });
-    submit.addEventListener('click', () => answer('allow', Object.fromEntries([...chosen].map(([k, v]) => [k, v.join(', ')]))));
-    card.append(...qs, h('div', { class: 'actions' }, h('button', { class: 'btn btn-small', type: 'button', onclick: () => answer('deny') }, '不回答'), submit));
-    return card;
-  }
+  if (it.kind === 'question') { card.append(...questionCard(s, it, answer)); return card; }
+  if (it.kind === 'form') { card.append(...formCard(s, it, answer)); return card; }
   const opts = it.options || [];
   const order = ['deny', 'allow_session', 'allow_always', 'allow'];
   const buttons = opts.slice().sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)).map((o) => h('button', {
@@ -839,43 +827,6 @@ function permissionNode(s, it) {
 }
 
 // ---------------------------------------------------------------- composer
-
-function buildComposer(s, c) {
-  const sid = s.session_id;
-  const label = HARNESS[s.harness].label;
-  const ta = h('textarea', { rows: '1', 'aria-label': `给 ${label} 发消息` });
-  ta.value = S.drafts.get(sid) || '';
-  const send = h('button', { class: 'send-btn', type: 'button' });
-  const hint = h('span', { class: 'hint' });
-  const status = h('div', { class: 'conv-status', 'aria-live': 'polite' });
-  const box = h('div', { class: 'composer' }, ta, h('div', { class: 'composer-bar' }, hint, send));
-  const wrap = h('div', { class: 'composer-wrap' }, status, box);
-  const root = convRoot();
-  root._ta = ta;
-  root._send = send;
-  root._hint = hint;
-  root._status = status;
-  root._box = box;
-  ta.addEventListener('input', () => { S.drafts.set(sid, ta.value); autosize(ta); updateConvChrome(findSession(sid), convFor(sid)); });
-  ta.addEventListener('keydown', (e) => {
-    if (e.isComposing || e.keyCode === 229) return;
-    const now = findSession(sid);
-    const running = !!(now && now.turn);
-    if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) { e.preventDefault(); if (!running) sendFromComposer(sid); }
-    else if (e.key === 'Escape' && running) { e.preventDefault(); e.stopPropagation(); interruptTurn(sid); }
-  });
-  ta.addEventListener('paste', (e) => {
-    const dt = e.clipboardData;
-    if (!dt) return;
-    const hasFiles = [...dt.items].some((x) => x.kind === 'file');
-    if (hasFiles && !dt.getData('text/plain')) { e.preventDefault(); toast('对话视图暂不支持粘贴图片或文件；可以在消息里写出文件路径。', 'error'); }
-  });
-  ta.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
-  ta.addEventListener('drop', (e) => { if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); toast('对话视图暂不支持拖入附件；可以在消息里写出文件路径。', 'error'); } });
-  send.addEventListener('click', () => { const now = findSession(sid); if (now && now.turn) interruptTurn(sid); else sendFromComposer(sid); });
-  setTimeout(() => autosize(ta), 0);
-  return wrap;
-}
 
 function autosize(ta) {
   ta.style.height = 'auto';
@@ -904,31 +855,35 @@ function updateConvChrome(s, c) {
   root._ta.placeholder = blocked || (s.external ? `这个会话已在 ${s.external.app} 中打开` : !s.active
     ? (s.can_resume ? `发送消息，用原生恢复继续这个 ${label} 会话` : `发送第一条消息，启动 ${label}`)
     : `给 ${label} 发消息`);
+  const atts = attachments(s.session_id);
+  const uploading = atts.some((a) => a.uploading);
+  const ready = atts.filter((a) => a.id && !a.error);
   root._send.replaceChildren(icon(running ? 'square' : 'send', running ? 'i-fill' : ''));
   root._send.classList.toggle('stop', running);
-  root._send.title = running ? '停止这一轮（Esc）' : '发送（↩）';
+  root._send.title = running ? '停止这一轮（Esc）' : uploading ? '附件还在上传…' : '发送（↩）';
   root._send.setAttribute('aria-label', running ? '停止这一轮' : '发送');
-  root._send.disabled = running ? false : (!!blocked || !root._ta.value.trim());
-  root._hint.textContent = running ? 'Esc 停止这一轮 · 原生会话会保存' : '↩ 发送 · ⇧↩ 换行';
+  root._send.disabled = running ? false : (!!blocked || uploading || (!root._ta.value.trim() && !ready.length));
+  root._hint.textContent = running ? 'Esc 停止这一轮' : '↩ 发送 · ⇧↩ 换行 · @ 引用文件';
+  renderControls(s);
   const st = root._status;
   st.className = 'conv-status';
   st.replaceChildren();
+  const pick = settingsStatus(s);
   if (S.switching.has(s.session_id)) st.append(stGlyph({ tone: 'idle', glyph: 'spin' }), '正在切换视图：结束原连接，再用原生恢复接续…');
-  else if (pendingPerm) { st.classList.add('warn'); st.append(stGlyph({ tone: 'warn', glyph: 'alert' }), `${label} 在等你确认权限`); }
-  else if (s.active && s.phase === 'starting') st.append(stGlyph({ tone: 'ok', glyph: 'spin' }), `正在连接 ${label}…`);
+  else if (pendingPerm) { st.classList.add('warn'); st.append(stGlyph({ tone: 'warn', glyph: 'alert' }), `${label} 在等你确认权限或回答问题`); }
+  else if (pick && pick.tone === 'bad') {
+    st.classList.add('bad');
+    st.append(icon('warning'), h('span', { class: 'grow selectable' }, pick.text),
+      h('button', { class: 'btn-plain', type: 'button', onclick: () => { S.dismissed.add(pick.dismiss); updateConvChrome(findSession(s.session_id), convFor(s.session_id)); } }, '知道了'));
+  } else if (s.active && s.phase === 'starting') st.append(stGlyph({ tone: 'ok', glyph: 'spin' }), `正在连接 ${label}…`);
   else if (running) {
     const started = s.turn.started_at ? Date.parse(s.turn.started_at) : Date.now();
     const secs = Math.max(0, Math.round((Date.now() - started) / 1000));
     st.append(stGlyph({ tone: 'ok', glyph: 'spin' }), `${label} 正在工作…`, h('span', { class: 'hint' }, ` ${secs} 秒`));
-  } else if (s.active && s.attached) {
-    const info = s.conn_info || c.info || {};
-    const bits = [`已连接 ${label}`];
-    if (info.model) bits.push(String(info.model));
-    const modes = { acceptEdits: '自动接受编辑', plan: '计划模式', auto: '自动审查', dontAsk: '不询问', bypassPermissions: '跳过权限检查', manual: '手动' };
-    if (info.permissionMode && info.permissionMode !== 'default') bits.push(`权限：${modes[info.permissionMode] || info.permissionMode}`);
-    if (info.approval_policy && typeof info.approval_policy === 'string') bits.push(`审批：${info.approval_policy}`);
-    st.append(stGlyph({ tone: 'ok', glyph: 'dot' }), h('span', { class: 'hint' }, bits.join(' · ')));
-  } else if (!s.active && s.run) {
+    if (pick) st.append(h('span', { class: 'hint' }, ` · ${pick.text}`));
+  } else if (pick) st.append(stGlyph({ tone: 'idle', glyph: 'ring' }), h('span', { class: 'hint' }, pick.text));
+  else if (s.active && s.attached) st.append(stGlyph({ tone: 'ok', glyph: 'dot' }), h('span', { class: 'hint' }, `已连接 ${label}`));
+  else if (!s.active && s.run) {
     st.append(h('span', { class: 'hint' }, s.can_resume ? '未连接。发送消息时会用原生恢复接续同一个会话。' : '未连接。'));
   }
 }
@@ -939,7 +894,9 @@ async function sendFromComposer(sid, confirmExternal = false) {
   const s = findSession(sid);
   if (!root || !root._ta || !s) return;
   const text = root._ta.value;
-  if (!text.trim() || composerBlock(s) || S.pending.has(`send:${sid}`)) return;
+  const atts = attachments(sid);
+  const ids = atts.filter((a) => a.id && !a.error).map((a) => a.id);
+  if ((!text.trim() && !ids.length) || composerBlock(s) || atts.some((a) => a.uploading) || S.pending.has(`send:${sid}`)) return;
   const askExternal = (app) => confirmPopover(root._send, {
     title: '在 RepoBridge 中继续？',
     text: `这个会话已在 ${app} 中打开。RepoBridge 看不到那边是否还在执行；请先确认那边的这一轮已经结束，避免两边同时写入。`,
@@ -957,9 +914,12 @@ async function sendFromComposer(sid, confirmExternal = false) {
   root._ta.value = '';
   S.drafts.delete(sid);
   autosize(root._ta);
+  hidePop();
   updateConvChrome(s, convFor(sid));
   try {
-    await api('POST', `/api/sessions/${sid}/send`, { text, client_id: clientId, confirm_external: confirmExternal });
+    await api('POST', `/api/sessions/${sid}/send`, { text, client_id: clientId, confirm_external: confirmExternal, attachments: ids });
+    S.attach.set(sid, atts.filter((a) => !ids.includes(a.id)));
+    renderAttachRow(sid);
   } catch (e) {
     restore();
     if (e.details && e.details.external && !confirmExternal) askExternal(e.details.external.app);
@@ -1758,6 +1718,10 @@ function changesPane(s) {
   return [bar, files, h('div', { class: 'pane-scroll' }, h('div', { class: 'empty' }, '正在读取差异…'))];
 }
 
+function settingsLabel(payload) {
+  return Object.entries(payload || {}).map(([k, v]) => `${FIELD_NAME[k] || k}→${v === null ? '默认' : v}`).join('，');
+}
+
 function kindLabel(kind) {
   return { modified: '已修改', added: '新增', deleted: '已删除', renamed: '重命名', copied: '复制', untracked: '未跟踪的新文件', unmerged: '有冲突', 'type changed': '类型变化' }[kind] || kind;
 }
@@ -1835,6 +1799,7 @@ function buildTimeline(events) {
         run_started: `${p.kind === 'resume' ? '已用原生方式恢复' : '已启动'}${p.transport === 'structured' ? '（对话连接）' : '（终端）'}${p.handoff_prompt ? '，并发送交接说明' : ''}`,
         released: `已结束连接（${p.reason === 'view' ? '切换视图' : '在官方桌面客户端中继续'}）`,
         view_changed: `视图切换为${p.to === 'conversation' ? '对话' : '终端'}`,
+        settings_chosen: `选择了${settingsLabel(p)}`,
         desktop_open: p.via === '/desktop' ? '通过终端里的 /desktop 移到了 Claude Desktop' : `已请求在 ${p.app || '桌面客户端'} 中打开（${{ acknowledged: '已确认', requested: '系统已接受请求', not_acknowledged: '没有确认', failed: '失败' }[p.status] || p.status}）`,
         desktop_returned: '已回到 RepoBridge 继续',
         turn_interrupt_requested: '已请求停止这一轮',
@@ -1882,6 +1847,7 @@ function detailsPane(s) {
           h('button', { class: 'icon-btn small', type: 'button', title: '复制命令', 'aria-label': '复制恢复命令', onclick: () => copyText(resumeCommand(s), '已复制恢复命令') }, icon('copy'))),
         h('div', { class: 'hint', style: 'margin-top:6px' }, '也可以在普通终端里，于项目文件夹中运行这条原生命令。')] : null),
   ];
+  sections.push(settingsSection(s));
   sections.push(desktopSection(s));
   if (from || outs.length) {
     sections.push(h('div', { class: 'sect' }, h('h3', {}, '交接'),
@@ -1915,6 +1881,18 @@ function detailsPane(s) {
         h('div', { class: 'k' }, { model: '模型', permissionMode: '权限模式', apiKeySource: '认证来源', approval_policy: '审批策略', sandbox: '沙箱', thread_source: '线程来源', cli_version: 'CLI 版本', version: 'CLI 版本', session_id: '原生会话', cwd: '目录' }[k] || k),
         h('div', { class: 'v mono' }, typeof v === 'string' ? v : JSON.stringify(v))]) : null))));
   return [h('div', { class: 'pane-scroll' }, sections)];
+}
+
+function settingsSection(s) {
+  const st = settingsOf(s);
+  const rows = [['model', modelNow(s).label], ['effort', effortNow(s).label], ['mode', modeNow(s).label]];
+  const stateText = (name) => fieldStateText(s, name);
+  return h('div', { class: 'sect' }, h('h3', {}, '模型与权限'), h('div', { class: 'kv' },
+    rows.map(([name, value]) => [h('div', { class: 'k' }, FIELD_NAME[name]), h('div', { class: 'v', title: fieldTitle(s, name, value) }, value, h('span', { class: 'hint' }, ` · ${stateText(name)}`))]),
+    st.turn_model ? [h('div', { class: 'k' }, '上一轮'), h('div', { class: 'v mono' }, st.turn_model)] : null),
+  h('div', { class: 'hint', style: 'margin-top:6px' }, s.view_mode === 'terminal'
+    ? '终端视图里，单独选过的设置会作为启动参数传给 CLI；之后在终端里用 /model 等命令改动的，以终端显示为准。'
+    : '在对话输入框下方选择。只有 CLI 回报后才显示为“已确认生效”。'));
 }
 
 function transportLabel(s) {
@@ -1976,14 +1954,14 @@ function place(el, anchor) {
   let y = isEl ? r.bottom + 4 : anchor.y;
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
-  requestAnimationFrame(() => {
-    const w = el.offsetWidth;
-    const hgt = el.offsetHeight;
-    if (isEl && r.left + w > window.innerWidth - 8) x = r.right - w;
-    if (y + hgt > window.innerHeight - 8) y = isEl ? r.top - hgt - 4 : y - hgt;
-    el.style.left = `${Math.max(8, Math.min(x, window.innerWidth - w - 8))}px`;
-    el.style.top = `${Math.max(8, Math.min(y, window.innerHeight - hgt - 8))}px`;
-  });
+  // Measured right away (the element is already in the layer): no frame at the wrong place,
+  // and no dependence on animation frames, which a covered window may not deliver.
+  const w = el.offsetWidth;
+  const hgt = el.offsetHeight;
+  if (isEl && r.left + w > window.innerWidth - 8) x = r.right - w;
+  if (y + hgt > window.innerHeight - 8) y = isEl ? r.top - hgt - 4 : y - hgt;
+  el.style.left = `${Math.max(8, Math.min(x, window.innerWidth - w - 8))}px`;
+  el.style.top = `${Math.max(8, Math.min(y, window.innerHeight - hgt - 8))}px`;
 }
 
 function menu(anchor, items) {
@@ -2350,6 +2328,8 @@ function runDevHash() {
     else if (action === 'menu' && s) sessionMenu(s, $('#toolbar .tb-title .icon-btn'));
     else if (action === 'view' && s) switchView(s, s.view_mode === 'conversation' ? 'terminal' : 'conversation', $('#toolbar .view-seg button[aria-checked="false"]'));
     else if (action === 'desktop' && s) openInDesktop(s, $('#toolbar .tb-title .icon-btn'));
+    else if (['model', 'effort', 'mode'].includes(action) && s) { S.devOpen = action; render(); }
+    else if (action === 'attach' && s && convEl && convEl._attachBtn) attachMenu(s, convEl._attachBtn);
     else if (action === 'filter') { $('#filter').value = arg || ''; S.filter = arg || ''; renderSidebar(); }
     else if (action === 'diff' && s) {
       const pick = (tries) => {

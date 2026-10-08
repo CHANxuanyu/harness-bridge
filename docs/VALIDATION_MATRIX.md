@@ -28,6 +28,20 @@ Codex sessions with handoff.
 | UI | Browser operations: real click Allow, expand tool, open diff from file chip, send / stop this turn, deny command, IME composing Enter not sent, Shift+Enter not sent, Enter sends and clears | UI-offline | pass |
 | Real | Real Claude Code / Codex in the conversation view; real view switch; real desktop open/list/continue/return; real IME, clipboard, VoiceOver | — | **not run** |
 
+## W8 model / effort / permission-mode controls, attachments, native forms — 2026-10-08
+
+| ID | Check | Level | Result |
+|---|---|---|---|
+| W23 | Model catalog from the CLI itself (Claude `initialize`, Codex `model/list`, hidden excluded); choice applied with `set_model` / thread+turn `model`; shown confirmed only after `get_settings` / `system/init` / `thread/read` agree; per-turn model from `message_start`; refusal keeps the old model with the CLI's reason; invalid ids refused from the catalog | T2-W stub + T1 | pass |
+| W23r | Claude Code 2.1.291 protocol definitions in the binary (set_model, apply_flag_settings effortLevel, set_permission_mode → mode, get_settings → applied, initialize → models[].supportedEffortLevels); real Codex 0.162 app-server + local fake model endpoint: thread/start settings reported, turn/start model/effort overrides reach the upstream request and persist, thread/read reports model+effort, loaded-thread thread/resume reports approval+sandbox, sandbox not kept across processes, unknown model only warns, no thread/settings/updated | real binary, no account, no model | pass (behaviour) |
+| W24 | Effort levels per model; dropped with a notice when the new model lacks them; Codex requests the new model's default when the thread's effort is unsupported; models without effort show a disabled control | T2-W stub + T1 | pass |
+| W25 | Permission modes per harness (Claude default/acceptEdits/plan/auto[model]/dontAsk; Codex read-only/workspace-write), org requirements filter Codex modes, bypassPermissions / full access refused; a choice made during a turn waits for the turn to end | T2-W stub + T1 | pass |
+| W26 | Choices persist (schema 2→3, `settings_json`), are re-applied and re-confirmed after view switch, resume and App restart; terminal launches carry them as `--model/--effort/--permission-mode` and `-m/-c/-a/-s` (state "launched"); a choice refused while connecting blocks that send; dependent changes roll back with a refused model | T2-W stub | pass |
+| W27 | Attachments: images by content (PNG/JPEG/GIF/WebP) as Claude image blocks / Codex localImage, size limits, image-less models refused; files via Claude `@"path"` / Codex path list; chips in live and native history; `@` project file search; Claude `/` commands from initialize | T2-W stub + T1 + UI-offline | pass |
+| W28 | Codex requestUserInput (options, other, secret not stored), MCP elicitation form (required/type/enum validation) and URL mode; unrenderable shapes declined visibly; Claude AskUserQuestion free text | T2-W stub + T1 + UI-offline | pass |
+| UI | Native window real pixels: model picker, mode picker, confirmed settings + attachments + per-turn model, refused model, details "模型与权限", Codex selected-for-next-turn, question card, MCP form, Codex mode picker | Native-W | pass |
+| Real | W23–W28 with real accounts (≤ 6 short turns per harness, combined with W13–W20) | — | **not run** at the time of this entry |
+
 ## W5 workbench redesign — 2026-10-08
 
 | Check | Level | Result |

@@ -1,5 +1,46 @@
 # Status
 
+## W8 model / effort / permission-mode controls, attachments and native forms — 2026-10-08
+
+**Controls (W8).** Under the conversation input: permission mode, model and reasoning effort
+selectors. Options come only from the catalog the installed CLI reports (Claude Code `initialize`:
+models with their effort levels and auto-mode support, commands; Codex `model/list` with per-model
+reasoning efforts and image support, filtered by `configRequirements/read`), fetched by a short-lived
+process that starts no session and no turn when nothing is connected. Choices are applied with each
+harness's own mechanism — Claude Code control requests `set_model`, `apply_flag_settings
+{effortLevel}`, `set_permission_mode` (idle, or before the next message); Codex `thread/start` /
+`thread/resume` parameters and `turn/start` overrides (Codex has no separate "set" request, so a
+choice travels with the next message) — and shown as **confirmed only when the harness reports it
+back** (`get_settings`, the echoed mode, `system/init`, the API's own per-turn model; Codex
+`thread/read` and the loaded thread's `thread/resume`). States: selected → applying → confirmed /
+failed. A refusal shows the CLI's reason and keeps the previous value in force; dependent changes roll
+back; a choice refused while connecting blocks that send (draft kept). Terminal launches pass explicit
+choices as the CLIs' own flags (shown as "passed, not confirmable"). Not offered: Claude
+`bypassPermissions`, Codex full access.
+
+**Input (W8).** Images (pasted, dropped or picked with the native open panel) go as Claude image
+blocks / Codex `localImage`; other files as Claude's own `@"path"` mention / a Codex path list; `@`
+searches project files; `/` lists Claude Code's own commands. Codex `requestUserInput` questions and
+MCP forms (form and URL modes) are answered in the conversation instead of being refused; secret
+answers are not stored.
+
+Defects found while using it and fixed: clicks swallowed when the selectors re-rendered; a refused
+model's reason overwritten by the read-back; an effort reset surviving a refused model change; the
+read-back overwriting a confirmed mode with the settings-file default; a send going out with the old
+model after a refusal at connect; a guessed effort shown before Codex reported one; two ticks in the
+Codex model menu; a `.pill` class collision; `[object HTMLDivElement]` in Details (deep-flattening
+children also fixes the technical-details rows); misleading "not in effect" wording; attachment paths
+in history; native snapshots missing popups (animations frozen while the display sleeps).
+
+Checks: workbench tests 79 (21 new); Codex behaviour checked against the real 0.162 app-server with
+a local fake model endpoint (no account, no network); Claude Code control-protocol definitions read
+from the 2.1.291 binary; native-window screenshots `docs/screenshots/w8-*.jpg` (synthetic project,
+stub CLIs). Support categories (implemented-not-yet-real-verified / native-but-not-implemented /
+not-supported-or-not-offered) are listed in docs/WORKBENCH.md.
+
+**Not verified yet:** the same controls, attachments and forms with real accounts (the approved
+batch: ≤ 6 short turns per harness, combined with the W6/W7 checks).
+
 ## W6 conversation view + W7 official desktop continuation — 2026-10-08
 
 **Conversation view (W6).** Every session can now be used in a *terminal* view (the native
