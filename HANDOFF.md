@@ -1,5 +1,14 @@
 # Handoff
 
+## Existing-session backend contract — 2026-10-09
+
+Backend branch `codex/existing-session-backend`, independent worktree
+`/Users/chan/Downloads/repobridge-backend`, exact base `ef75a625577c1848e1079dd6d487a5cdc3afa166`.
+Minimal frontend contract is [docs/EXISTING_SESSIONS_API.md](docs/EXISTING_SESSIONS_API.md).
+app.py/native_mac.py remain frontend-owned; shared status docs are integrator-owned.
+Contract first; implementation and scoped synthetic checks follow immediately. No real state opened,
+no personal history scanned, no new model allowance. Current W6–W8 evidence is retained.
+
 ## Role split from here: Codex owns backend and integration, Opus owns frontend — 2026-10-09
 
 From this handoff point, Codex implements the backend, protocols, storage and tests directly, and
