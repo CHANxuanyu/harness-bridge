@@ -2,8 +2,12 @@
 
 ## W5 redesign done; W4 real acceptance next — 2026-10-08
 
-Code: branch `claude/repobridge-product-direction-8e26f9`, [PR #1](https://github.com/CHANxuanyu/harness-bridge/pull/1) into `claude/new-repo-plan-dn1eac` (not merged), local
-worktree `/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9`.
+Code: branch `claude/repobridge-product-direction-8e26f9`, merged into the default branch
+`claude/new-repo-plan-dn1eac` via [PR #1](https://github.com/CHANxuanyu/harness-bridge/pull/1)
+(merge commit `e348c85`, 2026-10-08); local worktree
+`/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9`. The main
+checkout `/Users/chan/Downloads/harness-bridge` stays on `local/glm-macos-validation` (`f2cd6e6`) and
+does not contain the workbench; do not switch or sync it without the user's instruction.
 Read [WORKBENCH.md](docs/WORKBENCH.md) and DECISIONS 124–131 before changing the UI.
 
 Frontend lives in `src/harness_bridge/workbench/static/` (no build step). Native window glue:
@@ -29,7 +33,8 @@ To continue:
 0. Location: this code is on branch `claude/repobridge-product-direction-8e26f9` in worktree
    `/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9`; the main
    checkout `/Users/chan/Downloads/harness-bridge` (`local/glm-macos-validation`, f2cd6e6) does not contain
-   it until the user chooses to merge. Running there gives "Extra desktop is not defined"/"invalid choice: app".
+   it (PR #1 merged it into the default branch `claude/new-repo-plan-dn1eac` on 2026-10-08, not into that
+   local branch). Running there gives "Extra desktop is not defined"/"invalid choice: app".
 1. W4: in a normal terminal (not an agent session), from that worktree:
    `uv sync --frozen --extra desktop && uv run --frozen --extra desktop hbridge app`,
    then follow WORKBENCH.md "真实验收步骤". Record results as T3-W/T4-W in VALIDATION_MATRIX with

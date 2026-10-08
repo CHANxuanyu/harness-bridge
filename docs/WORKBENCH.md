@@ -7,9 +7,11 @@ _2026-10-08，作者 Xuanyu CHAN。产品范围见 [PROJECT_PLAN.md](PROJECT_PLA
 
 ## 运行
 
-代码在分支 `claude/repobridge-product-direction-8e26f9`（GitHub 同名分支 / PR）。本机开发检出位于 worktree
+代码在分支 `claude/repobridge-product-direction-8e26f9`，已于 2026-10-08 经
+[PR #1](https://github.com/CHANxuanyu/harness-bridge/pull/1) 合并到 GitHub 默认分支
+`claude/new-repo-plan-dn1eac`（合并提交 `e348c85`）。本机开发检出位于 worktree
 `/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9`；
-`/Users/chan/Downloads/harness-bridge` 所在的 `local/glm-macos-validation` 还没有合并这条分支，
+`/Users/chan/Downloads/harness-bridge` 当前所在的 `local/glm-macos-validation`（`f2cd6e6`）不含这些代码，
 在那里运行会得到 “Extra desktop is not defined / invalid choice: app”。
 
 ```bash
