@@ -381,6 +381,8 @@ class ClaudeStreamSession(StructuredSession):
         if decision not in ("allow", "allow_always", "deny"):
             raise StructuredError(f"unknown decision {decision!r}")
         response = claude_permission_response(decision, request, answers)
+        if decision == "deny" and request.get("tool_id"):
+            self.translator.denied.add(str(request["tool_id"]))
         assert self.process is not None
         self.process.write(
             {
@@ -423,6 +425,7 @@ class ClaudeStreamSession(StructuredSession):
                 "input": out["input"],
                 "suggestions": out["suggestions"],
                 "tool": item["tool"],
+                "tool_id": item.get("tool_id"),
             }
             self.cb.on_activity(
                 {
@@ -446,14 +449,15 @@ class ClaudeStreamSession(StructuredSession):
             content = (msg.get("message") or {}).get("content")
             for block in content if isinstance(content, list) else []:
                 if isinstance(block, dict) and block.get("type") == "tool_result":
-                    tool = self.conv.get(str(block.get("tool_use_id")))
+                    tool = self.conv.get(str(block.get("tool_use_id"))) or {}
                     self.cb.on_activity(
                         {
                             "event": "PostToolUseFailure"
                             if block.get("is_error")
                             else "PostToolUse",
-                            "tool_name": (tool or {}).get("name"),
+                            "tool_name": tool.get("name"),
                             "tool_use_id": block.get("tool_use_id"),
+                            "declined": tool.get("status") == "declined",
                         }
                     )
         elif kind == "result":
@@ -645,6 +649,7 @@ class CodexAppServerSession(StructuredSession):
                             else "PostToolUse",
                             "tool_name": shown.get("name"),
                             "tool_use_id": item.get("id"),
+                            "declined": shown.get("status") == "declined",
                         }
                     )
             elif method == "turn/diff/updated":

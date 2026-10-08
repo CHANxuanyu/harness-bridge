@@ -10,6 +10,24 @@ SQLite/loopback HTTP with **stub** harness executables) · UI-offline (browser/w
 harnesses) · T3-W real single native harness session on the user's machine · T4-W real Claude Code +
 Codex sessions with handoff.
 
+## W6 conversation view / W7 official desktop continuation — 2026-10-08
+
+| ID | Check | Level | Result |
+|---|---|---|---|
+| W13 | Claude Code conversation view over stream-json + SDK control protocol: streamed text, tool use/result, permission allow / deny (tool marked declined) / allow-always (forwards the CLI's own suggestion), AskUserQuestion answers, interrupt, login-failure result, API-retry notice; argv has no `--bare` / skip-permission / permission-mode flags | T2-W stub | pass |
+| W14 | Codex conversation view over app-server JSON-RPC: thread/start + name, turn notifications, deltas, command and file-change approvals (accept / acceptForSession / decline), unsupported server requests refused visibly (MCP elicitation → decline), failed turn | T2-W stub | pass |
+| W14r | Real `codex app-server` 0.162.0-alpha.2 interface shape: schema generated locally; initialize, thread/start (`source: vscode`, `originator: repobridge`, paginated history), thread/name/set, thread/resume, thread/turns/list (unmaterialized error), thread/list in an isolated credential-free CODEX_HOME; **no turn started, no model call** | real binary, no model | pass (shape only) |
+| W15 | View switch reconnects the same native session (Claude PTY ⇄ stream-json; Codex PTY → app-server), sends nothing, exit confirmed before reconnect, at most one active writer, refused while busy, explicit confirmation when idleness is unknown | T2-W stub | pass |
+| W16 | After App restart: view, native ID, history (Codex via app-server `thread/turns/list`; Claude via session transcript), external hold persist; resume continues the same thread | T2-W stub | pass |
+| W17 | Open in Claude Desktop: running connection released first; `claude --desktop --resume <id>` on a PTY with the official acknowledgement; Codex: `open -a <app> codex://threads/<id>` | T2-W stub launcher + fake app bundles | pass (mechanism only) |
+| W17r/W18r/W19r | Real Claude Desktop / Codex app: opens the **right** history; session listed in the app's sidebar/list; continue there; back in RepoBridge the refreshed history and resume continue the same native ID | — | **not run** (needs authorization; Executor-era evidence in DESKTOP_SESSIONS.md does not count) |
+| W20 | External hold: send/resume refused until the user confirms the desktop side is done; `/desktop` typed in the Claude TUI detected from its own acknowledgement | T2-W stub | pass |
+| W21 | Failed native resume explains itself with the CLI's own last line; unsent message marked not sent | T2-W stub | pass |
+| W22 | UI renders model output only as DOM text (no innerHTML/eval/new Function); links http(s)/mailto only; open-link route rejects other schemes | T1 static + T2-W | pass |
+| UI | Native window real pixels (stub CLIs, fake app bundles): dark conversation + Edit permission card, light conversation + diff, Codex approval + activity, switch-view confirmation, terminal after switch, desktop confirm + hold, new-session view choice, 900×640 | Native-W | pass |
+| UI | Browser operations: real click Allow, expand tool, open diff from file chip, send / stop this turn, deny command, IME composing Enter not sent, Shift+Enter not sent, Enter sends and clears | UI-offline | pass |
+| Real | Real Claude Code / Codex in the conversation view; real view switch; real desktop open/list/continue/return; real IME, clipboard, VoiceOver | — | **not run** |
+
 ## W5 workbench redesign — 2026-10-08
 
 | Check | Level | Result |

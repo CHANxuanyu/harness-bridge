@@ -12,6 +12,7 @@ const KEY_LABELS = [
   ['新建会话', '⌘N'], ['显示/隐藏变更', '⌘⇧D'], ['显示/隐藏活动', '⌘⇧A'], ['显示/隐藏详情', '⌘⇧I'],
   ['关闭辅助面板', '⌘\\'], ['显示/隐藏侧边栏', '⌃⌘S'], ['下一个 / 上一个会话', '⌃Tab / ⌃⇧Tab'],
   ['设置', '⌘,'], ['键盘快捷键', '⌘/'], ['终端内换行', '⇧↩'], ['强制选择终端文本', '⌥ + 拖动'],
+  ['对话：发送 / 换行', '↩ / ⇧↩'], ['对话：停止这一轮', 'Esc'],
 ];
 const LIGHT_TERM = {
   background: '#fbfaf8', foreground: '#1f1e1c', cursor: '#1f1e1c', cursorAccent: '#fbfaf8',
@@ -49,6 +50,10 @@ const S = {
   connected: false,
   lastTitle: '',
   pendingFocus: null,
+  convs: new Map(),       // session_id -> conversation view state
+  drafts: new Map(),      // session_id -> unsent composer text
+  openItems: new Set(),   // expanded tool / reasoning items
+  switching: new Set(),   // sessions changing view
 };
 
 // ---------------------------------------------------------------- helpers
@@ -102,6 +107,12 @@ function glyph(kind) {
   else if (kind === 'alert') {
     add('circle', { cx: 6, cy: 6, r: 5.25, fill: 'currentColor' });
     add('path', { d: 'M6 3.3v3.3M6 8.6v.1', fill: 'none', stroke: 'var(--bg)', 'stroke-width': '1.6', 'stroke-linecap': 'round' });
+  } else if (kind === 'check') {
+    add('circle', { cx: 6, cy: 6, r: 5.25, fill: 'currentColor' });
+    add('path', { d: 'M3.6 6.2 5.3 7.8 8.5 4.4', fill: 'none', stroke: 'var(--bg)', 'stroke-width': '1.4', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+  } else if (kind === 'half') {
+    add('circle', { cx: 6, cy: 6, r: 4, ...stroke });
+    add('path', { d: 'M6 2a4 4 0 0 1 0 8z', fill: 'currentColor' });
   } else if (kind === 'x') {
     add('circle', { cx: 6, cy: 6, r: 5.25, fill: 'currentColor' });
     add('path', { d: 'M4.2 4.2l3.6 3.6M7.8 4.2 4.2 7.8', fill: 'none', stroke: 'var(--bg)', 'stroke-width': '1.4', 'stroke-linecap': 'round' });
@@ -139,6 +150,17 @@ function homeify(path) {
   const home = S.state && S.state.home;
   if (home && (path === home || path.startsWith(home + '/'))) return '~' + path.slice(home.length);
   return path;
+}
+
+// Paths inside the session's folder read better relative to it; others are shown from ~.
+function relText(s, text) {
+  if (!text || !s) return text || '';
+  let out = String(text);
+  const roots = [s.workdir];
+  for (const root of roots) if (root) out = out.split(`${root}/`).join('');
+  const home = S.state && S.state.home;
+  if (home) out = out.split(`${home}/`).join('~/');
+  return out;
 }
 
 function shortPath(path, max = 48) {
@@ -183,12 +205,19 @@ function statusOf(s) {
   if (s.active && !s.attached) return { key: 'orphan', label: '后台遗留进程', tone: 'warn', glyph: 'alert' };
   if (s.active && s.stopping) return { key: 'stopping', label: '正在停止…', tone: 'idle', glyph: 'spin' };
   if (s.attention) return { key: 'attention', label: '需要你确认', tone: 'warn', glyph: 'alert' };
+  if (S.switching.has(s.session_id)) return { key: 'switching', label: '正在切换视图…', tone: 'idle', glyph: 'spin' };
+  if (s.active && s.transport === 'structured') {
+    if (s.phase === 'starting') return { key: 'starting', label: `正在连接 ${label}…`, tone: 'ok', glyph: 'spin' };
+    if (s.turn) return { key: 'working', label: '工作中', tone: 'ok', glyph: 'spin' };
+    return { key: 'waiting', label: '已连接，等待输入', tone: 'ok', glyph: 'dot' };
+  }
   if (s.active) {
     if (s.phase === 'starting') return { key: 'starting', label: `正在启动 ${label}…`, tone: 'ok', glyph: 'spin' };
     if (s.phase === 'working') return { key: 'working', label: '工作中', tone: 'ok', glyph: 'spin' };
     if (s.phase === 'waiting') return { key: 'waiting', label: '等待输入', tone: 'ok', glyph: 'dot' };
     return { key: 'running', label: '运行中', tone: 'ok', glyph: 'dot' };
   }
+  if (s.external) return { key: 'external', label: `已在 ${s.external.app} 中打开`, tone: 'idle', glyph: 'half' };
   return {
     new: { key: 'new', label: '未启动', tone: 'idle', glyph: 'dashed' },
     exited: { key: 'exited', label: '已退出', tone: 'idle', glyph: 'ring' },
@@ -242,7 +271,7 @@ darkQuery.addEventListener('change', applyTheme);
 // Native window integration goes through the authenticated loopback API (no page eval/JS bridge).
 function hasNative(name) { return !!(S.state && S.state.native && S.state.native.includes(name)); }
 function nativeCall(name, body) {
-  const route = { title: 'title', appearance: 'appearance', pick_folder: 'pick-folder' }[name];
+  const route = { title: 'title', appearance: 'appearance', pick_folder: 'pick-folder', open_url: 'open-url' }[name];
   if (!hasNative(name)) return Promise.resolve(null);
   return api('POST', `/api/native/${route}`, body || {}).catch(() => null);
 }
@@ -267,6 +296,7 @@ function connect() {
   es.addEventListener('output', (e) => onOutput(JSON.parse(e.data)));
   es.addEventListener('activity', (e) => onActivity(JSON.parse(e.data)));
   es.addEventListener('ended', (e) => onEnded(JSON.parse(e.data)));
+  es.addEventListener('conv', (e) => onConv(JSON.parse(e.data)));
 }
 
 function onState(state) {
@@ -397,6 +427,8 @@ function onOutput(msg) {
 function onEnded(msg) {
   scheduleChanges(msg.session_id, 300);
   S.details.delete(msg.session_id);
+  const c = S.convs.get(msg.session_id);
+  if (c) { c.live = false; c.turn = null; c.stale = true; }
 }
 
 async function loadHistory(sessionId) {
@@ -446,7 +478,585 @@ function tryPendingFocus() {
   if (Date.now() > want.until || !S.sel || S.sel.id !== want.id) { S.pendingFocus = null; return; }
   const t = S.terms.get(want.id);
   const s = findSession(want.id);
+  if (s && s.view_mode === 'conversation') { if (focusComposer()) S.pendingFocus = null; return; }
   if (t && s && s.attached && !layerOpen()) { t.term.focus(); S.pendingFocus = null; }
+}
+
+// ---------------------------------------------------------------- conversation view
+// Built only from the harness's structured messages (stream-json / app-server) and its native
+// history. Items arrive as upserts/deltas over SSE; the DOM is patched per item.
+
+function convFor(sid) {
+  let c = S.convs.get(sid);
+  if (!c) {
+    c = { items: new Map(), order: [], turn: null, live: false, runId: null, history: null, info: {}, loaded: false, loading: false, limit: 200, error: null };
+    S.convs.set(sid, c);
+  }
+  return c;
+}
+
+async function loadConversation(sid, { refresh = false } = {}) {
+  const c = convFor(sid);
+  if (c.loading) { c.reloadAfter = true; return; }
+  c.loading = true;
+  c.error = null;
+  if (S.sel && S.sel.id === sid) updateConvChrome(findSession(sid), c);
+  try {
+    const data = await api('GET', `/api/sessions/${sid}/conversation${refresh ? '?refresh=1' : ''}`);
+    c.items = new Map();
+    c.order = [];
+    for (const it of data.items) { if (!c.items.has(it.id)) c.order.push(it.id); c.items.set(it.id, it); }
+    c.turn = data.turn;
+    c.live = data.live;
+    c.runId = data.run_id;
+    c.history = data.history;
+    c.info = data.info || {};
+    c.loaded = true;
+    c.stale = false;
+  } catch (e) {
+    c.error = e.message;
+    c.loaded = true;
+  } finally { c.loading = false; }
+  if (c.reloadAfter) { c.reloadAfter = false; loadConversation(sid); return; }
+  if (S.sel && S.sel.id === sid) renderConversation(findSession(sid), { full: true });
+}
+
+function onConv(msg) {
+  const c = S.convs.get(msg.session_id);
+  if (!c || !c.loaded) return;
+  if (msg.op === 'reset' || (c.runId && c.runId !== msg.run_id)) { c.runId = msg.run_id; loadConversation(msg.session_id); return; }
+  c.runId = msg.run_id;
+  c.live = true;
+  if (msg.op === 'turn') {
+    c.turn = msg.turn;
+    if (S.sel && S.sel.id === msg.session_id) updateConvChrome(findSession(msg.session_id), c);
+  } else if (msg.op === 'upsert') {
+    const prev = c.items.get(msg.item.id);
+    c.items.set(msg.item.id, prev ? { ...prev, ...msg.item } : msg.item);
+    if (!prev) c.order.push(msg.item.id);
+    queuePatch(msg.session_id, msg.item.id);
+  } else if (msg.op === 'delta') {
+    const it = c.items.get(msg.id);
+    if (!it) return;
+    it[msg.field] = (it[msg.field] || '') + msg.delta;
+    queuePatch(msg.session_id, msg.id);
+  }
+}
+
+const patchQueue = new Set();
+let patchTimer = null;
+function queuePatch(sid, id) {
+  if (!S.sel || S.sel.id !== sid) return;
+  patchQueue.add(id);
+  if (!patchTimer) patchTimer = setTimeout(flushPatches, 40);
+}
+function flushPatches() {
+  patchTimer = null;
+  const s = selectedSession();
+  const root = convEl;
+  if (!s || !root || root.dataset.sid !== s.session_id || !root._inner) { patchQueue.clear(); return; }
+  const c = convFor(s.session_id);
+  const keep = stickState(root);
+  for (const id of patchQueue) {
+    const it = c.items.get(id);
+    if (!it) continue;
+    const node = itemNode(s, it);
+    const old = root._nodes.get(id);
+    if (old && old.parentNode) {
+      if (node) old.replaceWith(node); else old.remove();
+    } else if (node) root._inner.append(node);
+    if (node) root._nodes.set(id, node); else root._nodes.delete(id);
+  }
+  patchQueue.clear();
+  updateEmpty(root, s, c);
+  restickOrJump(root, keep);
+  updateConvChrome(s, c);
+}
+
+function stickState(root) {
+  const sc = root._scroll;
+  return { atBottom: sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 60 };
+}
+function restickOrJump(root, keep) {
+  const sc = root._scroll;
+  if (keep.atBottom) { sc.scrollTop = sc.scrollHeight; if (root._jump) root._jump.hidden = true; }
+  else if (root._jump) root._jump.hidden = false;
+}
+
+let convEl = null;
+function convRoot() {
+  if (!convEl) {
+    convEl = h('div', { class: 'conv', hidden: true });
+    $('#stage').insertBefore(convEl, $('#overlay'));
+    convEl.addEventListener('click', (e) => {
+      const a = e.target.closest('a[data-href]');
+      if (a) { e.preventDefault(); openLink(a.dataset.href); }
+    });
+    convEl.addEventListener('keydown', (e) => {
+      const a = e.target.closest && e.target.closest('a[data-href]');
+      if (a && e.key === 'Enter') { e.preventDefault(); openLink(a.dataset.href); }
+    });
+  }
+  return convEl;
+}
+
+function openLink(href) {
+  if (hasNative('open_url')) nativeCall('open_url', { url: href });
+  else window.open(href, '_blank', 'noopener,noreferrer');
+}
+
+function renderConversation(s, { full = false } = {}) {
+  const root = convRoot();
+  if (!s) { root.hidden = true; return; }
+  root.hidden = false;
+  const c = convFor(s.session_id);
+  if ((!c.loaded || c.stale) && !c.loading) loadConversation(s.session_id);
+  if (root.dataset.sid !== s.session_id || full || !root._inner) buildConversation(root, s, c);
+  else updateConvChrome(s, c);
+}
+
+function buildConversation(root, s, c) {
+  const same = root.dataset.sid === s.session_id;
+  const keepTop = same && root._scroll ? stickState(root) : { atBottom: true };
+  const prevScroll = same && root._scroll ? root._scroll.scrollTop : null;
+  // Rebuilding the list must not touch the input box: replacing it would drop focus, the caret
+  // and an in-progress input-method composition.
+  const keepComposer = same && root._composer && root._composer.parentNode === root;
+  root.dataset.sid = s.session_id;
+  if (!keepComposer) root.replaceChildren();
+  const inner = h('div', { class: 'conv-inner' });
+  const scroll = h('div', { class: 'conv-scroll' }, inner);
+  const jump = h('button', { class: 'btn btn-small jump', type: 'button', hidden: true, onclick: () => { scroll.scrollTop = scroll.scrollHeight; jump.hidden = true; } }, '↓ 新消息');
+  scroll.addEventListener('scroll', () => { if (scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 60) jump.hidden = true; });
+  const scrollWrap = h('div', { style: 'position:relative;flex:1;min-height:0;display:flex;flex-direction:column' }, scroll, jump);
+  root._inner = inner;
+  root._scroll = scroll;
+  root._jump = jump;
+  root._nodes = new Map();
+  const head = sourceLine(s, c);
+  if (head) inner.append(head);
+  const ids = c.order;
+  const from = Math.max(0, ids.length - c.limit);
+  if (from > 0) {
+    inner.append(h('button', { class: 'btn btn-small conv-more', type: 'button', onclick: () => { c.limit += 200; buildConversation(root, s, c); } }, `显示更早的 ${from} 条`));
+  }
+  for (const id of ids.slice(from)) {
+    const node = itemNode(s, c.items.get(id));
+    if (node) { inner.append(node); root._nodes.set(id, node); }
+  }
+  root._empty = h('div', { class: 'conv-empty', hidden: true });
+  inner.append(root._empty);
+  updateEmpty(root, s, c);
+  if (keepComposer) {
+    if (root._scrollWrap && root._scrollWrap.parentNode === root) root._scrollWrap.replaceWith(scrollWrap);
+    else root.insertBefore(scrollWrap, root._composer);
+  } else {
+    root._composer = buildComposer(s, c);
+    root.append(scrollWrap, root._composer);
+  }
+  root._scrollWrap = scrollWrap;
+  if (prevScroll !== null && !keepTop.atBottom) scroll.scrollTop = prevScroll;
+  else scroll.scrollTop = scroll.scrollHeight;
+  updateConvChrome(s, c);
+}
+
+function sourceLine(s, c) {
+  if (c.loading && !c.order.length) return h('div', { class: 'conv-source' }, stGlyph({ tone: 'idle', glyph: 'spin' }), '正在读取原生历史…');
+  if (c.error) return h('div', { class: 'conv-source warn' }, `无法读取会话内容：${c.error}`);
+  const hs = c.history || {};
+  const label = HARNESS[s.harness].label;
+  const parts = [];
+  if (hs.source === 'claude-transcript') parts.push(`历史来自 ${label} 的会话记录`);
+  else if (hs.source === 'codex') parts.push('历史来自 Codex（app-server）');
+  else if (hs.source === 'cache') parts.push('原生历史不可读，显示的是 RepoBridge 上次的记录');
+  if (!parts.length && !hs.error) return null;
+  const line = h('div', { class: `conv-source ${hs.error ? 'warn' : ''}` }, parts.join(' · ') || null, hs.error && hs.source !== 'cache' ? h('span', {}, hs.error) : null);
+  if (!c.live) line.append(h('button', { class: 'btn-plain', type: 'button', title: '重新读取原生历史（例如在官方桌面客户端里继续之后）', onclick: () => loadConversation(s.session_id, { refresh: true }) }, icon('refresh'), '刷新'));
+  return line;
+}
+
+function updateEmpty(root, s, c) {
+  if (!root._empty) return;
+  const visible = c.order.some((id) => { const it = c.items.get(id); return it && it.type !== 'turn_end'; });
+  root._empty.hidden = visible || c.loading || !!c.error;
+  if (root._empty.hidden) return;
+  const label = HARNESS[s.harness].label;
+  root._empty.replaceChildren(
+    h('h2', {}, s.active ? `${label} 已连接` : `与 ${label} 对话`),
+    h('div', {}, `消息、工具调用和权限请求会以对话形式显示。这里使用 ${label} 自己的登录和设置；RepoBridge 不会替你发送消息或批准操作。`));
+}
+
+// ---------------------------------------------------------------- items
+
+const TOOL_STATE = {
+  running: { tone: 'ok', glyph: 'spin', label: '进行中' },
+  waiting: { tone: 'warn', glyph: 'alert', label: '等待你确认' },
+  ok: { tone: 'ok', glyph: 'check', label: '完成' },
+  failed: { tone: 'bad', glyph: 'x', label: '失败' },
+  declined: { tone: 'bad', glyph: 'x', label: '已拒绝' },
+  interrupted: { tone: 'idle', glyph: 'ring', label: '已中断' },
+  unknown: { tone: 'idle', glyph: 'ring', label: '结果未知' },
+};
+
+function itemNode(s, it) {
+  if (!it) return null;
+  if (it.type === 'user') {
+    const meta = it.status === 'sending' ? '发送中…' : it.status === 'failed' ? '没有发送成功' : null;
+    return h('div', { class: `msg user selectable ${it.status === 'failed' ? 'failed' : ''}`, dataset: { id: it.id } }, it.text, meta ? h('div', { class: 'meta' }, meta) : null);
+  }
+  if (it.type === 'assistant') {
+    const md = renderMarkdown(it.text || '', { onCopy: (code) => copyText(code, '已复制代码') });
+    if (it.streaming) (md.lastElementChild && md.lastElementChild.tagName === 'P' ? md.lastElementChild : md).classList.add('caret');
+    return h('div', { class: 'msg assistant selectable', dataset: { id: it.id } }, md,
+      it.text_truncated ? h('div', { class: 'note-line warn' }, '回复过长，只显示了开头部分') : null,
+      it.streaming ? null : h('div', { class: 'msg-actions' }, h('button', { class: 'icon-btn small', type: 'button', title: '复制这条回复', 'aria-label': '复制这条回复', onclick: () => copyText(it.text || '', '已复制') }, icon('copy'))));
+  }
+  if (it.type === 'reasoning') {
+    const d = h('details', { class: 'reasoning', dataset: { id: it.id } });
+    if (S.openItems.has(it.id)) d.open = true;
+    d.addEventListener('toggle', () => { if (d.open) S.openItems.add(it.id); else S.openItems.delete(it.id); });
+    d.append(h('summary', {}, icon('chevron', 'chev'), h('span', {}, it.label || (it.streaming ? '正在思考…' : '思考过程'))), renderMarkdown(it.text || ''));
+    return d;
+  }
+  if (it.type === 'tool') return toolNode(s, it);
+  if (it.type === 'permission') return permissionNode(s, it);
+  if (it.type === 'turn_end') {
+    if (it.status === 'interrupted') return h('div', { class: 'turn-note' }, '已停止这一轮');
+    if (it.status === 'failed') {
+      const auth = /login|auth|api key|401|403|credential|登录/i.test(it.error || '');
+      return h('div', { class: 'turn-fail', role: 'alert' }, icon('warning'), h('div', { class: 'txt selectable' },
+        h('b', {}, '这一轮没有完成'), it.error ? `：${it.error}` : '',
+        auth ? h('div', { class: 'hint', style: 'margin-top:4px' }, `看起来是登录问题。请在普通终端里用 ${HARNESS[s.harness].label} 自己的登录命令处理；RepoBridge 不读取也不保存登录信息。`) : null));
+    }
+    return null;
+  }
+  if (it.type === 'notice') return h('div', { class: `note-line ${it.level || ''}`, role: it.level === 'error' ? 'alert' : null }, it.text);
+  return null;
+}
+
+function toolNode(s, it) {
+  const open = S.openItems.has(it.id);
+  const st = TOOL_STATE[it.status] || TOOL_STATE.unknown;
+  const meta = [];
+  if (it.status === 'waiting') meta.push('等待你确认');
+  else if (it.status === 'declined') meta.push('已拒绝');
+  else if (it.status === 'interrupted') meta.push('已中断');
+  if (it.exit_code !== undefined && it.exit_code !== null && it.exit_code !== 0) meta.push(`退出码 ${it.exit_code}`);
+  if (it.subagent_steps) meta.push(`子任务 ${it.subagent_steps} 步`);
+  const box = h('div', { class: `tool ${open ? 'open' : ''}`, dataset: { id: it.id } });
+  const toggle = () => { if (S.openItems.has(it.id)) S.openItems.delete(it.id); else S.openItems.add(it.id); queuePatch(s.session_id, it.id); };
+  box.append(h('div', { class: 'tool-row', role: 'button', tabindex: '0', 'aria-expanded': String(open), title: `${it.name}${it.title ? ` · ${it.title}` : ''} · ${st.label}`,
+    onclick: toggle, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } } },
+  icon('chevron', 'chev'), stGlyph(st), h('span', { class: 'name' }, it.name || '工具'), h('span', { class: 'title' }, relText(s, it.title)),
+  meta.length ? h('span', { class: 'meta' }, meta.join(' · ')) : null));
+  if (!open) return box;
+  const body = h('div', { class: 'tool-body selectable' });
+  const files = (it.files || []).filter((f) => f && f.path);
+  if (files.length) {
+    body.append(h('div', { class: 'tool-files' }, files.map((f) => h('button', { class: 'file-chip', type: 'button', title: `在“变更”中查看 ${f.path}`, onclick: () => showFileDiff(s, f.path) }, icon('changes'), relText(s, f.path)))));
+    for (const f of files) if (f.diff) body.append(diffInline(f.diff));
+  }
+  if (it.input) body.append(h('div', { class: 'label' }, '输入'), h('pre', {}, relText(s, it.input)));
+  if (it.output) {
+    const pre = h('pre', {}, relText(s, it.output));
+    body.append(h('div', { class: 'label' }, '输出'), pre);
+    if (it.output_truncated) body.append(h('div', { class: 'hint' }, `输出过长，这里只显示开头部分${it.output_omitted ? `（省略约 ${Math.round(it.output_omitted / 1024)} KB）` : ''}；完整内容在原生会话中。`));
+  } else if (it.status === 'running') body.append(h('div', { class: 'hint' }, '正在运行…'));
+  if (it.error) body.append(h('div', { class: 'label' }, '错误'), h('pre', { class: 'err' }, it.error));
+  box.append(body);
+  return box;
+}
+
+function diffInline(text) {
+  const box = h('div', { class: 'diff-inline' });
+  for (const line of text.split('\n')) {
+    let cls = '';
+    if (/^(diff --git |index |\+\+\+ |--- )/.test(line)) continue;
+    if (line.startsWith('+')) cls = 'add'; else if (line.startsWith('-')) cls = 'del'; else if (line.startsWith('@@')) cls = 'hunk';
+    box.append(h('span', { class: `ln ${cls}` }, line || ' '));
+  }
+  return box;
+}
+
+function showFileDiff(s, path) {
+  const rel = path.startsWith(`${s.workdir}/`) ? path.slice(s.workdir.length + 1) : path;
+  S.diff = { sid: s.session_id, path: rel, text: '', truncated: false };
+  setPref('inspector_open', true);
+  setPref('inspector_tab', 'changes');
+  render();
+  loadDiff(s.session_id, rel).then(() => loadChanges(s.session_id));
+}
+
+const PERM_KIND = { command: '运行命令', file: '修改文件', permissions: '额外权限', question: '回答问题', plan: '确认计划' };
+
+function permissionNode(s, it) {
+  const label = HARNESS[s.harness].label;
+  if (it.status !== 'pending') {
+    const text = { allowed: '已允许', denied: '已拒绝', cancelled: '已取消（这一轮已结束或请求已撤回）', expired: '已失效（这一轮已结束）' }[it.status] || it.status;
+    const ok = it.status === 'allowed';
+    return h('div', { class: `perm-done ${ok ? 'allowed' : it.status === 'denied' ? 'denied' : ''}`, dataset: { id: it.id } },
+      icon(ok ? 'check' : 'close'), h('span', {}, `${text}：${it.tool}${it.title && it.title !== it.tool ? ` · ${relText(s, it.title)}` : ''}`));
+  }
+  const what = PERM_KIND[it.kind] || `使用 ${it.tool}`;
+  const card = h('div', { class: 'perm-card', role: 'group', 'aria-label': `${label} 请求${what}`, dataset: { id: it.id } },
+    h('div', { class: 'perm-head' }, icon('warning'), `${label} 请求${what}`));
+  if (it.title && it.kind !== 'question') card.append(h('div', { class: 'mono selectable', style: 'font:12.5px var(--mono);overflow-wrap:anywhere' }, relText(s, it.title)));
+  if (it.kind === 'plan' && it.detail) card.append(h('div', { class: 'selectable', style: 'max-height:320px;overflow:auto' }, renderMarkdown(it.detail)));
+  else if (it.diff) card.append(diffInline(relText(s, it.diff)));
+  else if (it.detail && it.detail !== it.title && it.kind !== 'question') card.append(h('pre', { class: 'selectable' }, relText(s, it.detail)));
+  if (it.reason) card.append(h('div', { class: 'why' }, `原因：${it.reason}`));
+  if (it.grant_root) card.append(h('div', { class: 'why' }, `“本会话内都允许”会覆盖：${homeify(it.grant_root)}`));
+  const answer = (decision, answers) => guarded(`perm:${it.id}`, () => api('POST', `/api/sessions/${s.session_id}/permission`, { request_id: it.request_id, decision, answers }));
+  if (it.kind === 'question') {
+    const chosen = new Map();
+    const submit = h('button', { class: 'btn btn-primary btn-small', type: 'button', disabled: true }, '提交回答');
+    const qs = (it.questions || []).map((q) => {
+      const multi = !!q.multiSelect;
+      const opts = h('div', { class: 'q-opts' }, (q.options || []).map((o) => {
+        const b = h('button', { class: 'btn btn-small', type: 'button', 'aria-pressed': 'false', title: o.description || null }, o.label);
+        b.addEventListener('click', () => {
+          const cur = chosen.get(q.question) || [];
+          let next = multi ? (cur.includes(o.label) ? cur.filter((x) => x !== o.label) : [...cur, o.label]) : [o.label];
+          chosen.set(q.question, next);
+          for (const other of opts.querySelectorAll('button')) other.setAttribute('aria-pressed', String(next.includes(other.textContent)));
+          submit.disabled = (it.questions || []).some((x) => !(chosen.get(x.question) || []).length);
+        });
+        return b;
+      }));
+      return h('div', { class: 'q' }, h('div', { class: 'q-title' }, q.question), opts);
+    });
+    submit.addEventListener('click', () => answer('allow', Object.fromEntries([...chosen].map(([k, v]) => [k, v.join(', ')]))));
+    card.append(...qs, h('div', { class: 'actions' }, h('button', { class: 'btn btn-small', type: 'button', onclick: () => answer('deny') }, '不回答'), submit));
+    return card;
+  }
+  const opts = it.options || [];
+  const order = ['deny', 'allow_session', 'allow_always', 'allow'];
+  const buttons = opts.slice().sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)).map((o) => h('button', {
+    class: `btn btn-small ${o.id === 'allow' ? 'btn-primary' : ''}`, type: 'button', onclick: () => answer(o.id),
+  }, o.label));
+  card.append(h('div', { class: 'actions' }, buttons));
+  return card;
+}
+
+// ---------------------------------------------------------------- composer
+
+function buildComposer(s, c) {
+  const sid = s.session_id;
+  const label = HARNESS[s.harness].label;
+  const ta = h('textarea', { rows: '1', 'aria-label': `给 ${label} 发消息` });
+  ta.value = S.drafts.get(sid) || '';
+  const send = h('button', { class: 'send-btn', type: 'button' });
+  const hint = h('span', { class: 'hint' });
+  const status = h('div', { class: 'conv-status', 'aria-live': 'polite' });
+  const box = h('div', { class: 'composer' }, ta, h('div', { class: 'composer-bar' }, hint, send));
+  const wrap = h('div', { class: 'composer-wrap' }, status, box);
+  const root = convRoot();
+  root._ta = ta;
+  root._send = send;
+  root._hint = hint;
+  root._status = status;
+  root._box = box;
+  ta.addEventListener('input', () => { S.drafts.set(sid, ta.value); autosize(ta); updateConvChrome(findSession(sid), convFor(sid)); });
+  ta.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    const now = findSession(sid);
+    const running = !!(now && now.turn);
+    if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) { e.preventDefault(); if (!running) sendFromComposer(sid); }
+    else if (e.key === 'Escape' && running) { e.preventDefault(); e.stopPropagation(); interruptTurn(sid); }
+  });
+  ta.addEventListener('paste', (e) => {
+    const dt = e.clipboardData;
+    if (!dt) return;
+    const hasFiles = [...dt.items].some((x) => x.kind === 'file');
+    if (hasFiles && !dt.getData('text/plain')) { e.preventDefault(); toast('对话视图暂不支持粘贴图片或文件；可以在消息里写出文件路径。', 'error'); }
+  });
+  ta.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
+  ta.addEventListener('drop', (e) => { if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); toast('对话视图暂不支持拖入附件；可以在消息里写出文件路径。', 'error'); } });
+  send.addEventListener('click', () => { const now = findSession(sid); if (now && now.turn) interruptTurn(sid); else sendFromComposer(sid); });
+  setTimeout(() => autosize(ta), 0);
+  return wrap;
+}
+
+function autosize(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = `${Math.min(ta.scrollHeight, Math.round(window.innerHeight * 0.38))}px`;
+}
+
+function composerBlock(s) {
+  // Why the composer cannot be used right now, or null.
+  if (S.state.environment.refusal) return '当前环境不能启动原生会话';
+  if (s.archived) return '会话已归档；取消归档后才能继续';
+  if (s.active && !s.attached) return '上次运行遗留的进程仍在；请先在工具栏结束它';
+  if (!s.active && !harnessOk(s.harness)) return `找不到 ${HARNESS[s.harness].label}`;
+  if (S.switching.has(s.session_id)) return '正在切换视图…';
+  return null;
+}
+
+function updateConvChrome(s, c) {
+  const root = convEl;
+  if (!s || !root || root.dataset.sid !== s.session_id || !root._ta) return;
+  const label = HARNESS[s.harness].label;
+  const running = !!s.turn;
+  const blocked = composerBlock(s);
+  const pendingPerm = [...c.items.values()].some((x) => x.type === 'permission' && x.status === 'pending');
+  root._ta.disabled = !!blocked;
+  root._box.classList.toggle('disabled', !!blocked);
+  root._ta.placeholder = blocked || (s.external ? `这个会话已在 ${s.external.app} 中打开` : !s.active
+    ? (s.can_resume ? `发送消息，用原生恢复继续这个 ${label} 会话` : `发送第一条消息，启动 ${label}`)
+    : `给 ${label} 发消息`);
+  root._send.replaceChildren(icon(running ? 'square' : 'send', running ? 'i-fill' : ''));
+  root._send.classList.toggle('stop', running);
+  root._send.title = running ? '停止这一轮（Esc）' : '发送（↩）';
+  root._send.setAttribute('aria-label', running ? '停止这一轮' : '发送');
+  root._send.disabled = running ? false : (!!blocked || !root._ta.value.trim());
+  root._hint.textContent = running ? 'Esc 停止这一轮 · 原生会话会保存' : '↩ 发送 · ⇧↩ 换行';
+  const st = root._status;
+  st.className = 'conv-status';
+  st.replaceChildren();
+  if (S.switching.has(s.session_id)) st.append(stGlyph({ tone: 'idle', glyph: 'spin' }), '正在切换视图：结束原连接，再用原生恢复接续…');
+  else if (pendingPerm) { st.classList.add('warn'); st.append(stGlyph({ tone: 'warn', glyph: 'alert' }), `${label} 在等你确认权限`); }
+  else if (s.active && s.phase === 'starting') st.append(stGlyph({ tone: 'ok', glyph: 'spin' }), `正在连接 ${label}…`);
+  else if (running) {
+    const started = s.turn.started_at ? Date.parse(s.turn.started_at) : Date.now();
+    const secs = Math.max(0, Math.round((Date.now() - started) / 1000));
+    st.append(stGlyph({ tone: 'ok', glyph: 'spin' }), `${label} 正在工作…`, h('span', { class: 'hint' }, ` ${secs} 秒`));
+  } else if (s.active && s.attached) {
+    const info = s.conn_info || c.info || {};
+    const bits = [`已连接 ${label}`];
+    if (info.model) bits.push(String(info.model));
+    const modes = { acceptEdits: '自动接受编辑', plan: '计划模式', auto: '自动审查', dontAsk: '不询问', bypassPermissions: '跳过权限检查', manual: '手动' };
+    if (info.permissionMode && info.permissionMode !== 'default') bits.push(`权限：${modes[info.permissionMode] || info.permissionMode}`);
+    if (info.approval_policy && typeof info.approval_policy === 'string') bits.push(`审批：${info.approval_policy}`);
+    st.append(stGlyph({ tone: 'ok', glyph: 'dot' }), h('span', { class: 'hint' }, bits.join(' · ')));
+  } else if (!s.active && s.run) {
+    st.append(h('span', { class: 'hint' }, s.can_resume ? '未连接。发送消息时会用原生恢复接续同一个会话。' : '未连接。'));
+  }
+}
+setInterval(() => { const s = selectedSession(); if (s && s.turn && s.view_mode === 'conversation') updateConvChrome(s, convFor(s.session_id)); }, 1000);
+
+async function sendFromComposer(sid, confirmExternal = false) {
+  const root = convEl;
+  const s = findSession(sid);
+  if (!root || !root._ta || !s) return;
+  const text = root._ta.value;
+  if (!text.trim() || composerBlock(s) || S.pending.has(`send:${sid}`)) return;
+  const askExternal = (app) => confirmPopover(root._send, {
+    title: '在 RepoBridge 中继续？',
+    text: `这个会话已在 ${app} 中打开。RepoBridge 看不到那边是否还在执行；请先确认那边的这一轮已经结束，避免两边同时写入。`,
+    confirm: '那边已结束，继续',
+    onConfirm: () => sendFromComposer(sid, true),
+  });
+  if (s.external && !confirmExternal) { askExternal(s.external.app); return; }
+  const clientId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const restore = () => {
+    if (convEl && convEl.dataset.sid === sid && convEl._ta && !convEl._ta.value) { convEl._ta.value = text; autosize(convEl._ta); }
+    if (!S.drafts.get(sid)) S.drafts.set(sid, text);
+    updateConvChrome(findSession(sid), convFor(sid));
+  };
+  S.pending.add(`send:${sid}`);
+  root._ta.value = '';
+  S.drafts.delete(sid);
+  autosize(root._ta);
+  updateConvChrome(s, convFor(sid));
+  try {
+    await api('POST', `/api/sessions/${sid}/send`, { text, client_id: clientId, confirm_external: confirmExternal });
+  } catch (e) {
+    restore();
+    if (e.details && e.details.external && !confirmExternal) askExternal(e.details.external.app);
+    else fail(e);
+  } finally { S.pending.delete(`send:${sid}`); }
+}
+
+function interruptTurn(sid) {
+  guarded(`interrupt:${sid}`, () => api('POST', `/api/sessions/${sid}/interrupt`, {}));
+}
+
+function focusComposer() {
+  const root = convEl;
+  if (root && !root.hidden && root._ta && !root._ta.disabled && !layerOpen()) { root._ta.focus(); return true; }
+  return false;
+}
+
+// ---------------------------------------------------------------- view switching & desktop
+
+function switchView(s, mode, anchor) {
+  const sid = s.session_id;
+  const label = HARNESS[s.harness].label;
+  const target = mode === 'conversation' ? '对话' : '终端';
+  const run = async (confirmUnknown) => {
+    S.switching.add(sid);
+    render();
+    try {
+      await api('POST', `/api/sessions/${sid}/view`, { view_mode: mode, confirm_unknown: confirmUnknown });
+      S.convs.delete(sid);
+      toast(`已切换到${target}视图${s.attached ? '，并接续了同一个原生会话' : ''}`);
+    } catch (e) {
+      if (e.details && e.details.idle === 'unknown') {
+        S.switching.delete(sid);
+        render();
+        confirmPopover(anchor, { title: '无法确认是否空闲', text: `${e.message}。仍要切换吗？`, confirm: '仍然切换', danger: true, onConfirm: () => run(true) });
+        return;
+      }
+      fail(e);
+    } finally {
+      S.switching.delete(sid);
+      render();
+      focusTerminal(sid);
+    }
+  };
+  if (!s.attached) { run(false); return; }
+  confirmPopover(anchor, {
+    title: `切换到${target}视图？`,
+    text: `会先在空闲时结束当前与 ${label} 的连接（原生会话已保存），再用 ${label} 的原生恢复接续同一个会话。不会发送任何消息，也不会换 harness。`,
+    confirm: '切换',
+    onConfirm: () => run(false),
+  });
+}
+
+function openInDesktop(s, anchor) {
+  const d = s.desktop || {};
+  if (!d.available) { toast(d.reason || '无法在桌面客户端中打开', 'error'); return; }
+  const label = HARNESS[s.harness].label;
+  const go = async (confirmUnknown) => {
+    let r;
+    try {
+      r = await api('POST', `/api/sessions/${s.session_id}/desktop/open`, { release: true, confirm_unknown: confirmUnknown });
+    } catch (e) {
+      if (e.details && e.details.idle === 'unknown') {
+        confirmPopover(anchor, { title: '无法确认是否空闲', text: `${e.message}。仍要继续吗？`, confirm: '仍然继续', danger: true, onConfirm: () => go(true) });
+        return;
+      }
+      fail(e);
+      return;
+    }
+    if (r.status === 'acknowledged') toast(`${label} 已确认：正在 ${r.app} 中打开这个会话。请到 ${r.app} 中查看。`);
+    else if (r.status === 'requested') toast(`已请 ${r.app} 打开这个对话。系统接受了请求；请在 ${r.app} 中确认看到的是正确的对话。`);
+    else toast(`${r.app} 没有确认打开${r.message ? `：${r.message}` : ''}`, 'error');
+  };
+  confirmPopover(anchor, {
+    title: `在 ${d.app} 中继续？`,
+    text: (s.attached ? `RepoBridge 会先结束这里与 ${label} 的连接（原生会话已保存），然后` : '')
+      + `在 ${d.app} 中打开同一个会话。之后请在 ${d.app} 中继续；回到这里时，需要确认那边的这一轮已经结束。`,
+    confirm: `打开 ${d.app}`,
+    onConfirm: () => go(false),
+  });
+}
+
+async function desktopReturn(s) {
+  await guarded(`return:${s.session_id}`, async () => {
+    await api('POST', `/api/sessions/${s.session_id}/desktop/return`, {});
+    toast('已回到 RepoBridge。继续时会接续同一个原生会话。');
+    if (s.view_mode === 'conversation') loadConversation(s.session_id, { refresh: true });
+  });
+}
+
+function viewToggle(s) {
+  const busy = S.switching.has(s.session_id);
+  return h('div', { class: 'seg-inline view-seg', role: 'radiogroup', 'aria-label': '视图' },
+    [['conversation', '对话', 'chat', '对话视图：消息、工具调用和权限请求以卡片显示'], ['terminal', '终端', 'terminal', '终端视图：原生 CLI，与在终端中运行完全相同']].map(([v, l, ic, tip]) => h('button', {
+      type: 'button', role: 'radio', 'aria-checked': String(s.view_mode === v), 'aria-pressed': String(s.view_mode === v), disabled: busy || s.archived,
+      title: tip, onclick: (e) => { if (s.view_mode !== v) switchView(findSession(s.session_id), v, e.currentTarget); },
+    }, icon(ic), h('span', { class: 'tb-label-2' }, l))));
 }
 
 // ---------------------------------------------------------------- selection & loading
@@ -472,6 +1082,7 @@ function select(sel, { focus = true } = {}) {
 }
 
 function loadForSession(s) {
+  if (s.view_mode === 'conversation') { const c = convFor(s.session_id); if (!c.loaded || c.stale || !c.live) loadConversation(s.session_id); }
   loadEvents(s.session_id);
   scheduleChanges(s.session_id, 0);
   if (S.prefs.inspector_open && S.prefs.inspector_tab === 'details') loadDetails(s.session_id);
@@ -515,7 +1126,8 @@ setInterval(() => { const s = selectedSession(); if (s && s.active && !document.
 async function loadDiff(sid, path) {
   try {
     const d = await api('GET', `/api/sessions/${sid}/diff?path=${encodeURIComponent(path)}`);
-    S.diff = { sid, path, text: d.diff, truncated: d.truncated };
+    // Native tools report absolute paths; the server answers with the project-relative one.
+    S.diff = { sid, path: d.path || path, text: d.diff, truncated: d.truncated };
     if (S.sel && S.sel.id === sid) renderInspector();
   } catch (e) { fail(e); }
 }
@@ -539,12 +1151,33 @@ async function guarded(key, fn, button) {
   }
 }
 
-async function startRun(s, kind, button) {
-  await guarded(`start:${s.session_id}`, () => api('POST', `/api/sessions/${s.session_id}/start`, { kind }), button);
+async function startRun(s, kind, button, confirmExternal = false) {
+  if (s.external && !confirmExternal) {
+    confirmPopover(button || $('#toolbar'), {
+      title: '在 RepoBridge 中继续？',
+      text: `这个会话已在 ${s.external.app} 中打开。RepoBridge 看不到那边是否还在执行；请先确认那边的这一轮已经结束，避免两边同时写入。`,
+      confirm: '那边已结束，继续',
+      onConfirm: () => startRun(findSession(s.session_id), kind, button, true),
+    });
+    return;
+  }
+  await guarded(`start:${s.session_id}`, () => api('POST', `/api/sessions/${s.session_id}/start`, { kind, confirm_external: confirmExternal }), button);
   focusTerminal(s.session_id);
 }
 
 function stopSession(s, anchor) {
+  if (s.view_mode === 'conversation' && s.transport === 'structured') {
+    const label = HARNESS[s.harness].label;
+    confirmPopover(anchor, {
+      title: `断开 ${label}？`,
+      text: s.turn ? `${label} 正在处理当前这一轮，断开会先停止这一轮。原生会话已保存，之后发送消息会自动恢复。`
+        : `这会结束与 ${label} 的连接进程，并释放这个文件夹的写入权。原生会话已保存，之后发送消息会自动恢复。`,
+      confirm: '断开',
+      danger: !!s.turn,
+      onConfirm: () => guarded(`stop:${s.session_id}`, () => api('POST', `/api/sessions/${s.session_id}/stop`, {})),
+    });
+    return;
+  }
   confirmPopover(anchor, {
     title: `停止 ${HARNESS[s.harness].label}？`,
     text: s.phase === 'working'
@@ -715,7 +1348,8 @@ function visibleTree() {
   const q = S.filter.trim().toLowerCase();
   return S.state.projects.map((p) => {
     const sessions = p.sessions.filter((s) => (S.prefs.show_archived || !s.archived)
-      && (!q || s.title.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)));
+      && (!q || s.title.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)
+        || HARNESS[s.harness].label.toLowerCase().includes(q) || (s.native_session_id || '').toLowerCase().startsWith(q)));
     return { project: p, sessions };
   }).filter((g) => !q || g.sessions.length || g.project.name.toLowerCase().includes(q));
 }
@@ -840,7 +1474,7 @@ function renderToolbar() {
       h('span', { class: `harness ${s.harness}` }, HARNESS[s.harness].label),
       ` · ${p ? p.name : ''}${p && p.branch ? ` · ${p.branch}` : ''}`)));
   const tone = st.tone === 'warn' ? 'warn' : st.tone === 'bad' ? 'bad' : '';
-  const right = h('div', { class: 'tb-group' }, h('span', { class: `status-label ${tone}`, title: st.label }, stGlyph(st), h('span', { class: 'tb-label' }, st.label)), h('span', { class: 'tb-sep' }));
+  const right = h('div', { class: 'tb-group' }, h('span', { class: `status-label ${tone}`, title: st.label }, stGlyph(st), h('span', { class: 'tb-label' }, st.label)), h('span', { class: 'tb-sep' }), viewToggle(s), h('span', { class: 'tb-sep' }));
   const open = S.prefs.inspector_open;
   const tab = S.prefs.inspector_tab;
   const c = S.changes.get(s.session_id);
@@ -869,6 +1503,10 @@ function renderToolbar() {
 
 function primaryAction(s) {
   const label = HARNESS[s.harness].label;
+  if (s.view_mode === 'conversation' && s.active && s.attached) {
+    return h('button', { class: 'btn', type: 'button', disabled: s.stopping, title: `结束与 ${label} 的连接（原生会话会保存；之后发消息会自动恢复）`, onclick: (e) => stopSession(s, e.currentTarget) }, icon('stop', 'i-fill'), h('span', { class: 'tb-label' }, '断开'));
+  }
+  if (s.view_mode === 'conversation' && !s.active && !s.archived) return null; // the composer is the primary action
   if (s.active && s.attached) {
     return h('button', { class: 'btn', type: 'button', disabled: s.stopping, title: `停止 ${label} 进程（原生会话会保存）`, onclick: (e) => stopSession(s, e.currentTarget) }, icon('stop', 'i-fill'), h('span', { class: 'tb-label' }, '停止'));
   }
@@ -928,7 +1566,14 @@ function renderNotice() {
   if (p && !p.exists) add('bad', 'warning', `找不到项目文件夹 ${homeify(p.root_path)}。它可能被移动或删除了。`);
   if (!s) return;
   const label = HARNESS[s.harness].label;
-  if (s.attention) {
+  if (s.external && !s.active) {
+    add('info', 'external', [h('b', {}, `已在 ${s.external.app} 中打开`), `（${clock(s.external.opened_at)}${s.external.via === 'cli /desktop' ? '，通过终端里的 /desktop' : ''}）。RepoBridge 看不到那边是否还在执行；在那边结束这一轮后，再回到这里继续。`],
+      s.view_mode === 'conversation' ? h('button', { class: 'btn btn-small', type: 'button', title: '重新读取原生历史，查看在那边新增的内容', onclick: () => loadConversation(s.session_id, { refresh: true }) }, '刷新历史') : null,
+      h('button', { class: 'btn btn-small', type: 'button', onclick: () => desktopReturn(s) }, '回到 RepoBridge 继续'));
+  }
+  if (s.attention && s.view_mode === 'conversation' && s.transport === 'structured') {
+    // The permission card in the conversation is the place to answer.
+  } else if (s.attention) {
     add('warn', 'warning', [h('b', {}, `${label} 需要你确认`), `：${s.attention.message || '权限请求'}。请在下方终端中回答。`],
       h('button', { class: 'btn btn-small', type: 'button', onclick: () => focusTerminal(s.session_id) }, '转到终端'));
   } else if (s.active && !s.attached) {
@@ -936,7 +1581,10 @@ function renderNotice() {
   } else if (!s.active && s.run && s.run.status === 'failed') {
     const act = s.can_resume ? h('button', { class: 'btn btn-small', type: 'button', onclick: (e) => startRun(s, 'resume', e.currentTarget) }, '恢复')
       : s.can_start_fresh ? h('button', { class: 'btn btn-small', type: 'button', onclick: (e) => startRun(s, 'new', e.currentTarget) }, '重新启动') : null;
-    add('bad', 'warning', [h('b', {}, '会话失败'), `：${s.run.failure || '原因未知'}`], act,
+    const gone = /No conversation found|no rollout found|not found|不存在/i.test(s.run.failure || '');
+    add('bad', 'warning', [h('b', {}, '会话失败'), `：${s.run.failure || '原因未知'}`,
+      gone ? h('div', { class: 'hint', style: 'margin-top:2px' }, '原生历史似乎已不存在，无法恢复同一会话；可以用“交接”在同一项目中新建会话继续。') : null],
+    gone ? h('button', { class: 'btn btn-small', type: 'button', onclick: () => openHandoff(s) }, '交接到新会话') : act,
       h('button', { class: 'btn btn-small', type: 'button', onclick: () => { setPref('inspector_open', true); setPref('inspector_tab', 'details'); loadDetails(s.session_id); render(); } }, '查看详情'));
   } else if (!s.active && s.run && s.run.status === 'interrupted') {
     add('warn', 'warning', [h('b', {}, '会话被中断'), '：RepoBridge 关闭时它仍在运行。原生会话已保存。'],
@@ -952,8 +1600,10 @@ function renderNotice() {
 
 function renderStage() {
   const s = selectedSession();
-  for (const [id, t] of S.terms) t.el.classList.toggle('visible', !!s && id === s.session_id);
-  if (s) {
+  const conv = !!s && s.view_mode === 'conversation';
+  for (const [id, t] of S.terms) t.el.classList.toggle('visible', !!s && !conv && id === s.session_id);
+  renderConversation(conv ? s : null);
+  if (s && !conv) {
     const t = termFor(s.session_id);
     t.el.classList.add('visible');
     t.el.classList.toggle('readonly', !s.attached);
@@ -975,6 +1625,7 @@ function renderOverlay() {
     ov.append(p ? projectCard(p) : welcomeCard());
     return;
   }
+  if (s.view_mode === 'conversation') return;
   const t = S.terms.get(s.session_id);
   const label = HARNESS[s.harness].label;
   if (!s.active && s.status === 'new') { ov.append(startCard(s)); return; }
@@ -992,7 +1643,7 @@ function renderOverlay() {
 function welcomeCard() {
   return h('div', { class: 'card' },
     h('h1', {}, '欢迎使用 RepoBridge'),
-    h('p', {}, '以项目为中心，使用你已有的 Claude Code 和 Codex。每个会话都是原生 CLI：对话、工具、权限、登录和计费都由它自己处理。'),
+    h('p', {}, '以项目为中心，使用你已有的 Claude Code 和 Codex。每个会话都是原生 CLI：对话、工具、权限、登录和计费都由它自己处理；你可以用图形“对话”或原生“终端”来使用它。'),
     h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary', type: 'button', onclick: openAddProject }, icon('folder-plus'), '添加项目文件夹')),
     cliList());
 }
@@ -1113,9 +1764,11 @@ function kindLabel(kind) {
 
 function activityPane(s) {
   const events = S.events.get(s.session_id);
-  const note = s.harness === 'codex'
-    ? 'Codex 只向 RepoBridge 报告每轮完成和审批请求；逐个工具的过程请看终端。'
-    : 'Claude Code 的请求、工具调用、权限请求和停止，来自只记录的 hooks。';
+  const note = s.view_mode === 'conversation'
+    ? '对话视图的请求、工具调用、权限决定和每轮结束，来自原生结构化消息。'
+    : s.harness === 'codex'
+      ? 'Codex 只向 RepoBridge 报告每轮完成和审批请求；逐个工具的过程请看终端。'
+      : 'Claude Code 的请求、工具调用、权限请求和停止，来自只记录的 hooks。';
   const head = h('div', { class: 'pane-bar' }, h('span', { class: 'grow', title: note }, note));
   if (!events) return [head, h('div', { class: 'pane-scroll' }, h('div', { class: 'empty' }, '正在读取…'))];
   const items = buildTimeline(events);
@@ -1145,7 +1798,7 @@ function buildTimeline(events) {
   for (const ev of events) {
     const p = ev.payload || {};
     if (ev.kind === 'activity') {
-      if (p.source === 'claude-hook') {
+      if (p.source === 'claude-hook' || p.source === 'structured') {
         const name = p.event;
         if (name === 'UserPromptSubmit') newTurn(p.prompt || '（空）', ev.created_at);
         else if (name === 'PreToolUse') {
@@ -1156,7 +1809,7 @@ function buildTimeline(events) {
           const el = p.tool_use_id && tools.get(p.tool_use_id);
           if (el) {
             if (name === 'PostToolUse') el.querySelector('.txt').append(h('span', { class: 'ok', title: '完成' }, '✓'));
-            else { el.classList.add('fail'); el.querySelector('.txt').append(` — 失败${p.error ? `：${p.error}` : ''}`); }
+            else { el.classList.add('fail'); el.querySelector('.txt').append(p.declined ? ' — 已拒绝' : ` — 失败${p.error ? `：${p.error}` : ''}`); }
           } else if (name === 'PostToolUseFailure') ensureTurn(ev.created_at).append(step('fail', '×', `${p.tool_name || '工具'} 失败${p.error ? `：${p.error}` : ''}`));
         } else if (name === 'PermissionRequest' || (name === 'Notification' && p.notification_type === 'permission_prompt')) {
           ensureTurn(ev.created_at).append(step('perm', '!', `请求权限：${p.tool_name ? `${p.tool_name} ` : ''}${p.summary || p.message || ''}`));
@@ -1167,6 +1820,7 @@ function buildTimeline(events) {
         } else if (name === 'SessionStart') {
           sys(p.start_source === 'resume' ? '原生会话已恢复' : p.start_source === 'clear' ? '已开始新的原生对话（/clear）' : '原生会话已就绪', ev.created_at);
         } else if (name === 'SessionEnd') sys('原生会话已结束', ev.created_at);
+        else if (name === 'PermissionDecision') ensureTurn(ev.created_at).append(step(p.decision === 'deny' ? 'fail' : '', p.decision === 'deny' ? '×' : '✓', p.decision === 'deny' ? '你拒绝了这个请求' : '你允许了这个请求'));
       } else if (p.source === 'codex-notify') {
         newTurn(p.prompt || '（终端中的输入）', ev.created_at);
         if (p.message) turn.append(step('', '■', `本轮完成：${p.message}`));
@@ -1178,7 +1832,12 @@ function buildTimeline(events) {
     } else {
       const label = {
         session_created: null,
-        run_started: p.kind === 'resume' ? '已用原生方式恢复' : `已启动${p.handoff_prompt ? '，并发送交接说明' : ''}`,
+        run_started: `${p.kind === 'resume' ? '已用原生方式恢复' : '已启动'}${p.transport === 'structured' ? '（对话连接）' : '（终端）'}${p.handoff_prompt ? '，并发送交接说明' : ''}`,
+        released: `已结束连接（${p.reason === 'view' ? '切换视图' : '在官方桌面客户端中继续'}）`,
+        view_changed: `视图切换为${p.to === 'conversation' ? '对话' : '终端'}`,
+        desktop_open: p.via === '/desktop' ? '通过终端里的 /desktop 移到了 Claude Desktop' : `已请求在 ${p.app || '桌面客户端'} 中打开（${{ acknowledged: '已确认', requested: '系统已接受请求', not_acknowledged: '没有确认', failed: '失败' }[p.status] || p.status}）`,
+        desktop_returned: '已回到 RepoBridge 继续',
+        turn_interrupt_requested: '已请求停止这一轮',
         run_ended: `会话${{ exited: '已退出', stopped: '已停止', failed: '失败', interrupted: '被中断' }[p.status] || p.status}${p.exit_code !== null && p.exit_code !== undefined && p.status !== 'stopped' ? `（退出码 ${p.exit_code}）` : ''}${p.failure ? `：${p.failure}` : ''}`,
         stop_requested: '已请求停止',
         writer_refused: '启动被拒绝：这个文件夹已有运行中的会话',
@@ -1214,6 +1873,8 @@ function detailsPane(s) {
       h('div', { class: 'k' }, '项目'), h('div', { class: 'v' }, p ? p.name : '—'),
       h('div', { class: 'k' }, '文件夹'), h('div', { class: 'v selectable' }, homeify(s.workdir)),
       h('div', { class: 'k' }, '分支'), h('div', { class: 'v' }, (p && p.branch) || '—'),
+      h('div', { class: 'k' }, '视图'), h('div', { class: 'v' }, s.view_mode === 'conversation' ? '对话' : '终端'),
+      h('div', { class: 'k' }, '连接方式'), h('div', { class: 'v' }, transportLabel(s)),
       h('div', { class: 'k' }, '创建于'), h('div', { class: 'v' }, clock(s.created_at)))),
     h('div', { class: 'sect' }, h('h3', {}, '恢复'), h('div', { style: 'font-size:12.5px' }, recovery),
       s.native_session_id && s.can_resume ? [
@@ -1221,6 +1882,7 @@ function detailsPane(s) {
           h('button', { class: 'icon-btn small', type: 'button', title: '复制命令', 'aria-label': '复制恢复命令', onclick: () => copyText(resumeCommand(s), '已复制恢复命令') }, icon('copy'))),
         h('div', { class: 'hint', style: 'margin-top:6px' }, '也可以在普通终端里，于项目文件夹中运行这条原生命令。')] : null),
   ];
+  sections.push(desktopSection(s));
   if (from || outs.length) {
     sections.push(h('div', { class: 'sect' }, h('h3', {}, '交接'),
       from ? h('button', { class: 'list-btn', type: 'button', onclick: () => select({ type: 'session', id: from.session_id }) }, icon('handoff'), h('span', { class: 'name' }, `来自「${from.title}」`), h('span', { class: 'meta' }, HARNESS[from.harness].short)) : null,
@@ -1235,7 +1897,7 @@ function detailsPane(s) {
     !d ? h('div', { class: 'hint' }, '正在读取…') : !runs.length ? h('div', { class: 'hint' }, '还没有运行。') :
       h('div', { class: 'runs' }, runs.map((r) => h('div', { class: 'run' },
         h('span', { class: 'n' }, `#${r.seq}`),
-        h('span', { class: 'what' }, `${r.kind === 'resume' ? '恢复' : '启动'} · ${statusOf({ ...s, active: false, archived: false, status: r.status }).label}${r.exit_code !== null && r.status === 'failed' ? `（退出码 ${r.exit_code}）` : ''}`,
+        h('span', { class: 'what' }, `${r.kind === 'resume' ? '恢复' : '启动'} · ${r.transport === 'structured' ? '对话' : '终端'} · ${['running', 'starting'].includes(r.status) ? '运行中' : statusOf({ ...s, active: false, archived: false, external: null, status: r.status }).label}${r.exit_code !== null && r.status === 'failed' ? `（退出码 ${r.exit_code}）` : ''}`,
           r.failure ? h('span', { class: 'why' }, r.failure) : null),
         h('span', { class: 'time' }, clock(r.started_at))))),
     d && runs[0] && runs[0].output_tail && runs[0].status === 'failed' ? [h('div', { class: 'hint', style: 'margin-top:10px' }, '最后的输出'), h('pre', { class: 'tail selectable' }, runs[0].output_tail)] : null));
@@ -1248,8 +1910,36 @@ function detailsPane(s) {
       runs[0] ? [
         h('div', { class: 'k' }, '最近的命令'), h('div', { class: 'v mono' }, (runs[0].argv || []).map((a) => (a.length > 120 ? `${a.slice(0, 117)}…` : a)).join(' ')),
         h('div', { class: 'k' }, '未传递变量'), h('div', { class: 'v' }, runs[0].stripped_env && runs[0].stripped_env.length ? runs[0].stripped_env.join(', ') : '无'),
-        h('div', { class: 'k' }, '运行 ID'), h('div', { class: 'v mono' }, runs[0].run_id)] : null))));
+        h('div', { class: 'k' }, '运行 ID'), h('div', { class: 'v mono' }, runs[0].run_id)] : null,
+      d && d.structured_info ? Object.entries(d.structured_info).filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => [
+        h('div', { class: 'k' }, { model: '模型', permissionMode: '权限模式', apiKeySource: '认证来源', approval_policy: '审批策略', sandbox: '沙箱', thread_source: '线程来源', cli_version: 'CLI 版本', version: 'CLI 版本', session_id: '原生会话', cwd: '目录' }[k] || k),
+        h('div', { class: 'v mono' }, typeof v === 'string' ? v : JSON.stringify(v))]) : null))));
   return [h('div', { class: 'pane-scroll' }, sections)];
+}
+
+function transportLabel(s) {
+  const t = s.transport || (s.view_mode === 'conversation' ? 'structured' : 'pty');
+  if (t === 'pty') return `原生终端（${HARNESS[s.harness].label} 交互界面）`;
+  return s.harness === 'codex' ? 'Codex app-server（官方 JSON-RPC）' : 'Claude Code 流式协议（stream-json）';
+}
+
+function desktopSection(s) {
+  const d = s.desktop || {};
+  const label = HARNESS[s.harness].label;
+  const rows = [
+    h('div', { class: 'k' }, '客户端'), h('div', { class: 'v' }, d.app_found ? `${d.app}${d.app_version ? `（${d.app_version}）` : ''}` : `${d.app}（未找到）`),
+    h('div', { class: 'k' }, '状态'), h('div', { class: 'v' }, s.external ? `已在 ${s.external.app} 中打开（${clock(s.external.opened_at)}）` : d.available ? '可以打开' : (d.reason || '不可用')),
+  ];
+  const ref = d.command || d.link;
+  return h('div', { class: 'sect' }, h('h3', {}, '官方桌面客户端'), h('div', { class: 'kv' }, rows),
+    h('div', { style: 'display:flex;gap:8px;margin-top:10px;flex-wrap:wrap' },
+      s.external ? h('button', { class: 'btn btn-small', type: 'button', onclick: () => desktopReturn(s) }, '回到 RepoBridge 继续')
+        : h('button', { class: 'btn btn-small', type: 'button', disabled: !d.available, title: d.reason || null, onclick: (e) => openInDesktop(s, e.currentTarget) }, icon('external'), `在 ${d.app} 中打开`)),
+    ref ? h('div', { class: 'code-line selectable', style: 'margin-top:8px' }, h('span', { title: ref }, ref),
+      h('button', { class: 'icon-btn small', type: 'button', title: '复制', 'aria-label': '复制', onclick: () => copyText(d.command ? `cd ${shellQuote(s.workdir)} && ${d.command}` : d.link, '已复制') }, icon('copy'))) : null,
+    h('div', { class: 'hint', style: 'margin-top:6px' }, s.harness === 'codex'
+      ? '使用 Codex 官方的“已有对话”链接打开。系统接受请求不代表已经看到正确的对话，请在 Codex 中确认。'
+      : `由 ${label} 自己执行 claude --desktop --resume，并确认打开同一个会话；Claude Desktop 继续的是同一个会话，回到这里后可用原生恢复接着做。`));
 }
 
 function shellQuote(s) { return /^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`; }
@@ -1363,12 +2053,15 @@ function sessionMenu(s, anchor) {
   menu(anchor, [
     { icon: 'pencil', label: '重命名…', action: () => { select({ type: 'session', id: s.session_id }, { focus: false }); setTimeout(() => beginRename(findSession(s.session_id)), 50); } },
     { icon: 'handoff', label: '交接到新会话…', action: () => openHandoff(s) },
+    { icon: s.view_mode === 'conversation' ? 'terminal' : 'chat', label: s.view_mode === 'conversation' ? '切换到终端视图' : '切换到对话视图', disabled: s.archived || (s.active && !s.attached), action: () => switchView(s, s.view_mode === 'conversation' ? 'terminal' : 'conversation', anchorEl) },
+    s.external ? { icon: 'resume', label: '回到 RepoBridge 继续', action: () => desktopReturn(s) }
+      : { icon: 'external', label: `在 ${(s.desktop && s.desktop.app) || '桌面客户端'} 中打开…`, disabled: !(s.desktop && s.desktop.available), note: s.desktop && !s.desktop.available ? '不可用' : null, title: s.desktop && s.desktop.reason, action: () => openInDesktop(s, anchorEl) },
     '-',
     s.native_session_id && s.can_resume ? { icon: 'copy', label: '复制原生恢复命令', action: () => copyText(resumeCommand(s), '已复制恢复命令') } : null,
     p ? { icon: 'folder', label: '在 Finder 中显示项目', action: () => revealProject(p) } : null,
     { icon: 'info', label: '会话详情', action: () => { select({ type: 'session', id: s.session_id }, { focus: false }); setPref('inspector_open', true); setPref('inspector_tab', 'details'); loadDetails(s.session_id); render(); } },
     '-',
-    s.active && s.attached ? { icon: 'stop', label: `停止 ${label}`, action: () => stopSession(s, anchorEl) } : null,
+    s.active && s.attached ? { icon: 'stop', label: s.transport === 'structured' ? `断开 ${label}` : `停止 ${label}`, action: () => stopSession(s, anchorEl) } : null,
     s.archived ? { icon: 'unarchive', label: '取消归档', action: () => unarchiveSession(s) }
       : { icon: 'archive', label: '归档…', disabled: s.active, note: s.active ? '先停止' : null, action: () => archiveSession(s, anchorEl) },
   ]);
@@ -1404,6 +2097,8 @@ function openNewSession(projectId, harness) {
   projectSelect.value = pid;
   const title = h('input', { class: 'input', placeholder: '可选，例如“修复登录跳转”', maxlength: '120' });
   const choice = h('div', { class: 'choice', role: 'radiogroup' });
+  let view = S.prefs.default_view || 'terminal';
+  const viewChoice = h('div', { class: 'choice', role: 'radiogroup' });
   const busyBox = h('div');
   const create = h('button', { class: 'btn btn-primary', type: 'button' }, '创建并启动');
   const alt = h('button', { class: 'btn', type: 'button' });
@@ -1415,6 +2110,9 @@ function openNewSession(projectId, harness) {
         h('span', { class: 't' }, h('span', { class: `dot ${k}` }), HARNESS[k].label),
         h('span', { class: 'd' }, info && info.available ? (info.version || '已找到') : '未找到'));
     }));
+    viewChoice.replaceChildren(...[['conversation', '对话', '消息、工具调用和权限请求以卡片显示'], ['terminal', '终端', '原生终端界面，与在终端中运行一致']].map(([v, l, d]) => h('button', {
+      type: 'button', role: 'radio', 'aria-pressed': String(v === view), 'aria-checked': String(v === view), onclick: () => { view = v; draw(); },
+    }, h('span', { class: 't' }, icon(v === 'conversation' ? 'chat' : 'terminal'), l), h('span', { class: 'd' }, d))));
     const busy = busySessionIn(findProject(pid));
     busyBox.replaceChildren();
     if (busy) {
@@ -1432,17 +2130,19 @@ function openNewSession(projectId, harness) {
   projectSelect.addEventListener('change', () => { pid = projectSelect.value; draw(); });
   create.addEventListener('click', () => guarded('new-session', async () => {
     const start = !busySessionIn(findProject(pid));
-    const s = await api('POST', '/api/sessions', { project_id: pid, harness: kind, title: title.value.trim() || null, start });
+    const s = await api('POST', '/api/sessions', { project_id: pid, harness: kind, title: title.value.trim() || null, start, view_mode: view });
     setPref('last_harness', kind);
+    setPref('default_view', view);
     close();
     select({ type: 'session', id: s.session_id });
   }, create));
   title.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) create.click(); });
   close = dialog([
     h('h2', {}, '新建会话'),
-    h('p', { class: 'sub' }, '每个会话固定使用一种 harness，在项目文件夹中打开它的原生交互界面。'),
+    h('p', { class: 'sub' }, '每个会话固定使用一种 harness，在项目文件夹中运行它的原生 CLI。界面可以随时在“对话”和“终端”之间切换。'),
     h('div', { class: 'field' }, h('label', {}, '项目'), projectSelect),
     h('div', { class: 'field' }, h('div', { class: 'label' }, 'Harness'), choice),
+    h('div', { class: 'field' }, h('div', { class: 'label' }, '界面'), viewChoice),
     h('div', { class: 'field' }, h('label', {}, '标题'), title),
     busyBox,
     h('div', { class: 'actions' }, h('span', { class: 'left' }, alt), h('button', { class: 'btn', type: 'button', onclick: () => close() }, '取消'), create),
@@ -1640,7 +2340,7 @@ function runDevHash() {
   const [action, arg] = location.hash.slice(5).split(':');
   history.replaceState(null, '', '/');
   const s = selectedSession();
-  setTimeout(() => {
+  queueMicrotask(() => {
     if (action === 'settings') openSettings();
     else if (action === 'new') openNewSession();
     else if (action === 'add') openAddProject();
@@ -1648,6 +2348,8 @@ function runDevHash() {
     else if (action === 'handoff' && s) openHandoff(s);
     else if (action === 'stop' && s) stopSession(s, $('#toolbar .tb-group .btn:last-child'));
     else if (action === 'menu' && s) sessionMenu(s, $('#toolbar .tb-title .icon-btn'));
+    else if (action === 'view' && s) switchView(s, s.view_mode === 'conversation' ? 'terminal' : 'conversation', $('#toolbar .view-seg button[aria-checked="false"]'));
+    else if (action === 'desktop' && s) openInDesktop(s, $('#toolbar .tb-title .icon-btn'));
     else if (action === 'filter') { $('#filter').value = arg || ''; S.filter = arg || ''; renderSidebar(); }
     else if (action === 'diff' && s) {
       const pick = (tries) => {
@@ -1657,7 +2359,7 @@ function runDevHash() {
       };
       pick(20);
     }
-  }, 600);
+  });
 }
 
 // ---------------------------------------------------------------- boot

@@ -1,5 +1,56 @@
 # Status
 
+## W6 conversation view + W7 official desktop continuation — 2026-10-08
+
+**Conversation view (W6).** Every session can now be used in a *terminal* view (the native
+interactive CLI, unchanged) or a *conversation* view built only on the harness's own structured
+protocol: Claude Code `-p --input-format/--output-format stream-json --permission-prompt-tool stdio`
+(the Agent SDK control protocol) and `codex app-server` (JSON-RPC, checked against the schema the
+installed 0.162.0-alpha.2 generates). It shows user/assistant messages, streamed Markdown and code,
+collapsible thinking/tool calls (input, output, errors, exit codes, files → diff), real permission
+cards (allow / deny / the CLI's own "remember" suggestion, Edit shown as −/+), stop-this-turn, retry
+and failure notes, and history read from native stores (Codex `thread/turns/list`; the Claude Code
+session transcript). The view is chosen per session (default remembered); switching while connected
+waits for an idle point, releases the process with confirmed exit and reconnects with the native
+resume — same native ID, nothing sent, never two writers.
+
+**Official desktop continuation (W7).** Session menu / Details › “Open in Claude Desktop / Codex”
+uses only `claude --desktop --resume <id>` (PTY, official acknowledgement required) and
+`codex://threads/<id>`. RepoBridge releases its own connection first and then holds the session
+(“opened in X”) until the user confirms the other side is done; `/desktop` typed in the Claude TUI is
+detected. History can be refreshed from the native store after continuing elsewhere. Executor-era
+desktop evidence is not counted for workbench sessions.
+
+Defects found while using it in a test instance and fixed: `[hidden]` overridden by button display
+(stale “new messages” button); absolute/truncated paths in tool titles; diff not opening from a tool
+(absolute vs relative path); Edit permission shown as raw JSON and an unexplained “remember” option;
+user-declined tools shown as failed; permission-card class colliding with the activity timeline;
+failed native resume without its reason; narrow toolbar squeezing the title; dev snapshots stale when
+the window is covered; a test instance able to open the real desktop apps (now fake bundles +
+recording opener in dev mode).
+
+Checks: workbench tests 58 (22 new); full offline suite 917 passed / 18m04s (details in HANDOFF); real
+`codex app-server` interface shape probed without credentials or turns; native-window screenshots in
+`docs/screenshots/conv-*.jpg` (synthetic data, stub CLIs, fake app bundles).
+
+**Not verified (needs your authorization or your own run):** real Claude Code / Codex turns in the
+conversation view; a real view switch; real desktop open of the right history, presence in the
+official sidebar/list, continuing there and continuity back in RepoBridge; real IME, clipboard,
+VoiceOver. Policy note (DECISIONS 133): Anthropic's Agent SDK docs say third-party products may not
+offer claude.ai login/rate limits without approval; RepoBridge runs your own CLI with its own login
+locally, but distributing it to others needs that approval or terminal-only Claude sessions.
+
+Authorization request for real acceptance (one bounded run, synthetic repo `~/rb-acceptance/demo`,
+dedicated state dir, your existing logins, App started by you from a normal terminal):
+Claude Code ≤ 6 short turns and Codex ≤ 6 short turns (reply, one guarded file edit allowed, one
+denied, one stopped turn, one turn continued in the official desktop app, one turn back in
+RepoBridge); 2 view switches per harness (no messages); 1 open in Claude Desktop and 1 in Codex;
+screenshots/clicks via computer use on RepoBridge, Claude and ChatGPT(Codex) only. The test sessions
+will remain in your native histories (named “RepoBridge 验收 …”); nothing is deleted or rewritten.
+
+GitHub: development branch `claude/repobridge-product-direction-8e26f9`, draft
+[PR #3](https://github.com/CHANxuanyu/harness-bridge/pull/3) into `claude/new-repo-plan-dn1eac`.
+
 ## W5 workbench experience and interface redesign — 2026-10-08
 
 The workbench was used end to end in its own test instance (synthetic projects, stub CLIs) and

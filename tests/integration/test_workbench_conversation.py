@@ -105,6 +105,8 @@ def test_claude_conversation_streams_reply_and_real_permission_answers(wbx: WB) 
     wb.answer_permission(sid, perm["request_id"], "deny")
     wait_for(lambda: idle(wb, sid))
     assert not (wbx.repo / "nope.txt").exists()
+    denied = [i for i in items(wb, sid, "tool") if i.get("title", "").endswith("nope.txt")]
+    assert denied and denied[0]["status"] == "declined"
     with pytest.raises(BridgeError):
         wb.answer_permission(sid, perm["request_id"], "allow")
 
@@ -342,3 +344,21 @@ def test_desktop_unavailable_reasons_and_cli_desktop_command(wbx: WB) -> None:
         wb.start_run(sid, "resume")
     wb.start_run(sid, "resume", confirm_external=True)
     wait_for(lambda: WB.view(wb, sid)["active"])
+
+
+def test_failed_native_resume_explains_itself_and_keeps_the_message(wbx: WB) -> None:
+    wb = wbx.open()
+    sid = conversation_session(wb, wbx, CLAUDE)
+    say(wb, sid, "hello")
+    native = wb.store.get_session(sid)["native_session_id"]
+    wb.stop(sid)
+    wait_for(lambda: not WB.view(wb, sid)["active"])
+    # The native history disappears outside RepoBridge (e.g. purged in the CLI).
+    (wbx.base / "stub-home" / "claude" / native).unlink()
+    wb.send_message(sid, "still there?")
+    wait_for(lambda: WB.run(wb, sid)["status"] == "failed")
+    run = WB.run(wb, sid)
+    assert run["kind"] == "resume" and "No conversation found" in run["failure"]
+    assert native in run["failure"]
+    history = wb.conversation(sid)
+    assert history["live"] is False

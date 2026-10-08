@@ -275,6 +275,7 @@ class Workbench:
             "phase": live.phase if live else None,
             "transport": live.transport if live else (run or {}).get("transport"),
             "turn": live.conv.turn if live and live.conv is not None else None,
+            "conn_info": _conn_info(live),
             "can_resume": (not active) and resumable,
             "can_start_fresh": (not active) and session["turns_observed"] == 0,
             "external": external,
@@ -1375,11 +1376,14 @@ class Workbench:
             _, raw_tail = live.buffer.tail(65536)
         else:
             raw_tail = read_log_tail(live.run_dir / "stderr.log", 16384)
-            self._save_conversation(live)
             if live.conv is not None:
                 live.conv.finish_open_items("interrupted")
+                for item in live.conv.items():
+                    if item["type"] == "user" and item.get("status") == "sending":
+                        live.conv.upsert({"id": item["id"], "status": "failed"})
                 if live.conv.turn is not None:
                     live.conv.set_turn(None)
+            self._save_conversation(live)
         live.buffer.close()
         tail = strip_ansi_tail(raw_tail)
         if live.transport == "structured" and live.conv is not None:
@@ -1407,6 +1411,10 @@ class Workbench:
                 status, failure = "exited", None
             else:
                 status, failure = "failed", _exit_reason(info)
+                last = tail.strip().splitlines()[-1].strip() if tail.strip() else ""
+                if live.transport == "structured" and last:
+                    # The CLI's own last words (e.g. "No conversation found …") explain it best.
+                    failure += f"：{last[:300]}"
             self.store.finish_run(
                 live.run_id,
                 status=status,
@@ -1511,6 +1519,14 @@ class Workbench:
     @staticmethod
     def _is_active(runs: list[dict[str, Any]]) -> bool:
         return bool(runs) and runs[-1]["status"] in ("starting", "running")
+
+
+def _conn_info(live: LiveRun | None) -> dict[str, Any] | None:
+    if live is None or live.structured is None:
+        return None
+    keep = ("model", "permissionMode", "approval_policy", "sandbox")
+    info = live.structured.info
+    return {k: info[k] for k in keep if info.get(k)}
 
 
 def _b64(data: bytes) -> str:

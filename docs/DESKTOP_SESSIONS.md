@@ -1,5 +1,17 @@
 # Desktop session continuity
 
+> **Workbench sessions (W7, 2026-10-08).** The RepoBridge workbench has its own, separate entry:
+> session menu / Details › “Open in Claude Desktop / Codex” (`src/harness_bridge/workbench/desktop_apps.py`,
+> `Workbench.open_in_desktop`). It reuses the routes validated below (`claude --desktop --resume <id>` on a
+> PTY with the official acknowledgement; `codex://threads/<id>`), but **not** the Executor task/attempt
+> machinery and **not** its evidence: workbench sessions get no synthetic task or attempt, and the
+> observations in this file are about Executor sessions created by `hbridge run`, not workbench sessions.
+> Workbench differences: the app is identified by bundle id + URL scheme instead of pinned versions (Claude
+> Code ≥ 2.1.285 is checked); RepoBridge first releases its own connection at an idle point; afterwards the
+> session carries an “opened in X” hold until the user confirms the other side is done. Real workbench
+> results (opened the right history / listed in the app / continued there / continuity back in RepoBridge)
+> are pending and recorded separately in `docs/VALIDATION_MATRIX.md` (W6/W7).
+
 Runtime **0.1.0.dev2**, plugin **0.1.0-alpha.6**. This opens a finished Executor's existing
 conversation without a prompt or new task. Native history, native open acknowledgement and
 observed desktop visibility are separate evidence. Running-session display and bidirectional

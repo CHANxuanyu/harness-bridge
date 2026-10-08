@@ -1,5 +1,36 @@
 # Handoff
 
+## W6/W7 conversation view and desktop continuation done offline; real acceptance next — 2026-10-08
+
+Code: branch `claude/repobridge-product-direction-8e26f9`, draft
+[PR #3](https://github.com/CHANxuanyu/harness-bridge/pull/3) into `claude/new-repo-plan-dn1eac`.
+Read [WORKBENCH.md](docs/WORKBENCH.md) (W6/W7 sections, support matrix) and DECISIONS 132–138 first.
+
+Where things are: `workbench/structured.py` (Claude stream-json + SDK control protocol, Codex
+app-server JSON-RPC, history readers), `workbench/conversation.py` (native messages → items;
+transcript and `thread/turns/list` projections), `workbench/desktop_apps.py` (official desktop
+routes), `service.py` (`start_run` picks PTY or structured by `sessions.view_mode`; `switch_view`,
+`send_message`, `interrupt`, `answer_permission`, `conversation`, `open_in_desktop`,
+`desktop_return`; external hold in `sessions.external_json`), store schema 2 (additive migration
+from 1), `static/app.js` conversation section + `static/markdown.js`. Stubs:
+`tests/helpers/wb_stub.py` (stream-json, app-server, `--desktop`, `demo` turn for screenshots).
+
+Test-instance loop (stub CLIs, fake apps, nothing real opened): `hbridge app --state-dir <s>
+--claude-binary <stub> --codex-binary <stub> --dev-snapshot-dir <d> --dev-app-dir <fake Applications>
+--dev-opener <recorder>` with HOME/WB_STUB_HOME/CLAUDE_CONFIG_DIR inside a scratch dir; dev hashes
+`#dev=view|desktop|new|menu|settings|handoff|diff:N`. Dev mode keeps rendering when the window is covered.
+
+Checks run: full offline `scripts/check.sh` — ruff, format, strict mypy (57 files) and **917 passed in
+18m04s**, exit 0 — on the tree before the last workbench-only edits (cache save order, a static
+UI-safety test, an open-link route test, a stub trigger, docs); after those, all 58 workbench tests,
+ruff, format and mypy were re-run and pass (suite total now 919). No test skipped or removed.
+
+Next: (1) real acceptance per WORKBENCH.md “W6/W7 真实验收” — by the user, or by me after the
+bounded authorization in STATUS; record T3-W/T4-W results and the four desktop observations separately.
+(2) Likely follow-ups from real CLIs: exact stream-json event shapes in 2.1.291 (init timing, interrupt
+result, AskUserQuestion answer format), Codex app-server approval params in practice, Desktop list
+filtering of `-p` / app-server sessions. (3) Then `.app` packaging.
+
 ## W5 redesign done; W4 real acceptance next — 2026-10-08
 
 Code: branch `claude/repobridge-product-direction-8e26f9`, merged into the default branch

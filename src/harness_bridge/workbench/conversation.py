@@ -211,7 +211,7 @@ def claude_tool_title(name: str, args: Mapping[str, Any]) -> str:
     else:
         title = next((v for v in args.values() if isinstance(v, str) and v.strip()), "")
     title = " ".join(title.split())
-    return title[:200]
+    return title[:600]
 
 
 def claude_tool_files(name: str, args: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -286,6 +286,8 @@ class ClaudeTranslator:
         self.interrupt_requested = False
         self.tool_names: dict[str, str] = {}
         self.turn_started_at: float | None = None
+        # Tools whose permission the user denied: their error result means "declined".
+        self.denied: set[str] = set()
 
     # A turn starts when the host sends a user message.
     def begin_turn(self, client_id: str, text: str) -> str:
@@ -497,12 +499,15 @@ class ClaudeTranslator:
                 failed = bool(block.get("is_error"))
                 text = _result_text(block.get("content"))
                 clipped, cut = _clip(text, OUTPUT_CAP)
+                status = "ok"
+                if failed:
+                    status = "declined" if tool_id in self.denied else "failed"
                 self.conv.upsert(
                     {
                         "id": tool_id,
                         "type": "tool",
                         "name": self.tool_names.get(tool_id, "工具"),
-                        "status": "failed" if failed else "ok",
+                        "status": status,
                         "output": clipped,
                         "output_truncated": cut,
                     }
@@ -632,9 +637,10 @@ class ClaudeTranslator:
         kind = "tool"
         options = [{"id": "allow", "label": "允许"}]
         if isinstance(suggestions, list) and suggestions:
-            options.append({"id": "allow_always", "label": "允许，并记住"})
+            options.append({"id": "allow_always", "label": suggestion_label(suggestions)})
         options.append({"id": "deny", "label": "拒绝"})
         detail = pretty(args)
+        diff = edit_diff(name, args)
         questions = None
         if name == "AskUserQuestion":
             kind = "question"
@@ -661,10 +667,63 @@ class ClaudeTranslator:
                 "reason": request.get("decision_reason") or request.get("blocked_path"),
                 "options": options,
                 "questions": questions,
+                "diff": diff,
                 "status": "pending",
             }
         )
         return {"permission": item, "input": args, "suggestions": suggestions}
+
+
+def suggestion_label(suggestions: list[Any]) -> str:
+    """Say what "remember" would actually change, from Claude Code's own suggestion."""
+    for entry in suggestions:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("type") == "setMode" and entry.get("mode") == "acceptEdits":
+            return "允许，本会话内自动接受编辑"
+        if entry.get("type") == "addRules":
+            rules = [r for r in entry.get("rules") or [] if isinstance(r, dict)]
+            if rules:
+                rule = rules[0]
+                text = str(rule.get("toolName") or "")
+                if rule.get("ruleContent"):
+                    text += f"({rule['ruleContent']})"
+                where = {
+                    "session": "本会话",
+                    "localSettings": "本地设置",
+                    "projectSettings": "项目设置",
+                    "userSettings": "用户设置",
+                }.get(str(entry.get("destination")), "")
+                return f"允许，并始终允许 {text[:60]}" + (f"（{where}）" if where else "")
+        if entry.get("type") == "addDirectories":
+            return "允许，并允许访问该目录"
+    return "允许，并记住"
+
+
+def edit_diff(name: str, args: Mapping[str, Any]) -> str | None:
+    """A readable -/+ view of what an edit tool asks to change."""
+
+    def lines(prefix: str, text: Any) -> list[str]:
+        return [prefix + line for line in str(text or "").splitlines()] if text else []
+
+    if name == "Edit" and ("old_string" in args or "new_string" in args):
+        out = ["@@ " + str(args.get("file_path") or "")]
+        out += lines("-", args.get("old_string")) + lines("+", args.get("new_string"))
+        return pretty("\n".join(out), OUTPUT_CAP)
+    if name == "MultiEdit" and isinstance(args.get("edits"), list):
+        out = []
+        for edit in args["edits"]:
+            if isinstance(edit, dict):
+                out.append("@@ " + str(args.get("file_path") or ""))
+                out += lines("-", edit.get("old_string")) + lines("+", edit.get("new_string"))
+        return pretty("\n".join(out), OUTPUT_CAP)
+    if name == "Write" and "content" in args:
+        body = lines("+", args.get("content"))
+        head = ["@@ 新内容 " + str(args.get("file_path") or "")]
+        return pretty(
+            "\n".join(head + body[:400] + (["+…"] if len(body) > 400 else [])), OUTPUT_CAP
+        )
+    return None
 
 
 _PERMISSION_MODES = {

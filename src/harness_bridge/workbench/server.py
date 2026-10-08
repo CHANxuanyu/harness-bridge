@@ -262,6 +262,8 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                 self._run(lambda: wb.native_call("appearance", _appearance(body)))
             elif path == "/api/native/pick-folder":
                 self._run(lambda: wb.native_call("pick_folder"))
+            elif path == "/api/native/open-url":
+                self._run(lambda: wb.native_call("open_url", _link(body)))
             elif path == "/api/dev/snapshot" and wb.dev_snapshot is not None:
                 snap = wb.dev_snapshot
                 self._run(lambda: snap(_snapshot_name(body)))
@@ -444,6 +446,13 @@ def _str(body: dict[str, Any], key: str) -> str:
     if not isinstance(value, str):
         raise BridgeError("INVALID_INPUT", f"{key} must be a string")
     return value
+
+
+def _link(body: dict[str, Any]) -> str:
+    url = _str(body, "url")
+    if len(url) > 4096 or not re.match(r"^(https?://[^\s]+|mailto:[^\s]+)$", url, re.IGNORECASE):
+        raise BridgeError("INVALID_INPUT", "only http(s) and mailto links can be opened")
+    return url
 
 
 def _view(body: dict[str, Any]) -> str:

@@ -340,3 +340,14 @@ def test_conversation_routes_stream_events_and_validation(served: tuple[WB, Clie
     status, _, body = client.request("POST", f"/api/sessions/{sid}/send", {"text": "  "})
     assert status == 400
     conn.close()
+
+
+def test_open_link_route_accepts_only_web_links(served: tuple[WB, Client]) -> None:
+    _, client = served
+    client.login()
+    for url in ("javascript:alert(1)", "file:///etc/passwd", "codex://threads/x", "https://a b"):
+        status, _, _ = client.request("POST", "/api/native/open-url", {"url": url})
+        assert status == 400, url
+    # A valid link still needs the native window (absent in tests): nothing is opened.
+    status, _, _ = client.request("POST", "/api/native/open-url", {"url": "https://example.com/x"})
+    assert status == 404

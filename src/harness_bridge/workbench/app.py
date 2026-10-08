@@ -43,6 +43,10 @@ def add_arguments(parser: argparse.ArgumentParser, *, state_dir: bool = True) ->
     # Development only: lets a tester join the window's server from a browser and capture the
     # window's own pixels. Not shown in --help.
     parser.add_argument("--dev-snapshot-dir", default=None, help=argparse.SUPPRESS)
+    # Development only: test instances point desktop-client discovery at fake app bundles and
+    # "open" requests at a recorder, so a stub session can never open the real Claude/Codex app.
+    parser.add_argument("--dev-app-dir", action="append", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--dev-opener", default=None, help=argparse.SUPPRESS)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -62,7 +66,12 @@ def run(args: argparse.Namespace) -> int:
         )
         return 1
     binaries = {k: v for k, v in ((CLAUDE, args.claude_binary), (CODEX, args.codex_binary)) if v}
-    workbench = Workbench(state_dir, config=WorkbenchConfig(binaries=binaries))
+    extra: dict[str, Any] = {}
+    if getattr(args, "dev_app_dir", None):
+        extra["app_dirs"] = tuple(args.dev_app_dir)
+    if getattr(args, "dev_opener", None):
+        extra["opener"] = args.dev_opener
+    workbench = Workbench(state_dir, config=WorkbenchConfig(binaries=binaries, **extra))
     server = WorkbenchServer(workbench, port=args.port)
     server.start()
     dev_dir = Path(args.dev_snapshot_dir).expanduser() if args.dev_snapshot_dir else None
@@ -129,6 +138,13 @@ def _wait_for_signal() -> None:
         pass
 
 
+def _open_url(url: str) -> None:
+    """Open a link from a reply in the default browser (the server validated the scheme)."""
+    import subprocess
+
+    subprocess.run(["/usr/bin/open", "--", url], check=False, timeout=10, capture_output=True)
+
+
 def _pick_folder(window: Any) -> str | None:
     import webview
 
@@ -166,6 +182,7 @@ def _run_window(url: str, base_url: str, workbench: Any, dev_dir: Path | None) -
         "title": lambda title: window.set_title(title or "RepoBridge"),
         "appearance": lambda mode: native_mac.set_appearance(window, mode),
         "pick_folder": lambda: _pick_folder(window),
+        "open_url": _open_url,
     }
     if dev_dir is not None and native_mac.available():
         dev_dir.mkdir(parents=True, exist_ok=True)
@@ -182,6 +199,9 @@ def _run_window(url: str, base_url: str, workbench: Any, dev_dir: Path | None) -
     def on_loaded() -> None:
         with contextlib.suppress(Exception):
             native_mac.set_appearance(window, workbench.prefs.get()["appearance"])
+        if dev_dir is not None:
+            with contextlib.suppress(Exception):
+                native_mac.keep_rendering_when_covered(window)
 
     window.events.loaded += on_loaded
     webview.start(localization={"global.quitConfirmation": CLOSE_CONFIRMATION})

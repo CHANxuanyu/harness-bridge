@@ -610,14 +610,15 @@ class ClaudeStream:
         if line.startswith("edit "):
             path = os.path.abspath(line.split(" ", 1)[1])
             self.text(msg_id, 0, "我来创建这个文件。")
-            self.tool(msg_id, 1, "toolu_w1", "Write", {"file_path": path, "content": "x"})
-            answer = self.ask("Write", "toolu_w1", {"file_path": path, "content": "x"})
+            tid = f"toolu_w{uuid.uuid4().hex[:8]}"
+            self.tool(msg_id, 1, tid, "Write", {"file_path": path, "content": "x"})
+            answer = self.ask("Write", tid, {"file_path": path, "content": "x"})
             if answer.get("behavior") == "allow":
                 Path(path).write_text("written by stub stream\n")
-                self.tool_result("toolu_w1", f"File created successfully at: {path}")
+                self.tool_result(tid, f"File created successfully at: {path}")
                 reply = "已创建文件。"
             else:
-                self.tool_result("toolu_w1", f"denied: {answer.get('message')}", error=True)
+                self.tool_result(tid, f"denied: {answer.get('message')}", error=True)
                 reply = "好的，没有写入。"
         elif line == "perm":
             args = {"command": "rm -rf build", "description": "Remove build output"}
@@ -654,6 +655,8 @@ class ClaudeStream:
             answers = (answer.get("updatedInput") or {}).get("answers")
             self.tool_result("toolu_q1", f"answers={json.dumps(answers)}")
             reply = f"you chose {json.dumps(answers)}"
+        elif line == "demo" or "精确计算" in line:
+            return self.demo(msg_id)
         elif line == "slow":
             self.text(msg_id, 0, "working slowly…")
             while True:
@@ -681,6 +684,99 @@ class ClaudeStream:
         self.text(msg_id, 5, reply)
         transcript_add(
             self.session,
+            {
+                "type": "assistant",
+                "message": {
+                    "id": msg_id,
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": reply}],
+                },
+            },
+        )
+        self.result()
+        return None
+
+    def demo(self, msg_id: str) -> int | None:
+        """Synthetic multi-step turn for screenshots: thinking, read, markdown, guarded edit."""
+        path = os.path.abspath("src/ledger.py")
+        emit(
+            {
+                "type": "stream_event",
+                "parent_tool_use_id": None,
+                "session_id": self.session,
+                "event": {
+                    "type": "content_block_start",
+                    "index": 0,
+                    "content_block": {"type": "thinking", "thinking": ""},
+                },
+            }
+        )
+        emit(
+            {
+                "type": "stream_event",
+                "parent_tool_use_id": None,
+                "session_id": self.session,
+                "event": {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {
+                        "type": "thinking_delta",
+                        "thinking": "先读 ledger.py，看金额是怎么累加的。",
+                    },
+                },
+            }
+        )
+        emit(
+            {
+                "type": "stream_event",
+                "parent_tool_use_id": None,
+                "session_id": self.session,
+                "event": {"type": "content_block_stop", "index": 0},
+            }
+        )
+        self.text(msg_id, 1, "我先看一下 `src/ledger.py` 里金额是怎么计算的。")
+        self.tool(msg_id, 2, "toolu_r1", "Read", {"file_path": path})
+        self.tool_result("toolu_r1", Path(path).read_text() if Path(path).exists() else "")
+        body = (
+            "问题在于用 **浮点数** 累加金额：\n\n"
+            "1. `sum()` 对 `float` 会累积舍入误差；\n"
+            "2. 对账时 `0.1 + 0.2` 这样的值无法和账单精确相等。\n\n"
+            "建议改用 `Decimal`：\n\n"
+            "```python\nfrom decimal import Decimal\n\n\ndef total(items):\n"
+            '    return sum((Decimal(str(i.amount)) for i in items), Decimal("0"))\n```\n\n'
+            "我来修改这个文件。"
+        )
+        self.text(msg_id, 3, body)
+        new = (
+            "from decimal import Decimal\n\n\ndef total(items):\n"
+            '    return sum((Decimal(str(i.amount)) for i in items), Decimal("0"))\n'
+        )
+        args = {
+            "file_path": path,
+            "old_string": "return sum(i.amount for i in items)",
+            "new_string": 'return sum((Decimal(str(i.amount)) for i in items), Decimal("0"))',
+        }
+        self.tool(msg_id, 4, "toolu_e1", "Edit", args)
+        answer = self.ask(
+            "Edit",
+            "toolu_e1",
+            args,
+            [{"type": "setMode", "mode": "acceptEdits", "destination": "session"}],
+        )
+        if answer.get("behavior") == "allow":
+            Path(path).write_text(new)
+            self.tool_result("toolu_e1", f"The file {path} has been updated.")
+            reply = (
+                "已改为用 `Decimal` 累加：\n\n| 文件 | 变更 |\n|---|---|\n"
+                "| `src/ledger.py` | 金额累加改用 `Decimal` |\n\n"
+                "建议再补一个 `0.1 + 0.2` 的单元测试。"
+            )
+        else:
+            self.tool_result("toolu_e1", "denied", error=True)
+            reply = "好的，没有修改文件。"
+        self.text(msg_id, 5, reply)
+        transcript_add(
+            str(self.session),
             {
                 "type": "assistant",
                 "message": {
@@ -852,7 +948,7 @@ class CodexAppServer:
             path = os.path.abspath(text.split(" ", 1)[1])
             change = {
                 "type": "fileChange",
-                "id": "fc1",
+                "id": f"fc{self.turns}",
                 "status": "inProgress",
                 "changes": [
                     {"path": path, "kind": {"type": "add"}, "diff": "+written by stub codex\n"}
@@ -867,7 +963,7 @@ class CodexAppServer:
                 {
                     "threadId": self.thread,
                     "turnId": tid,
-                    "itemId": "fc1",
+                    "itemId": f"fc{self.turns}",
                     "startedAtMs": 0,
                     "reason": "create file",
                 },
@@ -886,7 +982,7 @@ class CodexAppServer:
         elif text == "perm":
             cmd = {
                 "type": "commandExecution",
-                "id": "c1",
+                "id": f"c{self.turns}",
                 "command": "rm -rf build",
                 "cwd": os.getcwd(),
                 "status": "inProgress",
@@ -901,7 +997,7 @@ class CodexAppServer:
                 {
                     "threadId": self.thread,
                     "turnId": tid,
-                    "itemId": "c1",
+                    "itemId": f"c{self.turns}",
                     "startedAtMs": 0,
                     "command": "rm -rf build",
                     "cwd": os.getcwd(),
@@ -910,7 +1006,12 @@ class CodexAppServer:
             if answer.get("decision") in ("accept", "acceptForSession"):
                 self.note(
                     "item/commandExecution/outputDelta",
-                    {"threadId": self.thread, "turnId": tid, "itemId": "c1", "delta": "removed\n"},
+                    {
+                        "threadId": self.thread,
+                        "turnId": tid,
+                        "itemId": f"c{self.turns}",
+                        "delta": "removed\n",
+                    },
                 )
                 cmd.update({"status": "completed", "exitCode": 0, "aggregatedOutput": "removed\n"})
             else:

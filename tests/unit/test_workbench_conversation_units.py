@@ -394,3 +394,21 @@ def test_store_migrates_revision_1_without_losing_sessions(tmp_path: Path) -> No
     again = WorkbenchStore(path)
     assert again.get_session("ses_000000000001")["view_mode"] == "conversation"
     again.close()
+
+
+def test_ui_scripts_never_build_markup_from_strings() -> None:
+    """Model output reaches the page only as DOM text; the CSP also forbids eval."""
+    static = Path(__file__).resolve().parents[2] / "src/harness_bridge/workbench/static"
+    forbidden = (
+        "innerHTML",
+        "outerHTML",
+        "insertAdjacentHTML",
+        "eval(",
+        "new Function",
+        "document.write",
+    )
+    for name in ("app.js", "markdown.js"):
+        text = (static / name).read_text(encoding="utf-8")
+        assert not [f for f in forbidden if f in text], name
+    markdown = (static / "markdown.js").read_text(encoding="utf-8")
+    assert "/^(https?:\\/\\/|mailto:)/i" in markdown  # links: http(s) and mailto only
