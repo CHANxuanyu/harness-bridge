@@ -127,7 +127,8 @@ RepoBridge 不改写厂商私有数据库、不伪造历史、不为在桌面侧
 
 | 类别 | 内容 |
 |---|---|
-| 已实现，离线验证，**真实未验证** | 上面全部：模型/思考强度/权限模式的选择、应用、读回与失败处理（两家）；图片与文件附件；`@` 文件引用；Claude 命令列表；Codex 提问卡片与 MCP 表单；终端启动参数 |
+| 已实现并**真实通过** | 模型/思考强度/权限模式的选择、应用、宿主回报确认（两家）；换视图、重开后的重新确认；终端启动参数；图片附件（两家）；Claude `@` 文件引用；Claude 权限卡片允许/拒绝 |
+| 已实现，离线验证，**真实未验证** | 账号拒绝某个模型时的失败显示（真实目录里没有不可用模型）；文件（非图片）附件；Codex 提问卡片与 MCP 表单、Claude AskUserQuestion（需模型主动发起）；Codex 审批卡片（本机 Codex 设为自动审查）；系统剪贴板粘贴、Finder 拖入、原生打开面板（验收中图片经与粘贴相同的页面处理函数加入） |
 | 原生支持，但 RepoBridge 尚未实现（工程待办） | Codex 计划模式（`collaborationMode`，实验接口）；Codex `fuzzyFileSearch`（目前用 RepoBridge 自己的项目搜索）；Codex 技能列表（`skills/list`）；Claude 对不支持强度档位的旧模型的思考预算（`set_max_thinking_tokens`）与思考显示方式；Codex 速度档位（Fast / service tier）；Claude 历史中图片的原文件名（记录文件不保存文件名） |
 | 本机版本或接入方式不支持 / 有意不提供 | Codex 0.162 没有“修改线程设置”的单独请求，也不发 `thread/settings/updated`（因此只能随下一条消息生效）；Codex 对未知模型名只警告不拒绝（因此 RepoBridge 按目录校验）；跳过全部权限 / 完全访问（有意不提供）；Codex 的斜杠命令（终端界面功能） |
 
@@ -136,17 +137,17 @@ RepoBridge 不改写厂商私有数据库、不伪造历史、不为在桌面侧
 | 组合 | 状态 |
 |---|---|
 | Claude Code · 终端视图（PTY） | 已实现；W1–W5 离线与原生窗口检查；真实 CLI 由你在 W4 中使用过 |
-| Claude Code · 对话视图（stream-json） | 已实现；替身协议离线测试 + 原生窗口截图；**真实 CLI 未验证** |
+| Claude Code · 对话视图（stream-json） | 已实现；**真实验收通过**（2026-10-08，6 轮：回复、自动接受编辑、权限卡片拒绝、图片、换视图后继续、Claude Desktop 中继续） |
 | Codex · 终端视图（PTY） | 同 Claude 终端视图 |
-| Codex · 对话视图（app-server） | 已实现；握手/建线程/命名/读取接口已用真实 0.162 app-server 在无凭据的隔离目录中核对（不发起任何一轮）；完整对话**真实未验证** |
-| 终端 ⇄ 对话（同一原生会话） | 已实现并离线验证（不发消息、不双写、原生 ID 不变）；真实 CLI 未验证 |
-| Claude → Claude Desktop 打开指定会话 | 已实现（官方命令 + 确认文字）；本机 Claude Code 2.1.291 满足版本要求；**真实打开与侧栏可见性未验证**（旧 Executor 证据不计入工作台） |
-| Codex → Codex App 打开指定对话 | 已实现（官方链接）；**真实打开与侧栏可见性未验证**；app-server 新建线程的 `source` 为 `vscode`、`originator` 为 `repobridge`，官方 App 是否列出未知 |
-| 桌面继续后回到 RepoBridge 的连续性 | 机制已实现（保护状态 + 原生恢复 + 历史刷新）；离线验证；**真实未验证** |
-| 原生身份与历史在 App 重开后保持 | 已实现并离线验证（会话 ID、视图、桌面保护状态、历史读取） |
-| 模型 / 思考强度 / 权限模式选择（两家，W8） | 已实现；离线验证（替身协议）+ Codex 部分用真实 0.162 app-server 与本地假模型端点核对；**真实账号未验证** |
-| 图片/文件附件、`@` 引用、Claude 命令（W8） | 已实现；离线验证；**真实未验证** |
-| Codex 提问、MCP 表单（W8） | 已实现；离线验证；**真实未验证**；数组等无法显示的表单仍可见地拒绝 |
+| Codex · 对话视图（app-server） | 已实现；**真实验收通过**（6 轮：回复、工作区可写编辑、只读被拒、图片、换视图后继续、Codex App 中继续）；审批卡片因本机 Codex 设置为自动审查而未出现（见下） |
+| 终端 ⇄ 对话（同一原生会话） | **真实通过**（两家：同一原生 ID、不发消息、设置作为启动参数传入并在切回后重新确认）；终端里两家 CLI 停在各自的首次使用提示（见下），未在终端中输入 |
+| Claude → Claude Desktop 打开指定会话 | **真实通过**：官方确认文字；Claude Desktop 会话列表出现同一 ID（`local_<id>`）、标题与目录正确，完整历史可见 |
+| Codex → Codex App 打开指定对话 | **真实通过**：Codex App 打开同一线程、完整历史可见、出现在侧栏“最近”第一项，输入框显示 RepoBridge 选择的模型与强度 |
+| 桌面继续后回到 RepoBridge 的连续性 | **真实**：两家刷新历史都能看到桌面端新增的一轮；Claude 随后原生恢复成功；Codex 再次连接被 Codex 自己的单写入锁拒绝（线程仍在 Codex App 中打开），RepoBridge 不强行接管并提示关闭后再继续 |
+| 原生身份与历史在 App 重开后保持 | **真实通过**（重开验收实例：视图、原生 ID、选择与上次确认值保持） |
+| 模型 / 思考强度 / 权限模式选择（两家，W8） | **真实通过**（选择、应用、宿主回报确认、换视图与重开后重新确认；两家原生记录与选择一致）；被账号拒绝的模型未遇到（目录中没有不可用模型） |
+| 图片/文件附件、`@` 引用、Claude 命令（W8） | 图片两家**真实通过**；Claude 的 `@notes.md` 由 CLI 自己读入（真实）；文件附件、Codex 的 `@`、命令列表执行未单独真实验证 |
+| Codex 提问、MCP 表单（W8） | 已实现；离线验证；**真实未验证**（需要模型主动发起）；数组等无法显示的表单仍可见地拒绝 |
 
 ## 界面
 
@@ -280,6 +281,10 @@ notify/OSC 9 覆盖项；Claude 用 `--settings` 注入只记录的 hooks；会�
 | 原生历史里附件显示为一长串状态目录路径 | 识别 RepoBridge 自己追加的附件引用，还原为附件标签 |
 | 原生窗口截图里弹出层不可见（显示器休眠或窗口被遮住时动画不推进） | 开发截图模式关闭动画，弹出层同步定位 |
 | 替身 Claude 在“自动接受编辑”模式下仍弹出编辑确认 | 替身按模式处理，与真实 CLI 一致 |
+| **真实验收发现**：工具栏的“对话 / 终端”切换按钮一直是禁用的（`archived` 为数字 0，被当成属性写入；W6 起存在，之前只经菜单与开发入口测过） | 构造函数对布尔属性只在为真时设置；调用处同时修正 |
+| **真实验收发现**：Codex 模式说明写“先问你”，而本机 Codex 的审批人是自动审查 | 改为“需要审批”，并显示 Codex 报告的审批人（不改动这项 Codex 设置） |
+| **真实验收发现**：线程仍在 Codex App 中打开时，再次连接只显示“未能就绪” | 识别 Codex 的单写入锁，提示在 Codex App 中关闭对话或退出后再继续 |
+| **真实验收发现**：Claude Desktop 继续后的那一轮，历史里显示整段 `<system-reminder>` 与跨会话消息标签 | 历史与回显中去掉宿主添加的包装，只显示真正的消息 |
 
 ## 证据
 
@@ -293,11 +298,12 @@ notify/OSC 9 覆盖项；Claude 用 `--settings` 注入只记录的 hooks；会�
 | 协议核对（真实二进制，无模型） | 本机 `codex app-server` 0.162.0-alpha.2：生成官方 JSON schema；在隔离、无凭据的 `CODEX_HOME` 中完成 initialize、thread/start、thread/name/set、thread/resume、thread/turns/list（未物化时的错误）、thread/list——**没有发起任何一轮**。Claude Code 2.1.291：`--help` 列出 stream-json、`--permission-prompts`、`--desktop` 等参数；二进制包含 `can_use_tool` / `control_request` 协议字符串 | 通过（仅接口形状） |
 | 原生窗口（W6/W7） | 深色对话 + Edit 权限卡片、浅色对话 + diff、Codex 命令审批 + 活动、切换视图确认、切换后的终端、Claude Desktop 打开确认与保护状态、新建会话界面选择、900×640 窄窗口 | 通过（截图见上） |
 | 浏览器（W6） | 真实点击“允许”、展开工具、点文件打开 diff、发送/停止这一轮、拒绝命令、输入法组字时 ↩ 不发送、⇧↩ 不发送、↩ 发送并清空 | 通过 |
-| T1 / T2-W（W8） | 新增 20 项（工作台共 79 项）：Claude 目录来自 initialize、三项设置经控制请求应用并由 get_settings/回应确认、本轮模型、非法组合按目录拒绝、无强度模型、CLI 拒绝后保留原值、连带调整随失败撤回、一轮中的选择等这一轮结束、连接时被拒阻止发送、跨视图切换与重开保持并作为终端参数；Codex 目录、随下一轮下发并经 thread/read/resume 读回、重连时随 resume 下发、组织要求过滤模式、图片模型限制；Codex 提问与 MCP 表单（必填、类型、拒绝）；附件（两家，按内容识别图片、大小上限、ID 校验）；目录探测不建会话；文件搜索；历史中的附件标签与每轮模型；新路由与校验 | 通过（替身 CLI） |
+| T1 / T2-W（W8） | 新增 23 项（工作台共 81 项）：Claude 目录来自 initialize、三项设置经控制请求应用并由 get_settings/回应确认、本轮模型、非法组合按目录拒绝、无强度模型、CLI 拒绝后保留原值、连带调整随失败撤回、一轮中的选择等这一轮结束、连接时被拒阻止发送、跨视图切换与重开保持并作为终端参数；Codex 目录、随下一轮下发并经 thread/read/resume 读回、重连时随 resume 下发、组织要求过滤模式、图片模型限制；Codex 提问与 MCP 表单（必填、类型、拒绝）；附件（两家，按内容识别图片、大小上限、ID 校验）；目录探测不建会话；文件搜索；历史中的附件标签与每轮模型；新路由与校验；Codex 单写入锁的提示；Claude Desktop 包装的去除 | 通过（替身 CLI） |
 | 协议核对（W8，真实二进制，无模型、无账号） | Claude Code 2.1.291 二进制内的控制协议定义：`set_model`、`apply_flag_settings`（`effortLevel`）、`set_permission_mode`（回应 `mode`）、`get_settings`（`applied.model/effort`）、`initialize` 返回 `models[].supportedEffortLevels`/`supportsAutoMode`；`--effort` 档位 low…max，`--permission-mode` 取值。Codex 0.162 真实 app-server + 本地假模型端点（隔离 `CODEX_HOME`、不联网）：`thread/start` 参数生效并在结果中报告；`turn/start` 的 model/effort 覆盖到达上游请求体并延续到后续轮次；`thread/read` 报告当前模型与强度；已加载线程的 `thread/resume` 报告审批与沙箱；新进程恢复时沙箱不保留；未知模型只警告；无 `thread/settings/updated` | 通过（接口与行为；不涉及账号与真实模型） |
 | 原生窗口（W8） | 模型选择器（浅色）、权限模式选择器（深色，自动模式按模型禁用）、设置已确认 + 附件 + 每轮模型（深色）、模型被拒（浅色）、详情“模型与权限”（浅色，已裁去本机路径）、Codex 已选择待下一轮（浅色）、Codex 提问卡片（浅色）、MCP 表单（深色）、Codex 权限模式（深色） | 通过（`docs/screenshots/w8-*.jpg`，均为合成项目与替身 CLI） |
 | 浏览器（W8） | 选择器点击、模型/强度/模式选择、`@` 文件弹出与插入、`/` 命令、附件标签与发送、模型被拒提示、Codex 提问作答、MCP 表单提交 | 通过 |
-| 未验证 | 真实 Claude Code / Codex 账号下的模型/强度/模式选择与确认、附件、提问与表单；真实对话视图完整一轮、真实视图切换、真实官方桌面打开/侧栏可见/桌面继续后回来；真实中文输入法、系统剪贴板粘贴图片、拖入 Finder 文件、VoiceOver、Safari/Firefox | 待验证 |
+| 真实验收（T3-W/T4-W，2026-10-08） | 见上方“真实验收结果”：两家各 6 轮，覆盖选择与确认、权限模式、Claude 权限卡片拒绝、图片、换视图、重开、官方桌面打开/列表/继续/回来 | 通过（逐项见表；Codex 审批卡片与回来后的再次连接如实记录） |
+| 未验证 | 账号拒绝模型时的显示；Codex 审批卡片（本机为自动审查）；提问与 MCP 表单；文件附件；系统剪贴板、Finder 拖入、原生打开面板；pywebview 原生窗口中的真实会话（验收用浏览器）；Codex App 释放线程后在 RepoBridge 再次写入；终端视图中的真实输入；中文输入法、VoiceOver | 待验证 |
 
 ## 真实验收步骤（W4，由你在本机执行）
 
@@ -327,7 +333,31 @@ notify/OSC 9 覆盖项；Claude 用 `--settings` 注入只记录的 hooks；会�
 6. 回到 RepoBridge，“回到 RepoBridge 继续”→“刷新”：能看到在桌面端新增的内容；再发一条消息，原生 ID 不变。
 7. 关闭并重开 RepoBridge：视图、历史、桌面保护状态仍在。
 
-### W8 真实验收（模型、思考强度、权限模式、附件；与上面合并为同一批）
+### 真实验收结果（W6–W8 合并一批，2026-10-08，我在你授权下执行）
+
+环境：合成仓库 `~/rb-acceptance/demo`，独立状态目录 `~/rb-acceptance/state`，你现有的登录；验收实例从 Claude
+桌面 App 的终端面板以 `--no-open` 启动（没有嵌套标记 `CLAUDECODE`；该 shell 继承了 `CLAUDE_AGENT_SDK_VERSION`，
+未做改动），界面在内置浏览器中操作，Codex App 用 computer use 查看与输入，Claude Desktop 用它自己的会话工具
+查看与发送。你正在运行的 App 未受影响。轮次：Claude Code 6/6，Codex 6/6，没有追加。
+
+| 项 | Claude Code 2.1.291 | Codex 0.162 · Codex App 26.1002 |
+|---|---|---|
+| 目录（无会话、无轮次） | 12 个模型，各自的强度档位（Haiku 4.5 无强度；Opus 4.6 / Sonnet 4.6 无 xhigh），96 个命令；探测没有在会话存储中留下文件 | 7 个模型，各自的强度（Luna 系列无 ultra），默认 GPT-6.1-Sol，均接受图片，无组织限制 |
+| 选择并确认（第 1 轮） | Sonnet 5.5 + 低：`get_settings` applied = `claude-sonnet-5-5` / `low`；`system/init` 一致；本轮 API 报告 `claude-sonnet-5-5`；会话记录文件一致；`apiKeySource: none`（订阅登录） | GPT-6-Luna + 低 + 只读：`thread/start` 结果确认，`thread/read` / `thread/resume` 读回；Codex 自己的 rollout `turn_context` 一致 |
+| 权限模式（第 2、3 轮） | 自动接受编辑（CLI 回应 `acceptEdits`）：编辑直接执行、不弹确认；改回需要时询问：真实权限卡片（−/+ 差异与 CLI 的“记住”选项）→ 拒绝 → 文件未变、工具显示“已拒绝” | 工作区可写：项目内写入不需审批；只读：写入被沙箱拒绝；每轮 rollout 的 sandbox 与所选一致 |
+| 审批卡片 | 通过 | 未出现：本机 Codex 的 `approvals_reviewer` 为 `auto_review`，越权请求交给 Codex 自动审查，模型直接放弃。RepoBridge 现在显示审批人，并把模式说明从“先问你”改为“需要审批” |
+| `@` 文件引用 | `@notes.md` 被 Claude Code 自己读入为文件附件 | 以路径文本给出（未单独验证） |
+| 图片（第 4 / 5 轮） | 红色方块 → “红色” | 蓝色方块 → “蓝色” |
+| 换视图（不发消息） | 终端以 `--resume … --model sonnet --effort low --permission-mode default` 启动；切回对话后三项重新确认；第 5 轮同一原生 ID、同一模型 | 终端以 `codex resume … -m gpt-6-luna -c model_reasoning_effort="low" -a on-request -s read-only` 启动；切回后 `thread/resume` 重新确认；第 5 轮同一线程 |
+| 重开 App | 视图、原生 ID、选择、上次确认值保持 | 同左 |
+| 在官方桌面打开 | 官方确认文字；Claude Desktop 会话列表出现 `local_<同一 ID>`、标题“RepoBridge 验收 Claude”、目录正确；完整历史可见 | Codex App 打开同一线程、完整历史可见、侧栏“最近”第一项；输入框显示 GPT-6 Luna Light |
+| 在官方桌面继续（第 6 轮） | 经 Claude Desktop 自己的会话消息机制继续一轮 → “OK3”，模型 `claude-sonnet-5-5` | 在 Codex App 输入框发送 → “OK3” |
+| 回到 RepoBridge | 刷新历史可见这一轮；继续后原生恢复成功，同一 ID，设置重新确认 | 刷新历史可见这一轮；重新连接被 Codex 拒绝 `thread … already has an active writer`（线程仍在 Codex App 中打开）；RepoBridge 不强行接管，提示在 Codex App 中关闭后再继续 |
+
+终端视图中两家 CLI 都停在自己的首次使用提示：Claude Code 的主题选择（本机交互式 Claude Code 从未完成初始设置），
+Codex 的“信任此文件夹？”。回答会写入你的全局 CLI 配置，所以我没有回答；你第一次在终端视图使用时回答一次即可。
+
+### W8 真实验收步骤（模型、思考强度、权限模式、附件；与上面合并为同一批）
 
 每个 harness 最多 6 个短轮次（已用过的计入，不因修复而重新计数）：
 

@@ -250,6 +250,8 @@ def test_codex_choices_travel_with_the_next_turn_and_are_read_back(wbx: WB) -> N
     assert mini["images"] is False and mini["efforts"] == ["low", "medium"]
     actual = wait_for(lambda: settings(wb, sid)["actual"].get("mode") and settings(wb, sid))
     assert actual["actual"]["model"] == "stub-codex" and actual["actual"]["mode"] == "workspace"
+    # Who answers approvals is Codex's own setting; it is shown, never changed.
+    assert actual["actual"]["reviewer"] == "user"
 
     wb.choose_settings(sid, {"model": "stub-codex-mini", "effort": "low", "mode": "read-only"})
     # Codex has no "set" request: the choice waits for the next turn, it is not claimed yet.
@@ -408,3 +410,22 @@ def test_catalog_probe_starts_no_session_and_file_search(wbx: WB) -> None:
     found = [f["path"] for f in wb.search_files(sid, "ledg")]
     assert found[0] == "src/ledger.py"
     assert [f["path"] for f in wb.search_files(sid, "rdme")] == ["README.md"]
+
+
+def test_codex_single_writer_lock_is_reported_as_an_actionable_failure(wbx: WB) -> None:
+    wb = wbx.open()
+    sid = conversation_session(wb, wbx, CODEX)
+    say(wb, sid, "hello")
+    wb.stop(sid)
+    wait_for(lambda: not WB.view(wb, sid)["active"])
+    wb.close(timeout=5)
+    # The thread is now held by another writer (the Codex app): RepoBridge must not force it.
+    wb2 = wbx.open(WB_STUB_CODEX_WRITER_BUSY="1")
+    try:
+        wb2.send_message(sid, "again")
+    except BridgeError:
+        pass
+    wait_for(lambda: WB.run(wb2, sid)["status"] == "failed")
+    failure = WB.run(wb2, sid)["failure"]
+    assert "already has an active writer" in failure and "Codex App" in failure
+    assert not [e for e in log(wbx, "codex-rpc.log") if e.get("turn") == "again"]

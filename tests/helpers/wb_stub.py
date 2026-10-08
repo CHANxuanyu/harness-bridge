@@ -1017,6 +1017,7 @@ class CodexAppServer:
             "reasoningEffort": self.effort,
             "approvalPolicy": self.approval,
             "sandbox": dict(self.sandbox),
+            "approvalsReviewer": "user",
             "modelProvider": "openai",
         }
 
@@ -1097,6 +1098,9 @@ class CodexAppServer:
                 self.respond(
                     rid, {"thread": self.thread_obj(self.thread), **self.settings_result()}
                 )
+            elif os.environ.get("WB_STUB_CODEX_WRITER_BUSY"):
+                # Codex's own single-writer lock (e.g. the thread is open in the Codex app).
+                self.error(rid, f"thread-store conflict: thread {tid} already has an active writer")
             elif not (HOME / "codex" / str(tid)).exists():
                 self.error(rid, f"no rollout found for thread id {tid}")
             else:

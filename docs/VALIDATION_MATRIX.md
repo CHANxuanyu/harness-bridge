@@ -40,7 +40,26 @@ Codex sessions with handoff.
 | W27 | Attachments: images by content (PNG/JPEG/GIF/WebP) as Claude image blocks / Codex localImage, size limits, image-less models refused; files via Claude `@"path"` / Codex path list; chips in live and native history; `@` project file search; Claude `/` commands from initialize | T2-W stub + T1 + UI-offline | pass |
 | W28 | Codex requestUserInput (options, other, secret not stored), MCP elicitation form (required/type/enum validation) and URL mode; unrenderable shapes declined visibly; Claude AskUserQuestion free text | T2-W stub + T1 + UI-offline | pass |
 | UI | Native window real pixels: model picker, mode picker, confirmed settings + attachments + per-turn model, refused model, details "模型与权限", Codex selected-for-next-turn, question card, MCP form, Codex mode picker | Native-W | pass |
-| Real | W23–W28 with real accounts (≤ 6 short turns per harness, combined with W13–W20) | — | **not run** at the time of this entry |
+| Real | W23–W28 with real accounts (≤ 6 short turns per harness, combined with W13–W20) | — | run 2026-10-08, see below |
+
+## Real acceptance W6–W8 — 2026-10-08 (synthetic repo, user's logins, Claude 6/6 turns, Codex 6/6 turns)
+
+| ID | Check | Level | Result |
+|---|---|---|---|
+| W13r | Claude Code conversation view: streamed reply, Edit auto-applied in acceptEdits, real permission card (−/+ diff, CLI "remember" option) denied → file unchanged, tool shown declined, image block answered, history from the session transcript | T3-W | pass |
+| W14r | Codex conversation view: reply, workspace-write edit without approval, read-only write refused by the sandbox, localImage answered, history via app-server | T3-W | pass; **approval card not observed** (this machine's Codex `approvals_reviewer = auto_review`) |
+| W15r | View switch both harnesses: terminal launched with the chosen flags, back to conversation re-confirms settings, same native id, nothing sent | T3-W | pass (TUIs stopped at their own first-run prompts, not answered) |
+| W16r | App restart: view, native ids, choices and last confirmed values persist | T3-W | pass |
+| W17r | Open in the official desktop: Claude acknowledgement + same id in Claude Desktop's session list with full history; Codex App opens the same thread with full history | T4-W | pass |
+| W18r | Listed in the official app: Claude Desktop session list (`local_<id>`, title, folder); Codex App sidebar "Recents" | T4-W | pass |
+| W19r | Continue in the desktop app (one turn each), then refresh in RepoBridge shows it; Claude resumes natively afterwards | T4-W | pass; **Codex re-connect refused by Codex's own single-writer lock** while the thread stays open in the Codex App (reported, not forced) |
+| W23r | Model choice applied and host-confirmed (Claude get_settings / system/init / message_start; Codex thread/start, thread/read, rollout turn_context) | T3-W | pass; refusal path not met (no unavailable model in the real catalogs) |
+| W24r | Effort per model from the real catalogs; low applied and confirmed on both | T3-W | pass |
+| W25r | Claude acceptEdits / default; Codex read-only / workspace-write, per-turn sandbox in Codex's own rollout matches the choice | T3-W | pass |
+| W26r | Choices survive view switch and restart and are re-confirmed | T3-W | pass |
+| W27r | Images (both); Claude `@notes.md` expanded by the CLI as a file attachment | T3-W | pass; file attachments, clipboard/Finder/native picker not verified |
+| W28r | Codex questions / MCP forms / Claude AskUserQuestion | — | **not run** (need the model to raise them) |
+| Fix | Found during the run and fixed: toolbar view toggle always disabled (since W6), Codex mode wording vs. auto review, Codex writer-lock message, Claude Desktop wrappers in history | T2-W + static | pass |
 
 ## W5 workbench redesign — 2026-10-08
 

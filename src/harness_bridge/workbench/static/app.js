@@ -60,10 +60,15 @@ const S = {
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
+// Boolean attributes are present or absent: a falsy value such as 0 (SQLite flags) must not set
+// them (an attribute "disabled=0" still disables the element).
+const BOOL_ATTRS = new Set(['disabled', 'checked', 'selected', 'hidden', 'multiple', 'readonly', 'required', 'open', 'autofocus']);
+
 function h(tag, props, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(props || {})) {
     if (v === null || v === undefined || v === false) continue;
+    if (BOOL_ATTRS.has(k) && !v) continue;
     if (k === 'class') el.className = v;
     else if (k === 'text') el.textContent = v;
     else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
@@ -1014,7 +1019,7 @@ function viewToggle(s) {
   const busy = S.switching.has(s.session_id);
   return h('div', { class: 'seg-inline view-seg', role: 'radiogroup', 'aria-label': '视图' },
     [['conversation', '对话', 'chat', '对话视图：消息、工具调用和权限请求以卡片显示'], ['terminal', '终端', 'terminal', '终端视图：原生 CLI，与在终端中运行完全相同']].map(([v, l, ic, tip]) => h('button', {
-      type: 'button', role: 'radio', 'aria-checked': String(s.view_mode === v), 'aria-pressed': String(s.view_mode === v), disabled: busy || s.archived,
+      type: 'button', role: 'radio', 'aria-checked': String(s.view_mode === v), 'aria-pressed': String(s.view_mode === v), disabled: busy || !!s.archived,
       title: tip, onclick: (e) => { if (s.view_mode !== v) switchView(findSession(s.session_id), v, e.currentTarget); },
     }, icon(ic), h('span', { class: 'tb-label-2' }, l))));
 }
@@ -1889,7 +1894,8 @@ function settingsSection(s) {
   const stateText = (name) => fieldStateText(s, name);
   return h('div', { class: 'sect' }, h('h3', {}, '模型与权限'), h('div', { class: 'kv' },
     rows.map(([name, value]) => [h('div', { class: 'k' }, FIELD_NAME[name]), h('div', { class: 'v', title: fieldTitle(s, name, value) }, value, h('span', { class: 'hint' }, ` · ${stateText(name)}`))]),
-    st.turn_model ? [h('div', { class: 'k' }, '上一轮'), h('div', { class: 'v mono' }, st.turn_model)] : null),
+    st.turn_model ? [h('div', { class: 'k' }, '上一轮'), h('div', { class: 'v mono' }, st.turn_model)] : null,
+    st.actual.reviewer ? [h('div', { class: 'k' }, '审批人'), h('div', { class: 'v' }, (REVIEWER[st.actual.reviewer] || st.actual.reviewer).trim(), h('span', { class: 'hint' }, ' · Codex 设置'))] : null),
   h('div', { class: 'hint', style: 'margin-top:6px' }, s.view_mode === 'terminal'
     ? '终端视图里，单独选过的设置会作为启动参数传给 CLI；之后在终端里用 /model 等命令改动的，以终端显示为准。'
     : '在对话输入框下方选择。只有 CLI 回报后才显示为“已确认生效”。'));

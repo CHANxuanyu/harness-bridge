@@ -279,3 +279,20 @@ def test_history_shows_attachments_as_chips_and_the_model_of_each_reply(tmp_path
         ]
     )
     assert text == "读一下" and [c["name"] for c in chips] == ["b.png", "billing.log"]
+
+
+def test_history_hides_host_wrappers_added_by_claude_desktop() -> None:
+    from harness_bridge.workbench.conversation import _user_parts
+
+    content = (
+        "<system-reminder>\nThis conversation is now continuing in the Claude desktop app.\n"
+        "</system-reminder>\n"
+        '<cross-session-message from="local_x" name="other">\n请只回复：OK3\n'
+        "</cross-session-message>"
+    )
+    assert _user_parts(content) == ("请只回复：OK3", [])
+    assert _user_parts([{"type": "text", "text": "<system-reminder>x</system-reminder>hi"}]) == (
+        "hi",
+        [],
+    )
+    assert _user_parts("plain  text ") == ("plain  text", [])

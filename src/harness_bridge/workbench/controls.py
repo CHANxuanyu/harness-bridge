@@ -76,7 +76,7 @@ CODEX_MODES: list[dict[str, Any]] = [
     {
         "id": "read-only",
         "label": "只读",
-        "description": "可以读取文件、回答问题；修改文件或运行越界命令前先问你",
+        "description": "可以读取文件、回答问题；修改文件或运行越界命令需要审批",
         "approval": "on-request",
         "sandbox_mode": "read-only",
         "sandbox": {"type": "readOnly"},
@@ -84,7 +84,7 @@ CODEX_MODES: list[dict[str, Any]] = [
     {
         "id": "workspace",
         "label": "工作区可写",
-        "description": "可以在项目内修改文件、运行命令；越出工作区或联网时先问你",
+        "description": "可以在项目内修改文件、运行命令；越出工作区或联网需要审批",
         "approval": "on-request",
         "sandbox_mode": "workspace-write",
         "sandbox": {"type": "workspaceWrite"},

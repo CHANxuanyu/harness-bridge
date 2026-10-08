@@ -259,6 +259,23 @@ _CLAUDE_ATTACH_TAIL = re.compile(r'\s*附件：((?:@"[^"]+"\s*)+)$')
 _CODEX_ATTACH_TAIL = re.compile(r"\s*附件文件（请读取）：\n((?:- [^\n]+\n?)+)$")
 
 
+# Host-added wrappers in user turns (not typed by the user): Claude Desktop prepends a
+# <system-reminder> when a session continues there, and messages relayed from another session
+# arrive inside <cross-session-message>.
+_SYSTEM_REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>\s*", re.S)
+_CROSS_SESSION = re.compile(
+    r"<cross-session-message\b[^>]*>\s*(.*?)\s*</cross-session-message>", re.S
+)
+
+
+def _strip_host_wrappers(text: str) -> str:
+    if "<system-reminder>" in text:
+        text = _SYSTEM_REMINDER.sub("", text)
+    if "<cross-session-message" in text:
+        text = _CROSS_SESSION.sub(lambda m: m.group(1), text)
+    return text.strip()
+
+
 def _attachment_tail(text: str) -> tuple[str, list[dict[str, Any]]]:
     for pattern in (_CLAUDE_ATTACH_TAIL, _CODEX_ATTACH_TAIL):
         match = pattern.search(text)
@@ -277,7 +294,7 @@ def _attachment_tail(text: str) -> tuple[str, list[dict[str, Any]]]:
 def _user_parts(content: Any) -> tuple[str, list[dict[str, Any]]]:
     """User text plus attachment chips (images are shown as chips, never inlined as text)."""
     if isinstance(content, str):
-        return _attachment_tail(content)
+        return _attachment_tail(_strip_host_wrappers(content))
     texts: list[str] = []
     attachments: list[dict[str, Any]] = []
     for block in content if isinstance(content, list) else []:
@@ -293,7 +310,7 @@ def _user_parts(content: Any) -> tuple[str, list[dict[str, Any]]]:
             )
         elif btype == "document":
             attachments.append({"kind": "file", "name": str(block.get("title") or "文档")})
-    text, files = _attachment_tail("\n".join(texts))
+    text, files = _attachment_tail(_strip_host_wrappers("\n".join(texts)))
     return text, attachments + files
 
 

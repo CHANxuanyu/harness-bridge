@@ -693,6 +693,7 @@ class CodexAppServerSession(StructuredSession):
                     "effort": result.get("reasoningEffort", thread.get("reasoningEffort")),
                     "approval": result.get("approvalPolicy"),
                     "sandbox": result.get("sandbox"),
+                    "reviewer": result.get("approvalsReviewer"),
                 }
             )
             if self.spec.mode == "new":
@@ -703,7 +704,15 @@ class CodexAppServerSession(StructuredSession):
                 self.load_history()
         except StructuredError as exc:
             self.failure = str(exc)
-            self.cb.on_fatal(f"Codex app-server 未能就绪：{exc}")
+            if "active writer" in str(exc):
+                # Codex's own single-writer lock: the thread is still open elsewhere (typically
+                # the Codex app). RepoBridge never forces it.
+                self.cb.on_fatal(
+                    "这个 Codex 线程仍在别处打开（通常是 Codex App），Codex 只允许一个写入者："
+                    f"{exc}。请在 Codex App 中关闭这个对话或退出 Codex App 后再继续。"
+                )
+            else:
+                self.cb.on_fatal(f"Codex app-server 未能就绪：{exc}")
             return
         self.ready.set()
         self.cb.on_ready()

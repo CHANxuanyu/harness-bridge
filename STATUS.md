@@ -32,14 +32,28 @@ Codex model menu; a `.pill` class collision; `[object HTMLDivElement]` in Detail
 children also fixes the technical-details rows); misleading "not in effect" wording; attachment paths
 in history; native snapshots missing popups (animations frozen while the display sleeps).
 
-Checks: workbench tests 79 (21 new); Codex behaviour checked against the real 0.162 app-server with
+Checks: workbench tests 81 (23 new); Codex behaviour checked against the real 0.162 app-server with
 a local fake model endpoint (no account, no network); Claude Code control-protocol definitions read
 from the 2.1.291 binary; native-window screenshots `docs/screenshots/w8-*.jpg` (synthetic project,
 stub CLIs). Support categories (implemented-not-yet-real-verified / native-but-not-implemented /
 not-supported-or-not-offered) are listed in docs/WORKBENCH.md.
 
-**Not verified yet:** the same controls, attachments and forms with real accounts (the approved
-batch: ≤ 6 short turns per harness, combined with the W6/W7 checks).
+**Real acceptance (2026-10-08, approved batch, synthetic repo `~/rb-acceptance/demo`, your logins;
+Claude Code 6/6 turns, Codex 6/6 turns, nothing added).** Passed: real model catalogs (Claude 12
+models, Codex 7, each with its own effort levels); model/effort/mode chosen in the UI and confirmed by
+the CLIs themselves (Claude `get_settings` / `system/init` / per-turn API model; Codex
+`thread/start` / `thread/read` / `thread/resume`, and Codex's own rollout records match every turn);
+Claude acceptEdits vs. a real permission card denied; Codex workspace-write vs. read-only; images on
+both; Claude `@notes.md` expanded by the CLI; view switch both ways with the chosen flags and
+re-confirmation; App restart; open in Claude Desktop / Codex App with the right history, listed in
+both apps, one turn continued in each, history refreshed in RepoBridge; Claude resumed natively after.
+Recorded, not passed: no Codex approval card (this machine's Codex uses `approvals_reviewer =
+auto_review`); Codex refuses a RepoBridge re-connect while the thread stays open in the Codex App
+(its own single-writer lock — reported, not forced). Found and fixed during the run: the toolbar
+view toggle had been disabled since W6; Codex mode wording; the Codex writer-lock message; Claude
+Desktop wrappers in history. Not verified: account-refused models (none in the catalogs), Codex
+questions/MCP forms, file attachments, clipboard/Finder/native picker, the pywebview window with real
+sessions, terminal input (both TUIs stopped at their own first-run prompts, left for you).
 
 ## W6 conversation view + W7 official desktop continuation — 2026-10-08
 

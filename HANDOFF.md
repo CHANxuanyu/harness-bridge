@@ -30,9 +30,12 @@ Read [WORKBENCH.md](docs/WORKBENCH.md) (W8 sections, the three support categorie
   `codex-rpc.log` in WB_STUB_HOME) and honour acceptEdits/dontAsk. Offline Codex behaviour probe with a
   local fake Responses endpoint: scratch scripts only (not in the repo); results in DECISIONS 140.
 
-Real acceptance (approved batch, ≤ 6 short turns per harness including any already used): see
-WORKBENCH.md “W8 真实验收” combined with “W6/W7 真实验收”. Record results per item; do not re-count
-turns after fixes.
+Real acceptance ran on 2026-10-08 (results table in WORKBENCH.md “真实验收结果”; budget used up:
+Claude 6/6, Codex 6/6 — any further real check needs a new authorization). Open items from it: Codex
+approval card (needs `approvals_reviewer = user` in the user's Codex settings — never changed by
+RepoBridge); re-connecting after the Codex App still holds the thread (Codex's writer lock);
+questions/MCP forms and AskUserQuestion with a real model; file attachments and clipboard/Finder/native
+picker; the pywebview window with real sessions; terminal view after the CLIs' own first-run prompts.
 
 ## W6/W7 conversation view and desktop continuation done offline; real acceptance next — 2026-10-08
 

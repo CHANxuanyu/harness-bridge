@@ -17,6 +17,7 @@ const FIELD_STATE = {
   failed: '没有生效',
   launched: '已作为启动参数传给终端（终端里无法确认）',
 };
+const REVIEWER = { user: '你（在 RepoBridge 中确认）', auto_review: ' Codex 自动审查', guardian_subagent: ' Codex 审查子代理' };
 const SOURCE_TEXT = {
   get_settings: 'get_settings 读回', control_response: 'CLI 回应', 'system/init': '本轮启动信息',
   'thread/start': 'thread/start 结果', 'thread/resume': 'thread/resume 结果', 'thread/read': 'thread/read 读回',
@@ -229,10 +230,12 @@ function openModePicker(s, anchor) {
     items.push({ label: m.label, desc: m.description, checked: (st.chosen.mode || now.id) === m.id, disabled: !available, reason, action: () => chooseSetting(s, { mode: m.id }) });
   }
   const label = HARNESS[s.harness].label;
+  const reviewer = REVIEWER[st.actual.reviewer] || st.actual.reviewer;
   const foot = h('div', { class: 'picker-foot' }, h('div', { class: 'hint' },
     s.harness === 'codex'
       ? '这些是 Codex 的审批方式与沙箱组合；完全访问（不审批、不设沙箱）不在 RepoBridge 中提供。'
-      : `这些是 ${label} 自己的权限模式；跳过全部权限检查的模式不在 RepoBridge 中提供。`));
+      : `这些是 ${label} 自己的权限模式；跳过全部权限检查的模式不在 RepoBridge 中提供。`),
+  s.harness === 'codex' && reviewer ? h('div', { class: 'hint' }, `审批由${reviewer}处理（Codex 自己的 approvals_reviewer 设置，RepoBridge 不改动）。`) : null);
   picker(anchor, { title: '权限模式', items, footer: foot });
 }
 

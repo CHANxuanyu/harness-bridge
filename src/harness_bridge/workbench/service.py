@@ -1134,6 +1134,9 @@ class Workbench:
                 actual["mode_label"] = controls.describe_codex_mode(
                     report.get("approval"), report.get("sandbox")
                 )
+            if harness == CODEX and isinstance(report.get("reviewer"), str):
+                # Who answers approval requests is Codex's own setting (user / auto review).
+                actual["reviewer"] = report["reviewer"]
             if report.get("turn_model"):
                 st["turn_model"] = report["turn_model"]
             actual["at"] = _now()
