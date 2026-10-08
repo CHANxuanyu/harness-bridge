@@ -1,5 +1,25 @@
 # Status
 
+## Role split and next feature — 2026-10-09
+
+**Roles.**
+
+- Codex implements backend, protocols, storage and tests directly, and integrates.
+- Claude Code (Opus 5.5) owns the frontend, desktop interaction, visuals and UI testing, and verifies
+  the integrated interface.
+- Handoff point, file ownership and open items: HANDOFF.md, “Role split from here”.
+- Code baseline: `2f26d23` (full offline check passed).
+
+**Next feature.** Add an existing native Claude Code / Codex session created outside RepoBridge, then:
+
+- discover, preview, link, read history, continue;
+- continue in the official client;
+- return, read what was added there, and continue again.
+
+It links the same native session: no copy, no fork, no replayed messages. Native history stays
+authoritative; RepoBridge keeps only the link, needed caches and UI preferences. Report CLI-created,
+Desktop-created and cloud/other sources separately.
+
 ## W8 model / effort / permission-mode controls, attachments and native forms — 2026-10-08
 
 **Controls (W8).** Under the conversation input: permission mode, model and reasoning effort

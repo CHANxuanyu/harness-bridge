@@ -1,5 +1,125 @@
 # Handoff
 
+## Role split from here: Codex owns backend and integration, Opus owns frontend — 2026-10-09
+
+From this handoff point, Codex implements the backend, protocols, storage and tests directly, and
+integrates. Claude Code (Opus 5.5) owns the frontend, desktop interaction, visuals and UI testing, and
+verifies the real interface after integration. The GLM split is not restored. Verified work is kept,
+not rewritten. Opus makes no further backend, migration or public-interface changes until Codex
+publishes the minimal interface contract for the next feature.
+
+**Checkpoint.**
+
+- Frontend workspace (Opus, stays here, no branch switch):
+  `/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9`,
+  branch `claude/repobridge-product-direction-8e26f9`, pushed, draft
+  [PR #3](https://github.com/CHANxuanyu/harness-bridge/pull/3) into `claude/new-repo-plan-dn1eac`
+  (not merged).
+- Code baseline: `2f26d237e73cb8fdf0a94793036bfd60b15164c9`. Full `scripts/check.sh` passed on it
+  (ruff, format, strict mypy over 58 files, 942 tests in 17m34s, exit 0). The commit that adds this
+  section changes only `STATUS.md` and `HANDOFF.md`. Codex's backend worktree should start from that
+  commit, or from `2f26d23` (same code).
+- Do not branch the backend from the default branch: `claude/new-repo-plan-dn1eac` (`4eb1b21`) does not
+  yet contain W6–W8 (`db0b1d4`..`2f26d23`). If PR #3 is later squash-merged, rebase the backend branch
+  onto the new default branch.
+- Main checkout `/Users/chan/Downloads/harness-bridge` is on `local/glm-macos-validation` (`f2cd6e6`)
+  and clean. It is GLM-era work, not part of this split: do not switch, sync or reuse it.
+- Nothing left running from this workspace: no RepoBridge test instances, no background jobs, no stash
+  entries. Processes still running belong to the user's Claude/Codex desktop apps; leave them.
+
+**File ownership (one owner per file; ask the owner instead of editing).**
+
+| Owner | Files |
+|---|---|
+| Codex: backend, protocols, storage, tests, integration | `src/harness_bridge/**/*.py` except the two desktop-shell files below — notably workbench `service.py`, `store.py` (schema and migrations), `structured.py`, `conversation.py`, `controls.py`, `harness.py`, `desktop_apps.py`, `handoff.py`, `changes.py`, `relay.py`, `pty_host.py`, `prefs.py`, and `server.py` (its routes and JSON shapes are the public interface); `tests/**` including `tests/helpers/wb_stub.py`; `scripts/`, `pyproject.toml`, `uv.lock`; `AGENTS.md` (the role split is not yet written there), `docs/DECISIONS.md`, `docs/PROJECT_PLAN.md`, `docs/VALIDATION_MATRIX.md`; `STATUS.md` and `HANDOFF.md` from now on (integrator) |
+| Opus: frontend, desktop interaction, visuals, UI testing | `src/harness_bridge/workbench/static/**` (`app.js`, `composer.js`, `markdown.js`, `app.css`, `index.html`; `vendor/` unchanged); `docs/screenshots/**`; in `docs/WORKBENCH.md` the sections 界面, 设计原则 and 原生窗口集成 and the screenshot rows under 证据; new UI-only test files named `tests/**/test_workbench_ui_*.py` |
+| Proposed for Opus, Codex to confirm or change in its first contract note | `workbench/app.py` and `workbench/native_mac.py` (pywebview window, native panels and dev snapshot loop). Anything they expose to the page goes through `/api/native/*` in `server.py`, so a new native hook needs a route from Codex |
+
+Opus's frontend progress goes in its commit messages and PR description; Codex folds it into STATUS
+and HANDOFF at integration. A new UI preference key needs a whitelist entry in `prefs.py`, so Opus asks
+Codex for it.
+
+**What the frontend currently depends on (keep compatible, or announce the change in the contract).**
+
+- `GET /api/state` (snapshot, including `catalogs`) and the SSE stream `GET /api/stream`.
+- Sessions:
+  - `GET /api/sessions/<id>`, `…/activity`, `…/changes`, `…/conversation[?refresh]`,
+    `…/diff?path=`, `…/files?q=`, `…/output`.
+  - `POST /api/sessions` and `…/start|stop|send|input|interrupt|permission|settings|attachments|view`.
+  - `POST …/desktop/open|desktop/return|handoff|handoff/draft|rename|resize|archive|unarchive`.
+- Projects: `POST /api/projects`, `…/archive`, `…/reveal`.
+- Other routes:
+  - `POST /api/catalog/<harness>/refresh` and `/api/harnesses/refresh`;
+  - `POST /api/prefs`;
+  - `POST /api/native/*`;
+  - dev-only `/api/dev/snapshot|reload|resize`, used for native screenshots.
+- The session view's `settings` object (states selected / applying / confirmed / failed / launched)
+  and conversation items as produced by `conversation.py`.
+
+**Frontend needs for the next feature (input for Codex's contract, not a contract).** The feature:
+add an existing native session, preview it, read its history, continue it, continue in the official
+client, come back. The UI needs the following.
+
+- **Discovery list.** Filtered by harness and project, and only for projects the user allowed. It must
+  be paged. Each entry needs:
+  - native id and storage environment;
+  - source: CLI, official Desktop Code page, or cloud/other, with a resumable flag and the reason;
+  - title, updated time, working directory (exists or not, project or worktree match);
+  - already-linked (with the RepoBridge session id);
+  - whether it is in use elsewhere, or unknown.
+  - The list also needs a completeness flag (complete, or partial plus the reason).
+- **Preview.** The same item shape as `/conversation`, paged, with explicit states: loading, truly
+  empty, failed (reason), partial.
+- **Link and unlink.**
+  - Link must be idempotent on native id plus storage environment and must return the RepoBridge
+    session.
+  - Unlink keeps the native history.
+- **History paging.**
+  - A cursor to load older pages.
+  - A "since" refresh after the official client added turns.
+  - Stable item ids, so a refresh never duplicates messages.
+- **Progress.** SSE events for list and preview progress, or a documented polling rule.
+- **Boundary.** The frontend never reads vendor session files or databases itself.
+
+**Open items that affect both sides.**
+
+1. PR #3 (W6–W8) is still a draft. Merging it is the user's decision.
+2. Store schema revision 3 (`settings_json`, additive from 2) exists only on this branch, so the next
+   migration is 3 → 4. The user's own state directory has not been migrated. Their App runs an older
+   build, and the in-use state database must not be upgraded. Test migrations on copies or test state
+   directories.
+3. The real-turn budget for W6–W8 is used up (Claude Code 6/6, Codex 6/6). New real-message tests need
+   a new minimal batch approved by the user. Listing, preview, UI and offline work can proceed without
+   one.
+4. Implemented but not verified for real:
+   - an account-refused model;
+   - Codex approval card, questions and MCP forms;
+   - Claude AskUserQuestion;
+   - file (non-image) attachments;
+   - clipboard paste, Finder drag-in and the native open panel;
+   - the pywebview window with real sessions;
+   - terminal-view input (both CLIs stop at their own first-run prompts, which are left for the user).
+5. Two machine facts matter for "continue in the official client and come back".
+   - This machine's Codex uses `approvals_reviewer = auto_review`, so no approval card appears.
+   - Codex refuses a second writer while the Codex App holds the thread (`thread … already has an
+     active writer`). RepoBridge reports this and does not force it.
+6. Acceptance leftovers, left in place (nothing deleted):
+   - `~/rb-acceptance/demo`, whose `notes.md` has uncommitted edits;
+   - the state directory `~/rb-acceptance/state`;
+   - the native sessions titled "RepoBridge 验收 Claude" and "RepoBridge 验收 Codex".
+   These were created by RepoBridge, so they do not count as sessions created outside RepoBridge.
+7. Agent SDK distribution caveat for the Claude conversation view (DECISIONS 133).
+
+**Opus next (independent of the contract).**
+
+- Frontend visual and interaction work only, for example:
+  - long-history scrolling stability;
+  - drafts and focus kept across refreshes;
+  - empty, loading and error states that are distinct and honest.
+- Once Codex publishes the contract, build the add-existing-session dialog, the preview and the
+  history paging against it.
+- Verify the integrated real interface.
+
 ## W8 controls, attachments and native forms done offline; real acceptance next — 2026-10-08
 
 Read [WORKBENCH.md](docs/WORKBENCH.md) (W8 sections, the three support categories) and DECISIONS
