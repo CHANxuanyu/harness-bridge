@@ -324,7 +324,7 @@ def test_conversation_routes_stream_events_and_validation(served: tuple[WB, Clie
     status, _, body = client.request(
         "POST",
         f"/api/sessions/{sid}/permission",
-        {"request_id": perm["request_id"], "decision": "allow", "answers": {"q": 1}},
+        {"request_id": perm["request_id"], "decision": "allow", "answers": {"q": {"x": 1}}},
     )
     assert status == 400
     client.api(
@@ -351,3 +351,50 @@ def test_open_link_route_accepts_only_web_links(served: tuple[WB, Client]) -> No
     # A valid link still needs the native window (absent in tests): nothing is opened.
     status, _, _ = client.request("POST", "/api/native/open-url", {"url": "https://example.com/x"})
     assert status == 404
+
+
+def test_settings_attachment_file_and_catalog_routes(served: tuple[WB, Client]) -> None:
+    fx, client = served
+    client.login()
+    project = client.api("POST", "/api/projects", {"path": str(fx.repo)})
+    session = client.api(
+        "POST",
+        "/api/sessions",
+        {"project_id": project["project_id"], "harness": CLAUDE, "view_mode": "conversation"},
+    )
+    sid = session["session_id"]
+    wait_for(lambda: client.api("GET", "/api/state")["catalogs"][CLAUDE]["status"] == "ok")
+    view = client.api("POST", f"/api/sessions/{sid}/settings", {"model": "stub-sonnet"})
+    assert view["chosen"] == {"model": "stub-sonnet"}
+    status, _, _ = client.request("POST", f"/api/sessions/{sid}/settings", {"model": 3})
+    assert status == 400
+    status, _, body = client.request("POST", f"/api/sessions/{sid}/settings", {"effort": "max"})
+    assert status == 400 and "思考强度" in json.loads(body)["error"]["message"]
+
+    data = base64.b64encode(b"hello file\n").decode()
+    att = client.api("POST", f"/api/sessions/{sid}/attachments", {"name": "a.txt", "data": data})
+    assert att["kind"] == "file" and att["name"] == "a.txt" and "path" not in att
+    status, _, _ = client.request(
+        "POST", f"/api/sessions/{sid}/attachments", {"name": "a.txt", "data": "%%%"}
+    )
+    assert status == 400
+    # Uploads may exceed the normal 1 MB body limit; other routes may not.
+    big = base64.b64encode(b"x" * (2 << 20)).decode()
+    att = client.api("POST", f"/api/sessions/{sid}/attachments", {"name": "b.log", "data": big})
+    assert att["size"] == 2 << 20
+    try:
+        status, _, _ = client.request("POST", f"/api/sessions/{sid}/rename", {"title": big})
+    except (ConnectionResetError, BrokenPipeError):
+        status = 400  # refused before the body was read
+    assert status == 400
+
+    files = client.api("GET", f"/api/sessions/{sid}/files?q=read")
+    assert files[0]["path"] == "README.md"
+    assert client.api("POST", "/api/catalog/codex/refresh", {}) == {"probing": True}
+    status, _, _ = client.request("POST", "/api/catalog/other/refresh", {})
+    assert status == 404
+    status, _, _ = client.request(
+        "POST", f"/api/sessions/{sid}/send", {"text": "x", "attachments": "nope"}
+    )
+    assert status == 400
+    wait_for(lambda: client.api("GET", "/api/state")["catalogs"]["codex"]["status"] == "ok")

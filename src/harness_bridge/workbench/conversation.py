@@ -14,6 +14,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import threading
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
@@ -252,6 +253,50 @@ def _user_text(content: Any) -> str:
     return ""
 
 
+# The file references RepoBridge appends for attachments it stored (see service._claude_content
+# and _codex_content): shown as chips again when the message comes back from native history.
+_CLAUDE_ATTACH_TAIL = re.compile(r'\s*附件：((?:@"[^"]+"\s*)+)$')
+_CODEX_ATTACH_TAIL = re.compile(r"\s*附件文件（请读取）：\n((?:- [^\n]+\n?)+)$")
+
+
+def _attachment_tail(text: str) -> tuple[str, list[dict[str, Any]]]:
+    for pattern in (_CLAUDE_ATTACH_TAIL, _CODEX_ATTACH_TAIL):
+        match = pattern.search(text)
+        if match:
+            body = match.group(1)
+            if pattern is _CLAUDE_ATTACH_TAIL:
+                found = re.findall(r'@"([^"]+)"', body)
+            else:
+                found = [x[2:].strip() for x in body.splitlines() if x]
+            if found and all("/workbench/attachments/" in f for f in found):
+                chips = [{"kind": "file", "name": os.path.basename(f)} for f in found]
+                return text[: match.start()], chips
+    return text, []
+
+
+def _user_parts(content: Any) -> tuple[str, list[dict[str, Any]]]:
+    """User text plus attachment chips (images are shown as chips, never inlined as text)."""
+    if isinstance(content, str):
+        return _attachment_tail(content)
+    texts: list[str] = []
+    attachments: list[dict[str, Any]] = []
+    for block in content if isinstance(content, list) else []:
+        if not isinstance(block, dict):
+            continue
+        btype = block.get("type")
+        if btype == "text" and isinstance(block.get("text"), str):
+            texts.append(block["text"])
+        elif btype == "image":
+            source = _dict(block.get("source"))
+            attachments.append(
+                {"kind": "image", "name": "图片", "mime": source.get("media_type") or ""}
+            )
+        elif btype == "document":
+            attachments.append({"kind": "file", "name": str(block.get("title") or "文档")})
+    text, files = _attachment_tail("\n".join(texts))
+    return text, attachments + files
+
+
 def _command_notice(text: str) -> str | None:
     """Claude Code wraps slash commands and their local output in tags inside user turns."""
     stripped = text.strip()
@@ -290,12 +335,27 @@ class ClaudeTranslator:
         self.denied: set[str] = set()
 
     # A turn starts when the host sends a user message.
-    def begin_turn(self, client_id: str, text: str) -> str:
+    def begin_turn(
+        self,
+        client_id: str,
+        text: str,
+        attachments: list[dict[str, Any]] | None = None,
+        native_uuid: str | None = None,
+        echo_text: str | None = None,
+    ) -> str:
         self._turn_seq += 1
         turn_id = f"t{self._turn_seq}:{client_id}"
         self.interrupt_requested = False
         self.conv.upsert(
-            {"id": f"user:{client_id}", "type": "user", "text": text, "status": "sending"}
+            {
+                "id": f"user:{client_id}",
+                "type": "user",
+                "text": text,
+                "attachments": list(attachments or []),
+                "native_uuid": native_uuid,
+                "echo_text": echo_text if echo_text is not None else text,
+                "status": "sending",
+            }
         )
         self.conv.set_turn({"id": turn_id, "status": "running", "started_at": now()})
         return turn_id
@@ -513,12 +573,17 @@ class ClaudeTranslator:
                     }
                 )
             return
-        text = _user_text(content)
-        if not text:
+        text, attachments = _user_parts(content)
+        if not text and not attachments:
             return
-        # --replay-user-messages: the CLI acknowledges a message it accepted.
+        # --replay-user-messages: the CLI acknowledges a message it accepted (same uuid).
+        echoed = msg.get("uuid")
         pending = self.conv.find(
-            lambda i: i["type"] == "user" and i.get("status") == "sending" and i["text"] == text
+            lambda i: (
+                i["type"] == "user"
+                and i.get("status") == "sending"
+                and ((echoed and i.get("native_uuid") == echoed) or i.get("echo_text") == text)
+            )
         )
         if pending is not None:
             self.conv.upsert({"id": pending["id"], "status": "sent"})
@@ -535,6 +600,7 @@ class ClaudeTranslator:
                 "id": f"user:{msg.get('uuid') or now()}",
                 "type": "user",
                 "text": text,
+                "attachments": attachments,
                 "status": "sent",
             }
         )
@@ -583,17 +649,6 @@ class ClaudeTranslator:
             version = msg.get("claude_code_version") or msg.get("version")
             if version:
                 self.info["version"] = version
-            mode = msg.get("permissionMode")
-            if mode and mode != "default" and not self.info.get("mode_noticed"):
-                self.info["mode_noticed"] = True
-                self.conv.upsert(
-                    {
-                        "id": "n:permission-mode",
-                        "type": "notice",
-                        "text": f"Claude Code 当前权限模式：{_PERMISSION_MODES.get(mode, mode)}"
-                        "（来自 Claude Code 自己的设置）。",
-                    }
-                )
         elif sub == "api_retry":
             turn = (self.conv.turn or {}).get("id", "")
             self.conv.upsert(
@@ -726,17 +781,6 @@ def edit_diff(name: str, args: Mapping[str, Any]) -> str | None:
     return None
 
 
-_PERMISSION_MODES = {
-    "default": "默认（需要时询问）",
-    "acceptEdits": "自动接受编辑",
-    "plan": "计划模式",
-    "auto": "自动审查",
-    "dontAsk": "不询问（直接拒绝需要确认的操作）",
-    "bypassPermissions": "跳过权限检查",
-    "manual": "手动",
-}
-
-
 def claude_permission_response(
     decision: str,
     request: Mapping[str, Any],
@@ -783,6 +827,19 @@ def find_claude_transcript(env: Mapping[str, str], session_id: str) -> Path | No
 def claude_transcript_items(path: Path) -> list[Item]:
     items: dict[str, Item] = {}
     names: dict[str, str] = {}
+    # The model each reply came from (the API's own answer, recorded in the transcript).
+    turn: dict[str, Any] = {"uid": None, "model": None}
+
+    def close_turn() -> None:
+        if turn["uid"] and turn["model"]:
+            items[f"end:{turn['uid']}"] = {
+                "id": f"end:{turn['uid']}",
+                "type": "turn_end",
+                "status": "completed",
+                "model": turn["model"],
+            }
+        turn.update(uid=None, model=None)
+
     with open(path, "rb") as fh:
         data = fh.read(HISTORY_FILE_CAP + 1)
     truncated = len(data) > HISTORY_FILE_CAP
@@ -823,21 +880,24 @@ def claude_transcript_items(path: Path) -> list[Item]:
                         }
                     )
                 continue
-            text = _user_text(content)
-            if not text:
+            text, attachments = _user_parts(content)
+            if not text and not attachments:
                 continue
             notice = _command_notice(text)
             if notice is not None:
                 if notice:
                     items[f"n:{uid}"] = {"id": f"n:{uid}", "type": "notice", "text": notice}
                 continue
+            close_turn()
             items[f"user:{uid}"] = {
                 "id": f"user:{uid}",
                 "type": "user",
                 "text": text,
+                "attachments": attachments,
                 "status": "sent",
                 "time": stamp,
             }
+            turn["uid"] = uid
         elif kind == "assistant":
             if entry.get("isApiErrorMessage"):
                 items[f"n:{uid}"] = {
@@ -848,6 +908,8 @@ def claude_transcript_items(path: Path) -> list[Item]:
                     "time": stamp,
                 }
                 continue
+            if isinstance(message.get("model"), str) and message["model"] != "<synthetic>":
+                turn["model"] = message["model"]
             for i, block in enumerate(content if isinstance(content, list) else []):
                 if not isinstance(block, dict):
                     continue
@@ -883,6 +945,7 @@ def claude_transcript_items(path: Path) -> list[Item]:
                     }
         elif kind == "system" and entry.get("subtype") == "compact_boundary":
             items[f"n:{uid}"] = {"id": f"n:{uid}", "type": "notice", "text": "上下文已压缩"}
+    close_turn()
     out = list(items.values())
     if truncated:
         out.insert(
@@ -907,20 +970,25 @@ _CODEX_STATUS = {
 }
 
 
-def _user_inputs(content: Any) -> str:
+def _user_inputs(content: Any) -> tuple[str, list[dict[str, Any]]]:
     if not isinstance(content, list):
-        return ""
+        return "", []
     parts = []
+    attachments: list[dict[str, Any]] = []
     for entry in content:
         if not isinstance(entry, dict):
             continue
         if entry.get("type") == "text":
             parts.append(str(entry.get("text") or ""))
-        elif entry.get("type") in ("image", "localImage"):
-            parts.append("[图片]")
+        elif entry.get("type") == "localImage":
+            path = str(entry.get("path") or "")
+            attachments.append({"kind": "image", "name": os.path.basename(path) or "图片"})
+        elif entry.get("type") == "image":
+            attachments.append({"kind": "image", "name": "图片"})
         elif entry.get("type") in ("mention", "skill"):
             parts.append(f"@{entry.get('name')}")
-    return "\n".join(p for p in parts if p)
+    text, files = _attachment_tail("\n".join(p for p in parts if p))
+    return text, attachments + files
 
 
 def codex_item(item: Mapping[str, Any], *, client_ids: Mapping[str, str] | None = None) -> Item:
@@ -934,10 +1002,12 @@ def codex_item(item: Mapping[str, Any], *, client_ids: Mapping[str, str] | None 
             iid = client_ids[str(client)]
         else:
             iid = f"user:{iid}"
+        text, attachments = _user_inputs(item.get("content"))
         return {
             "id": iid,
             "type": "user",
-            "text": _user_inputs(item.get("content")),
+            "text": text,
+            "attachments": attachments,
             "status": "sent",
         }
     if kind == "agentMessage":
@@ -1086,11 +1156,19 @@ class CodexTranslator:
         self.turn_id: str | None = None
         self.interrupt_requested = False
 
-    def begin_turn(self, client_id: str, text: str) -> None:
+    def begin_turn(
+        self, client_id: str, text: str, attachments: list[dict[str, Any]] | None = None
+    ) -> None:
         self.client_ids[client_id] = f"user:{client_id}"
         self.interrupt_requested = False
         self.conv.upsert(
-            {"id": f"user:{client_id}", "type": "user", "text": text, "status": "sending"}
+            {
+                "id": f"user:{client_id}",
+                "type": "user",
+                "text": text,
+                "attachments": list(attachments or []),
+                "status": "sending",
+            }
         )
         self.conv.set_turn({"id": None, "status": "starting", "started_at": now()})
 
@@ -1243,6 +1321,63 @@ class CodexTranslator:
                     ],
                 }
             )
+        if method == "item/tool/requestUserInput":
+            questions = []
+            for q in params.get("questions") or []:
+                if not isinstance(q, dict) or not q.get("id"):
+                    continue
+                options = [
+                    {
+                        "label": str(o.get("label") or ""),
+                        "description": str(o.get("description") or ""),
+                    }
+                    for o in q.get("options") or []
+                    if isinstance(o, dict)
+                ]
+                questions.append(
+                    {
+                        "id": str(q["id"]),
+                        "header": str(q.get("header") or ""),
+                        "question": str(q.get("question") or ""),
+                        "options": options,
+                        "multiSelect": False,
+                        "other": bool(q.get("isOther")) or not options,
+                        "secret": bool(q.get("isSecret")),
+                    }
+                )
+            if not questions:
+                return None
+            return self.conv.upsert(
+                {
+                    **base,
+                    "kind": "question",
+                    "tool": "提问",
+                    "title": "Codex 想问你",
+                    "detail": "",
+                    "questions": questions,
+                    "answer_key": "id",
+                    "options": [{"id": "deny", "label": "不回答"}],
+                }
+            )
+        if method == "mcpServer/elicitation/request":
+            form = elicitation_form(params)
+            if form is None:
+                return None
+            return self.conv.upsert(
+                {
+                    **base,
+                    "kind": "form",
+                    "tool": f"MCP · {params.get('serverName') or ''}",
+                    "title": str(params.get("message") or "MCP 服务器请求信息")[:600],
+                    "detail": "",
+                    "form": form,
+                    "options": [
+                        {"id": "accept", "label": "提交" if form["mode"] == "form" else "已完成"},
+                        {"id": "decline", "label": "拒绝"},
+                        {"id": "cancel", "label": "取消"},
+                    ],
+                }
+            )
         if method == "item/permissions/requestApproval":
             return self.conv.upsert(
                 {
@@ -1261,9 +1396,120 @@ class CodexTranslator:
         return None
 
 
+_ELICIT_TYPES = ("string", "number", "integer", "boolean")
+
+
+def elicitation_form(params: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The MCP elicitation as a simple form, or None when it uses a shape RepoBridge cannot show.
+
+    Supports the MCP form mode (flat object of string/number/integer/boolean/enum fields) and
+    the URL mode (open a link, then report done/declined).
+    """
+    mode = params.get("mode")
+    if mode == "url":
+        url = str(params.get("url") or "")
+        if not url.startswith(("https://", "http://")):
+            return None
+        return {"mode": "url", "url": url, "fields": []}
+    if mode != "form":
+        return None
+    schema = _dict(params.get("requestedSchema"))
+    props = _dict(schema.get("properties"))
+    required = set(schema.get("required") or [])
+    fields = []
+    for name, raw in props.items():
+        spec = _dict(raw)
+        ftype = spec.get("type")
+        choices: list[dict[str, str]] = []
+        if isinstance(spec.get("enum"), list):
+            names = spec.get("enumNames")
+            labels: list[Any] = names if isinstance(names, list) else []
+            for i, value in enumerate(spec["enum"]):
+                label = labels[i] if i < len(labels) else value
+                choices.append({"value": str(value), "label": str(label)})
+        elif isinstance(spec.get("oneOf"), list):
+            for opt in spec["oneOf"]:
+                if isinstance(opt, dict) and "const" in opt:
+                    choices.append(
+                        {"value": str(opt["const"]), "label": str(opt.get("title") or opt["const"])}
+                    )
+        elif ftype == "array":
+            return None
+        if ftype not in _ELICIT_TYPES:
+            return None
+        fields.append(
+            {
+                "name": str(name),
+                "type": ftype,
+                "title": str(spec.get("title") or name),
+                "description": str(spec.get("description") or ""),
+                "required": name in required,
+                "default": spec.get("default"),
+                "choices": choices,
+                "minimum": spec.get("minimum"),
+                "maximum": spec.get("maximum"),
+                "format": spec.get("format"),
+            }
+        )
+    return {"mode": "form", "url": None, "fields": fields}
+
+
+def _elicitation_content(form: Mapping[str, Any], answers: Mapping[str, Any]) -> dict[str, Any]:
+    content: dict[str, Any] = {}
+    for field in form.get("fields") or []:
+        name = field["name"]
+        value = answers.get(name)
+        if value is None or value == "":
+            if field["required"]:
+                raise ValueError(f"「{field['title']}」是必填项")
+            continue
+        if field["type"] == "boolean":
+            content[name] = bool(value) if isinstance(value, bool) else str(value) == "true"
+        elif field["type"] in ("number", "integer"):
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                raise ValueError(f"「{field['title']}」需要数字") from None
+            if field["type"] == "integer":
+                if not number.is_integer():
+                    raise ValueError(f"「{field['title']}」需要整数")
+                content[name] = int(number)
+            else:
+                content[name] = number
+        else:
+            text = str(value)
+            if field["choices"] and text not in {c["value"] for c in field["choices"]}:
+                raise ValueError(f"「{field['title']}」的选项无效")
+            content[name] = text
+    return content
+
+
 def codex_permission_response(
-    method: str, decision: str, params: Mapping[str, Any]
+    method: str,
+    decision: str,
+    params: Mapping[str, Any],
+    answers: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if method == "item/tool/requestUserInput":
+        if decision == "deny":
+            return {"answers": {}}
+        out: dict[str, Any] = {}
+        for q in params.get("questions") or []:
+            if not isinstance(q, dict) or not q.get("id"):
+                continue
+            value = (answers or {}).get(str(q["id"]))
+            values = value if isinstance(value, list) else ([value] if value else [])
+            out[str(q["id"])] = {"answers": [str(v) for v in values if str(v)]}
+        if not any(entry["answers"] for entry in out.values()):
+            raise ValueError("请至少回答一个问题，或选择不回答")
+        return {"answers": out}
+    if method == "mcpServer/elicitation/request":
+        if decision != "accept":
+            return {"action": decision}
+        form = elicitation_form(params) or {"mode": "form", "fields": []}
+        if form["mode"] == "url":
+            return {"action": "accept"}
+        return {"action": "accept", "content": _elicitation_content(form, answers or {})}
     if method == "item/permissions/requestApproval":
         if decision == "deny":
             return {"permissions": {}}

@@ -16,8 +16,10 @@ import base64
 import contextlib
 import hashlib
 import json
+import mimetypes
 import os
 import queue
+import re
 import shutil
 import signal
 import subprocess
@@ -31,7 +33,7 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 from harness_bridge.errors import BridgeError
-from harness_bridge.workbench import changes, desktop_apps, handoff
+from harness_bridge.workbench import changes, controls, desktop_apps, handoff
 from harness_bridge.workbench.conversation import Conversation
 from harness_bridge.workbench.harness import (
     CLAUDE,
@@ -69,6 +71,7 @@ from harness_bridge.workbench.structured import (
     StructuredError,
     StructuredSession,
     build_structured,
+    probe_catalog,
     read_claude_history,
     read_codex_history,
 )
@@ -77,6 +80,29 @@ _PERMISSION_WORDS = ("permission", "approval", "approve", "权限", "批准")
 _CLEARS_ATTENTION = {"PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop", "UserPromptSubmit"}
 VIEWS = ("terminal", "conversation")
 MAX_MESSAGE = 100_000
+MAX_ATTACHMENTS = 10
+IMAGE_LIMIT = {CLAUDE: 5 << 20, CODEX: 20 << 20}
+FILE_LIMIT = 10 << 20
+_IMAGE_MAGIC = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+)
+FIELD_LABEL = {"model": "模型", "effort": "思考强度", "mode": "权限模式"}
+# Which host reports may overrule a choice (a mismatch there means the choice did not apply).
+AUTHORITATIVE = {
+    CLAUDE: {
+        "model": ("get_settings", "system/init"),
+        "effort": ("get_settings",),
+        "mode": ("control_response", "system/init"),
+    },
+    CODEX: {
+        "model": ("thread/start", "thread/resume", "thread/read"),
+        "effort": ("thread/start", "thread/resume", "thread/read"),
+        "mode": ("thread/start", "thread/resume"),
+    },
+}
 
 
 @dataclass
@@ -97,6 +123,14 @@ class LiveRun:
     structured: StructuredSession | None = None
     conv: Conversation | None = None
     release_reason: str | None = None
+    # Set once the settings chosen for this session were sent and read back after connecting.
+    settings_ready: threading.Event = field(default_factory=threading.Event)
+    apply_lock: threading.Lock = field(default_factory=threading.Lock)
+    turn_model: str | None = None
+    # Choices the harness refused while connecting; the next send reports them instead of
+    # going out with the previous value.
+    connect_failures: list[str] = field(default_factory=list)
+    applying: bool = False
 
     def terminate(self, grace: float) -> None:
         if self.structured is not None:
@@ -139,6 +173,7 @@ class Workbench:
         (self.root / "runs").mkdir(parents=True, exist_ok=True)
         (self.root / "handoffs").mkdir(parents=True, exist_ok=True)
         (self.root / "history").mkdir(parents=True, exist_ok=True)
+        (self.root / "attachments").mkdir(parents=True, exist_ok=True)
         self.store = WorkbenchStore(state_dir / "workbench.sqlite3")
         self.prefs = Prefs(self.root / "prefs.json")
         # Native window hooks (title, appearance, folder picker), set by ``hbridge app`` when a
@@ -158,6 +193,10 @@ class Workbench:
         self._apps: dict[str, desktop_apps.DesktopApp] | None = None
         self._history_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._session_locks: dict[str, threading.Lock] = {}
+        self._settings_lock = threading.RLock()
+        self._catalogs: dict[str, dict[str, Any]] = {}
+        self._catalog_probes: set[str] = set()
+        self._file_index: dict[str, tuple[float, list[str]]] = {}
         self._dirty = threading.Event()
         self._closing = threading.Event()
         self.reconcile()
@@ -247,6 +286,7 @@ class Workbench:
             "desktop_apps": {
                 k: {"label": a.label, "version": a.version} for k, a in self.desktop_apps().items()
             },
+            "catalogs": {h: self._catalog_summary(h) for h in HARNESSES},
             "environment": {
                 "refusal": environment_refusal(self.base_env),
                 "stripped_env": stripped_billing_env(self.base_env),
@@ -265,7 +305,7 @@ class Workbench:
         raw_external = session.get("external_json")
         external = _loads(raw_external) if isinstance(raw_external, str) else None
         view = {
-            **{k: v for k, v in session.items() if k != "external_json"},
+            **{k: v for k, v in session.items() if k not in ("external_json", "settings_json")},
             "harness_label": LABELS.get(session["harness"], session["harness"]),
             "status": status,
             "active": active,
@@ -280,6 +320,7 @@ class Workbench:
             "can_start_fresh": (not active) and session["turns_observed"] == 0,
             "external": external,
             "desktop": self._desktop_capability(session),
+            "settings": self._settings_view(session, live),
             "run": None,
         }
         if run is not None:
@@ -316,7 +357,9 @@ class Workbench:
             live = self._live.get(session_id)
         info = dict(live.structured.info) if live and live.structured else {}
         return {
-            "session": {k: v for k, v in session.items() if k != "external_json"},
+            "session": {
+                k: v for k, v in session.items() if k not in ("external_json", "settings_json")
+            },
             "structured_info": {k: v for k, v in info.items() if k != "mode_noticed"},
             "runs": [
                 {k: v for k, v in r.items() if k not in ("argv_json", "stripped_env_json")}
@@ -505,6 +548,7 @@ class Workbench:
             run_dir=run_dir,
             config=self.config,
             base_env=self.base_env,
+            settings=self._settings_of(session)["chosen"],
         )
         self._admit(
             run_id, session_id, kind, workdir, native_argv(spec), spec.stripped_env, run_dir
@@ -546,6 +590,7 @@ class Workbench:
                 "handoff_prompt": initial_prompt is not None,
             },
         )
+        self._settings_disconnected(session_id, launched=True)
         self._changed()
         return self.store.get_run(run_id) or {}
 
@@ -639,12 +684,20 @@ class Workbench:
             on_activity=lambda record: self._record(live, {"source": "structured", **record}),
             on_exit=lambda info: self._on_exit(live, info),
             on_fatal=lambda message: self._structured_fatal(live, message),
+            on_settings=lambda report: self._on_settings(live, report),
+            on_catalog=lambda payload: self._store_catalog(harness, payload),
         )
+        chosen = dict(self._settings_of(session)["chosen"])
         structured: StructuredSession
         if harness == CLAUDE:
             structured = ClaudeStreamSession(spec, run_dir, conv, callbacks)
         else:
             structured = CodexAppServerSession(spec, run_dir, conv, callbacks)
+            # Codex takes the choices as thread/start or thread/resume parameters.
+            structured.connect_settings = chosen
+            if chosen:
+                self._mark_fields(sid, list(chosen), "applying")
+            live.settings_ready.set()
         live.structured = structured
         # History first (the native store), so the view shows the same session immediately.
         if kind == "resume" and harness == CLAUDE and native_id:
@@ -660,6 +713,10 @@ class Workbench:
             structured.start()
         except OSError as exc:
             self._launch_failed(live, exc)
+        if harness == CLAUDE:
+            threading.Thread(
+                target=self._connect_settings, args=(live,), name="settings", daemon=True
+            ).start()
         self.store.mark_running(
             run_id, pid=structured.pid, pgid=structured.pid, birth=process_birth(structured.pid)
         )
@@ -718,7 +775,15 @@ class Workbench:
         else:
             live.phase = "waiting"
             live.attention = None
+            if live.conv is not None and live.turn_model:
+                ends = [i for i in live.conv.items() if i["type"] == "turn_end"]
+                if ends and not ends[-1].get("model"):
+                    live.conv.upsert({"id": ends[-1]["id"], "model": live.turn_model})
+            live.turn_model = None
             self._save_conversation(live)
+            if live.harness == CLAUDE and self._pending_fields(live.session_id):
+                # Choices made during the turn take effect now, before the next message.
+                threading.Thread(target=self._apply_pending, args=(live,), daemon=True).start()
         self._changed()
 
     def _structured_fatal(self, live: LiveRun, message: str) -> None:
@@ -740,6 +805,532 @@ class Workbench:
         except OSError:
             pass
 
+    # --- model catalogs -------------------------------------------------------------------------
+
+    def _catalog_path(self, harness: str) -> Path:
+        return self.root / f"catalog-{harness}.json"
+
+    def catalog(self, harness: str) -> dict[str, Any] | None:
+        """The harness's own model/effort/mode catalog (last one it reported, cached on disk)."""
+        with self._lock:
+            cached = self._catalogs.get(harness)
+        if cached is None:
+            try:
+                loaded = json.loads(self._catalog_path(harness).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                loaded = None
+            if isinstance(loaded, dict) and loaded.get("harness") == harness:
+                cached = loaded
+                with self._lock:
+                    self._catalogs[harness] = loaded
+        return cached
+
+    def _catalog_summary(self, harness: str) -> dict[str, Any]:
+        catalog = self.catalog(harness)
+        info = self._harnesses.get(harness)
+        probing = harness in self._catalog_probes
+        if catalog is None:
+            return {"status": "probing" if probing else "missing", "harness": harness}
+        stale = bool(
+            info is not None
+            and info.version
+            and catalog.get("cli_version")
+            and catalog["cli_version"] != info.version
+        )
+        status = "probing" if probing else ("error" if catalog.get("error") else "ok")
+        return {**catalog, "status": status, "stale": stale}
+
+    def _store_catalog(self, harness: str, payload: Mapping[str, Any]) -> None:
+        info = self._harnesses.get(harness)
+        version = info.version if info else None
+        if payload.get("error"):
+            previous = self.catalog(harness) or {"harness": harness, "models": [], "modes": []}
+            catalog = {**previous, "error": str(payload["error"])}
+        elif harness == CLAUDE:
+            catalog = controls.claude_catalog(payload, cli_version=version)
+        else:
+            catalog = controls.codex_catalog(
+                list(payload.get("models") or []),
+                payload.get("requirements"),
+                cli_version=version,
+            )
+        if not payload.get("error"):
+            catalog["fetched_at"] = _now()
+        path = self._catalog_path(harness)
+        try:
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(catalog, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, path)
+        except OSError:
+            pass
+        with self._lock:
+            self._catalogs[harness] = catalog
+        self._changed()
+
+    def refresh_catalog(self, harness: str, session_id: str | None = None) -> dict[str, Any]:
+        """Ask the CLI for its catalog with a short-lived process: no session, no turn."""
+        if harness not in HARNESSES:
+            raise BridgeError("INVALID_INPUT", f"unknown harness {harness!r}")
+        workdir = self.base_env.get("HOME") or os.path.expanduser("~")
+        if session_id:
+            workdir = self._session(session_id)["workdir"]
+        with self._lock:
+            if harness in self._catalog_probes:
+                return {"probing": True}
+            self._catalog_probes.add(harness)
+        self._changed()
+        threading.Thread(
+            target=self._probe_catalog, args=(harness, workdir), name="catalog", daemon=True
+        ).start()
+        return {"probing": True}
+
+    def _probe_catalog(self, harness: str, workdir: str) -> None:
+        scratch = self.root / "history" / ("catalog-" + uuid.uuid4().hex[:8])
+        try:
+            info = self._preflight(harness)
+            assert info.binary is not None
+            scratch.mkdir(parents=True, exist_ok=True)
+            payload = probe_catalog(harness, info.binary, workdir, self.base_env, scratch)
+            self._store_catalog(harness, payload)
+        except (BridgeError, StructuredError, OSError) as exc:
+            message = exc.message if isinstance(exc, BridgeError) else str(exc)
+            self._store_catalog(harness, {"error": f"无法取得模型目录：{message}"})
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+            with self._lock:
+                self._catalog_probes.discard(harness)
+            self._changed()
+
+    # --- model / effort / permission settings ---------------------------------------------------
+
+    @staticmethod
+    def _settings_of(session: Mapping[str, Any]) -> dict[str, Any]:
+        raw = session.get("settings_json")
+        try:
+            loaded = json.loads(raw) if isinstance(raw, str) and raw else None
+        except ValueError:
+            loaded = None
+        return controls.normalise(loaded)
+
+    def _settings_view(self, session: Mapping[str, Any], live: LiveRun | None) -> dict[str, Any]:
+        st = self._settings_of(session)
+        actual = dict(st["actual"])
+        actual["live"] = bool(
+            live is not None and live.structured is not None and actual.get("live")
+        )
+        return {
+            "chosen": st["chosen"],
+            "fields": st["fields"],
+            "actual": actual,
+            "turn_model": st.get("turn_model"),
+            "notices": st["notices"][-3:],
+        }
+
+    def _update_settings(
+        self, session_id: str, fn: Callable[[dict[str, Any], dict[str, Any]], None]
+    ) -> dict[str, Any] | None:
+        """Read-modify-write a session's settings under one lock."""
+        with self._settings_lock:
+            session = self.store.get_session(session_id)
+            if session is None:
+                return None
+            st = self._settings_of(session)
+            fn(st, session)
+            self.store.set_settings(session_id, st)
+        self._changed()
+        return st
+
+    def choose_settings(self, session_id: str, changes: Mapping[str, Any]) -> dict[str, Any]:
+        """Record the user's choice; apply it now when that is safe, else on the next turn."""
+        if not changes or any(k not in controls.FIELDS for k in changes):
+            raise BridgeError("INVALID_INPUT", "settings: model, effort and/or mode")
+        session = self._session(session_id)
+        harness = session["harness"]
+        catalog = self.catalog(harness)
+        with self._settings_lock:
+            st = self._settings_of(self._session(session_id))
+            try:
+                chosen, notices = controls.validate_choice(catalog, st, changes, harness=harness)
+            except controls.ChoiceError as exc:
+                raise BridgeError("INVALID_INPUT", str(exc)) from None
+            previous = dict(st["chosen"])
+            changed = [f for f in controls.FIELDS if chosen.get(f) != previous.get(f)]
+
+            def record(st: dict[str, Any], _s: dict[str, Any]) -> None:
+                for f in changed:
+                    rec = {
+                        "state": "selected",
+                        "value": chosen.get(f),
+                        "previous": previous.get(f),
+                        "at": _now(),
+                        "error": None,
+                    }
+                    if f not in changes and "model" in changes:
+                        # Adjusted only because of the new model: it stands or falls with it.
+                        rec["depends_on"] = "model"
+                        rec["prior"] = st["fields"].get(f)
+                    st["fields"][f] = rec
+                st["chosen"] = chosen
+                st["notices"] = (st["notices"] + [{"text": n, "at": _now()} for n in notices])[-5:]
+
+            self._update_settings(session_id, record)
+        if changed:
+            self.store.add_event(
+                session_id, None, "settings_chosen", {f: chosen.get(f) for f in changed}
+            )
+        with self._lock:
+            live = self._live.get(session_id)
+        if (
+            changed
+            and live is not None
+            and live.structured is not None
+            and live.harness == CLAUDE
+            and not live.structured.busy
+            and live.settings_ready.is_set()
+        ):
+            threading.Thread(target=self._apply_pending, args=(live,), daemon=True).start()
+        self._changed()
+        return self._settings_view(self._session(session_id), live)
+
+    def _pending_fields(self, session_id: str) -> dict[str, Any]:
+        session = self._session(session_id)
+        st = self._settings_of(session)
+        return {
+            f: rec.get("value")
+            for f, rec in st["fields"].items()
+            if isinstance(rec, dict) and rec.get("state") == "selected"
+        }
+
+    def _apply_pending(self, live: LiveRun) -> list[str]:
+        """Claude Code: send the selected fields as control requests; return failure texts."""
+        if live.structured is None:
+            return []
+        with live.apply_lock:
+            pending = self._pending_fields(live.session_id)
+            if not pending:
+                return []
+            failures = self._apply_now(live, pending) + live.connect_failures
+            live.connect_failures = []
+            return failures
+
+    def _apply_now(self, live: LiveRun, fields: Mapping[str, Any]) -> list[str]:
+        """Send, record refusals with the harness's own words, then read the result back."""
+        structured = live.structured
+        assert structured is not None
+        self._mark_fields(live.session_id, list(fields), "applying")
+        live.applying = True
+        try:
+            rest = dict(fields)
+            failures: list[str] = []
+            if "model" in rest:
+                # The model first: changes made only because of it must not apply without it.
+                failures = self._settle(
+                    live, structured.apply_settings({"model": rest.pop("model")})
+                )
+                if failures:
+                    rest = {f: v for f, v in rest.items() if f not in self._revert_dependents(live)}
+            if rest:
+                failures += self._settle(live, structured.apply_settings(rest))
+            if isinstance(structured, ClaudeStreamSession):
+                structured.read_settings()
+            return failures
+        finally:
+            live.applying = False
+
+    def _revert_dependents(self, live: LiveRun) -> set[str]:
+        reverted: set[str] = set()
+
+        def revert(st: dict[str, Any], _s: dict[str, Any]) -> None:
+            for f, rec in list(st["fields"].items()):
+                if isinstance(rec, dict) and rec.get("depends_on") == "model":
+                    if rec.get("previous") is None:
+                        st["chosen"].pop(f, None)
+                    else:
+                        st["chosen"][f] = rec["previous"]
+                    prior = rec.get("prior")
+                    if isinstance(prior, dict):
+                        st["fields"][f] = prior
+                    else:
+                        st["fields"].pop(f, None)
+                    st["notices"] = (
+                        st["notices"]
+                        + [{"text": f"模型没有切换，{FIELD_LABEL[f]}保持原样", "at": _now()}]
+                    )[-5:]
+                    reverted.add(f)
+
+        self._update_settings(live.session_id, revert)
+        return reverted
+
+    def _settle(self, live: LiveRun, results: Mapping[str, Mapping[str, Any]]) -> list[str]:
+        failures: list[str] = []
+
+        def settle(st: dict[str, Any], _s: dict[str, Any]) -> None:
+            for f, res in results.items():
+                rec = st["fields"].get(f)
+                if not isinstance(rec, dict) or rec.get("state") != "applying":
+                    continue
+                if not res.get("ok"):
+                    text = (
+                        f"{LABELS[live.harness]} 没有接受{FIELD_LABEL[f]}设置：{res.get('error')}"
+                    )
+                    self._fail_field(st, f, text)
+                    failures.append(text)
+                elif res.get("pending"):
+                    rec["note"] = "下一轮发送时生效"
+                    rec["state"] = "selected"
+                else:
+                    rec["note"] = "CLI 已接受，等待它报告生效值"
+
+        self._update_settings(live.session_id, settle)
+        return failures
+
+    def _mark_fields(self, session_id: str, fields: list[str], state: str) -> None:
+        def mark(st: dict[str, Any], _s: dict[str, Any]) -> None:
+            for f in fields:
+                rec = st["fields"].setdefault(f, {"value": st["chosen"].get(f)})
+                rec.update(state=state, at=_now(), error=None, note=None)
+
+        self._update_settings(session_id, mark)
+
+    @staticmethod
+    def _fail_field(st: dict[str, Any], f: str, error: str) -> None:
+        rec = st["fields"].setdefault(f, {})
+        rec.update(state="failed", error=error, attempted=rec.get("value"), at=_now())
+        previous = rec.get("previous")
+        # The harness keeps the old value; never pretend the new one is in force.
+        if previous is None:
+            st["chosen"].pop(f, None)
+        else:
+            st["chosen"][f] = previous
+        rec["value"] = previous
+
+    def _on_settings(self, live: LiveRun, report: Mapping[str, Any]) -> None:
+        """A host report of what is actually in effect; confirms or fails pending choices."""
+        source = str(report.get("source") or "")
+        harness = live.harness
+        catalog = self.catalog(harness)
+        derived: dict[str, Any] = {}
+        if isinstance(report.get("model"), str) and report["model"]:
+            derived["model"] = report["model"]
+        if "effort" in report:
+            derived["effort"] = report.get("effort")
+        if harness == CLAUDE and isinstance(report.get("mode"), str):
+            derived["mode"] = "default" if report["mode"] == "manual" else report["mode"]
+        if harness == CODEX and report.get("approval") is not None:
+            derived["mode"] = (
+                controls.codex_mode_of(report.get("approval"), report.get("sandbox")) or "other"
+            )
+        if report.get("turn_model"):
+            live.turn_model = str(report["turn_model"])
+        error = report.get("error")
+
+        def apply(st: dict[str, Any], _s: dict[str, Any]) -> None:
+            actual = st["actual"]
+            sources = actual.setdefault("sources", {})
+            for key, value in derived.items():
+                actual[key] = value
+                sources[key] = source
+            if harness == CODEX and "mode" in derived:
+                actual["mode_label"] = controls.describe_codex_mode(
+                    report.get("approval"), report.get("sandbox")
+                )
+            if report.get("turn_model"):
+                st["turn_model"] = report["turn_model"]
+            actual["at"] = _now()
+            actual["live"] = True
+            for f, rec in st["fields"].items():
+                if not isinstance(rec, dict) or rec.get("state") != "applying":
+                    continue
+                if error:
+                    # The turn never started, so nothing was applied (or refused): retry later.
+                    rec.update(
+                        state="selected", note=f"这一轮没有开始（{error}）；下次发送时再应用"
+                    )
+                    continue
+                if f not in derived:
+                    continue
+                want, got = rec.get("value"), derived[f]
+                if self._setting_matches(harness, catalog, f, want, got):
+                    rec.update(state="confirmed", source=source, at=_now(), note=None)
+                elif source in AUTHORITATIVE[harness].get(f, ()):
+                    text = (
+                        f"{LABELS[harness]} 报告当前{FIELD_LABEL[f]}为 {got or '默认'}，"
+                        f"不是所选的 {want or '默认'}"
+                    )
+                    self._fail_field(st, f, text)
+                    if live.applying:
+                        live.connect_failures.append(text)
+
+        self._update_settings(live.session_id, apply)
+
+    @staticmethod
+    def _setting_matches(
+        harness: str, catalog: Mapping[str, Any] | None, f: str, want: Any, got: Any
+    ) -> bool:
+        if f == "model":
+            return want is None or controls.model_matches(catalog, str(want), got)
+        if f == "effort":
+            return want is None or want == got
+        if want is None:
+            return harness == CODEX or got == "default"
+        return bool(want == got)
+
+    def _connect_settings(self, live: LiveRun) -> None:
+        """Claude Code: after the handshake, apply this session's choices and read them back."""
+        structured = live.structured
+        if not isinstance(structured, ClaudeStreamSession):
+            live.settings_ready.set()
+            return
+        try:
+            structured.wait_initialized(30)
+            chosen = dict(self._settings_of(self._session(live.session_id))["chosen"])
+            if chosen:
+                with live.apply_lock:
+                    live.connect_failures += self._apply_now(live, chosen)
+            else:
+                structured.read_settings()
+        except (BridgeError, StructuredError, OSError):
+            pass
+        finally:
+            live.settings_ready.set()
+            self._changed()
+
+    def _settings_disconnected(self, session_id: str, *, launched: bool = False) -> None:
+        """The connection ended (or a terminal launch took the choices as flags)."""
+
+        def mark(st: dict[str, Any], _s: dict[str, Any]) -> None:
+            st["actual"]["live"] = False
+            for f, rec in st["fields"].items():
+                if not isinstance(rec, dict):
+                    continue
+                if launched and f in st["chosen"]:
+                    rec.update(
+                        state="launched", note="已作为启动参数传给终端；以终端中 CLI 的显示为准"
+                    )
+                elif rec.get("state") == "applying":
+                    rec.update(state="selected", note="连接已结束；下次连接时再应用")
+
+        self._update_settings(session_id, mark)
+
+    # --- attachments and file references --------------------------------------------------------
+
+    def add_attachment(
+        self,
+        session_id: str,
+        *,
+        name: str,
+        data: bytes | None = None,
+        path: str | None = None,
+    ) -> dict[str, Any]:
+        """Keep a copy of a pasted, dropped or picked file for this session's next message."""
+        session = self._session(session_id)
+        if (data is None) == (path is None):
+            raise BridgeError("INVALID_INPUT", "需要文件内容或文件路径（二选一）")
+        if path is not None:
+            if not os.path.isabs(path) or not os.path.isfile(path):
+                raise BridgeError("INVALID_INPUT", f"不是文件：{path}")
+            size = os.path.getsize(path)
+            if size > max(FILE_LIMIT, IMAGE_LIMIT[CODEX]):
+                raise BridgeError("INVALID_INPUT", f"文件太大（{size >> 20} MB）")
+            with open(path, "rb") as fh:
+                data = fh.read()
+            name = name or os.path.basename(path)
+        assert data is not None
+        safe = _safe_name(name)
+        mime = _image_mime(data)
+        kind = "image" if mime else "file"
+        limit = IMAGE_LIMIT[session["harness"]] if kind == "image" else FILE_LIMIT
+        if len(data) > limit:
+            what = "图片" if kind == "image" else "文件"
+            raise BridgeError(
+                "INVALID_INPUT",
+                f"{what}太大：{len(data) / (1 << 20):.1f} MB，上限 {limit >> 20} MB",
+            )
+        if not data:
+            raise BridgeError("INVALID_INPUT", "文件是空的")
+        att_id = "att_" + uuid.uuid4().hex[:12]
+        folder = self.root / "attachments" / session_id / att_id
+        folder.mkdir(parents=True, mode=0o700)
+        target = folder / safe
+        target.write_bytes(data)
+        meta = {
+            "id": att_id,
+            "name": safe,
+            "kind": kind,
+            "mime": mime or (mimetypes.guess_type(safe)[0] or "application/octet-stream"),
+            "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "path": str(target),
+            "added_at": _now(),
+        }
+        (folder / "meta.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+        return {k: v for k, v in meta.items() if k != "path"}
+
+    def _attachments(self, session_id: str, ids: list[str]) -> list[dict[str, Any]]:
+        if len(ids) > MAX_ATTACHMENTS:
+            raise BridgeError("INVALID_INPUT", f"一条消息最多 {MAX_ATTACHMENTS} 个附件")
+        out = []
+        for att_id in ids:
+            if not re.fullmatch(r"att_[0-9a-f]{12}", att_id):
+                raise BridgeError("INVALID_INPUT", "附件 ID 无效")
+            folder = self.root / "attachments" / session_id / att_id
+            try:
+                meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                raise BridgeError("NOT_FOUND", "附件已不存在；请重新添加") from None
+            out.append(meta)
+        return out
+
+    def search_files(self, session_id: str, query: str, limit: int = 40) -> list[dict[str, Any]]:
+        """Project files for ``@`` references (git's view when it is a repository)."""
+        workdir = self._session(session_id)["workdir"]
+        files = self._project_files(workdir)
+        q = query.strip().lower()
+        scored = []
+        for rel in files:
+            score = _fuzzy(q, rel.lower())
+            if score is not None:
+                scored.append((score, rel))
+        scored.sort(key=lambda x: (x[0], len(x[1]), x[1]))
+        return [{"path": rel, "name": os.path.basename(rel)} for _, rel in scored[:limit]]
+
+    def _project_files(self, workdir: str) -> list[str]:
+        cached = self._file_index.get(workdir)
+        if cached and time.monotonic() - cached[0] < 15:
+            return cached[1]
+        files: list[str] = []
+        try:
+            proc = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    workdir,
+                    "ls-files",
+                    "-z",
+                    "--cached",
+                    "--others",
+                    "--exclude-standard",
+                ],
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
+            if proc.returncode == 0:
+                files = [f for f in proc.stdout.decode("utf-8", "replace").split("\0") if f]
+        except (OSError, subprocess.TimeoutExpired):
+            files = []
+        if not files:
+            skip = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build"}
+            for root, dirs, names in os.walk(workdir):
+                dirs[:] = [d for d in dirs if d not in skip and not d.startswith(".")]
+                for n in names:
+                    files.append(os.path.relpath(os.path.join(root, n), workdir))
+                if len(files) > 20000:
+                    break
+        files = files[:20000]
+        self._file_index[workdir] = (time.monotonic(), files)
+        return files
+
     # --- conversation actions -------------------------------------------------------------------
 
     def send_message(
@@ -749,8 +1340,10 @@ class Workbench:
         *,
         client_id: str | None = None,
         confirm_external: bool = False,
+        attachments: list[str] | None = None,
     ) -> dict[str, Any]:
-        if not text.strip():
+        files = self._attachments(session_id, list(attachments or []))
+        if not text.strip() and not files:
             raise BridgeError("INVALID_INPUT", "消息不能为空")
         if len(text.encode("utf-8")) > MAX_MESSAGE:
             raise BridgeError("INVALID_INPUT", "消息过长（上限 100 KB）")
@@ -773,11 +1366,66 @@ class Workbench:
                     live = self._live.get(session_id)
             if live is None or live.structured is None:
                 raise BridgeError("STATE_CONFLICT", "会话没有以对话方式连接")
+            if live.structured.busy:
+                raise BridgeError("STATE_CONFLICT", "上一轮还在进行；可以先停止它")
+            chips = [
+                {"id": f["id"], "kind": f["kind"], "name": f["name"], "size": f["size"]}
+                for f in files
+            ]
             try:
-                live.structured.send(text, client_id)
+                if isinstance(live.structured, ClaudeStreamSession):
+                    if not live.settings_ready.wait(40):
+                        raise BridgeError(
+                            "STATE_CONFLICT", "Claude Code 还没有完成连接；请稍后再发"
+                        )
+                    failures = live.connect_failures + self._apply_pending(live)
+                    live.connect_failures = []
+                    if failures:
+                        # The chosen setting did not apply: do not send with another one silently.
+                        raise BridgeError(
+                            "STATE_CONFLICT", "；".join(failures) + "。消息没有发送，草稿已保留。"
+                        )
+                    body, blocks = _claude_content(text, files)
+                    live.structured.send(body, client_id, blocks, chips, display=text)
+                else:
+                    assert isinstance(live.structured, CodexAppServerSession)
+                    model = controls.find_model(
+                        self.catalog(CODEX),
+                        self._settings_of(self._session(session_id))["chosen"].get("model")
+                        or self._settings_of(self._session(session_id))["actual"].get("model"),
+                    )
+                    if any(f["kind"] == "image" for f in files) and model and not model["images"]:
+                        raise BridgeError(
+                            "INVALID_INPUT", f"{model['label']} 不接受图片输入；请换模型或去掉图片"
+                        )
+                    chosen = dict(self._settings_of(self._session(session_id))["chosen"])
+                    pending = list(self._pending_fields(session_id))
+                    if pending:
+                        self._mark_fields(session_id, pending, "applying")
+                    body, inputs = _codex_content(text, files)
+                    codex = live.structured
+                    codex.send(body, client_id, inputs, chips, chosen, display=text)
             except (StructuredError, OSError) as exc:
+                if live.structured.process is not None and live.structured.process.exited:
+                    # The connection ended before the message went out: say why, keep the draft.
+                    reason = self._ended_reason(live)
+                    label = LABELS[live.harness]
+                    raise BridgeError(
+                        "STATE_CONFLICT",
+                        f"{label} 的连接已结束：{reason}。消息没有发送，草稿已保留。",
+                    ) from None
                 raise BridgeError("STATE_CONFLICT", str(exc) or "消息没有发送成功") from None
         return {"client_id": client_id}
+
+    def _ended_reason(self, live: LiveRun) -> str:
+        deadline = time.monotonic() + 5
+        run: dict[str, Any] = {}
+        while time.monotonic() < deadline:
+            run = self.store.get_run(live.run_id) or {}
+            if run.get("status") not in ("starting", "running"):
+                break
+            time.sleep(0.05)
+        return str(run.get("failure") or "进程已退出")
 
     def interrupt(self, session_id: str) -> dict[str, Any]:
         self._session(session_id)
@@ -798,7 +1446,7 @@ class Workbench:
         session_id: str,
         request_id: str,
         decision: str,
-        answers: Mapping[str, str] | None = None,
+        answers: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         self._session(session_id)
         with self._lock:
@@ -1384,6 +2032,7 @@ class Workbench:
                 if live.conv.turn is not None:
                     live.conv.set_turn(None)
             self._save_conversation(live)
+            self._settings_disconnected(live.session_id)
         live.buffer.close()
         tail = strip_ansi_tail(raw_tail)
         if live.transport == "structured" and live.conv is not None:
@@ -1566,3 +2215,73 @@ def _wait_until(predicate: Any, timeout: float) -> bool:
         end.wait(0.1)
         waited += 0.1
     return bool(predicate())
+
+
+def _image_mime(data: bytes) -> str | None:
+    """Only real image bytes count as images (never a client-supplied type)."""
+    for magic, mime in _IMAGE_MAGIC:
+        if data.startswith(magic):
+            return mime
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def _safe_name(name: str) -> str:
+    base = os.path.basename(str(name or "").replace("\\", "/")).strip() or "附件"
+    base = re.sub(r"[\x00-\x1f/:]", "_", base)[:120]
+    return "_" + base if base.startswith(".") else base
+
+
+def _fuzzy(query: str, text: str) -> int | None:
+    """Lower is better; None when the query letters do not appear in order."""
+    if not query:
+        return 0
+    base = text.rsplit("/", 1)[-1]
+    if query in base:
+        return base.index(query)
+    if query in text:
+        return 50 + text.index(query)
+    pos = -1
+    gaps = 0
+    for ch in query:
+        nxt = text.find(ch, pos + 1)
+        if nxt < 0:
+            return None
+        gaps += nxt - pos - 1
+        pos = nxt
+    return 200 + gaps
+
+
+def _claude_content(text: str, files: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    """Images as native image blocks; other files as Claude Code ``@"path"`` file mentions."""
+    blocks = []
+    mentions = []
+    for f in files:
+        if f["kind"] == "image":
+            data = Path(f["path"]).read_bytes()
+            blocks.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": f["mime"],
+                        "data": base64.b64encode(data).decode("ascii"),
+                    },
+                }
+            )
+        else:
+            mentions.append(f'@"{f["path"]}"')
+    if mentions:
+        text = (text.rstrip() + "\n\n" if text.strip() else "") + "附件：" + " ".join(mentions)
+    return text, blocks
+
+
+def _codex_content(text: str, files: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    """Images as Codex ``localImage`` inputs; other files by path for Codex to read."""
+    inputs = [{"type": "localImage", "path": f["path"]} for f in files if f["kind"] == "image"]
+    others = [f for f in files if f["kind"] != "image"]
+    if others:
+        listing = "\n".join(f"- {f['path']}" for f in others)
+        text = (text.rstrip() + "\n\n" if text.strip() else "") + "附件文件（请读取）：\n" + listing
+    return text, inputs

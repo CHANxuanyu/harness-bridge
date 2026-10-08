@@ -28,8 +28,10 @@ from harness_bridge.workbench.service import Workbench
 
 STATIC_DIR = Path(__file__).with_name("static")
 MAX_BODY = 1 << 20
+MAX_UPLOAD = 28 << 20  # base64 of the largest attachment (20 MB image) plus JSON framing
 _SESSION_PATH = re.compile(r"^/api/sessions/(ses_[0-9a-f]{12})(?:/([a-z/-]+))?$")
 _PROJECT_PATH = re.compile(r"^/api/projects/(prj_[0-9a-f]{12})/([a-z-]+)$")
+_CATALOG_PATH = re.compile(r"^/api/catalog/(claude-code|codex)/refresh$")
 _STATUS = {
     "INVALID_INPUT": HTTPStatus.BAD_REQUEST,
     "USAGE_ERROR": HTTPStatus.BAD_REQUEST,
@@ -175,9 +177,9 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                     return False
             return True
 
-        def _body(self) -> dict[str, Any]:
+        def _body(self, limit: int = MAX_BODY) -> dict[str, Any]:
             length = int(self.headers.get("Content-Length") or 0)
-            if length > MAX_BODY:
+            if length > limit:
                 raise BridgeError("INVALID_INPUT", "request body too large")
             raw = self.rfile.read(length) if length else b"{}"
             try:
@@ -240,6 +242,8 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                 elif action == "conversation":
                     refresh = query.get("refresh") == "1"
                     self._run(lambda: wb.conversation(sid, refresh=refresh))
+                elif action == "files":
+                    self._run(lambda: wb.search_files(sid, query.get("q", "")[:200]))
                 else:
                     self._error(HTTPStatus.NOT_FOUND, "NOT_FOUND", "unknown route")
             else:
@@ -250,7 +254,7 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                 return
             path = urlsplit(self.path).path
             try:
-                body = self._body()
+                body = self._body(MAX_UPLOAD if path.endswith("/attachments") else MAX_BODY)
             except BridgeError as err:
                 self._json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": err.to_dict()})
                 return
@@ -264,6 +268,16 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                 self._run(lambda: wb.native_call("pick_folder"))
             elif path == "/api/native/open-url":
                 self._run(lambda: wb.native_call("open_url", _link(body)))
+            elif path == "/api/native/pick-files":
+                self._run(lambda: wb.native_call("pick_files"))
+            elif m := _CATALOG_PATH.match(path):
+                harness = m.group(1)
+                sid_value = body.get("session_id")
+                self._run(
+                    lambda: wb.refresh_catalog(
+                        harness, sid_value if isinstance(sid_value, str) else None
+                    )
+                )
             elif path == "/api/dev/snapshot" and wb.dev_snapshot is not None:
                 snap = wb.dev_snapshot
                 self._run(lambda: snap(_snapshot_name(body)))
@@ -322,8 +336,13 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                         if isinstance(body.get("client_id"), str)
                         else None,
                         confirm_external=body.get("confirm_external") is True,
+                        attachments=_ids(body, "attachments"),
                     )
                 )
+            elif action == "settings":
+                self._run(lambda: wb.choose_settings(sid, _settings(body)))
+            elif action == "attachments":
+                self._run(lambda: wb.add_attachment(sid, **_attachment(body)))
             elif action == "interrupt":
                 self._run(lambda: wb.interrupt(sid))
             elif action == "permission":
@@ -462,15 +481,59 @@ def _view(body: dict[str, Any]) -> str:
     return str(mode)
 
 
-def _answers(body: dict[str, Any]) -> dict[str, str] | None:
+def _answers(body: dict[str, Any]) -> dict[str, Any] | None:
+    """Question answers (text or list of choices) or form values (text, number, boolean)."""
     answers = body.get("answers")
     if answers is None:
         return None
-    if not isinstance(answers, dict) or not all(
-        isinstance(k, str) and isinstance(v, str) for k, v in answers.items()
+
+    def ok(v: Any) -> bool:
+        if isinstance(v, list):
+            return len(v) <= 50 and all(isinstance(x, str) and len(x) <= 10_000 for x in v)
+        if isinstance(v, str):
+            return len(v) <= 10_000
+        return v is None or isinstance(v, (bool, int, float))
+
+    if (
+        not isinstance(answers, dict)
+        or len(answers) > 100
+        or not all(isinstance(k, str) and ok(v) for k, v in answers.items())
     ):
-        raise BridgeError("INVALID_INPUT", "answers must map questions to strings")
+        raise BridgeError("INVALID_INPUT", "answers must map questions to text, choices or values")
     return answers
+
+
+def _ids(body: dict[str, Any], key: str) -> list[str]:
+    value = body.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+        raise BridgeError("INVALID_INPUT", f"{key} must be a list of ids")
+    return value
+
+
+def _settings(body: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key in ("model", "effort", "mode"):
+        if key in body:
+            value = body[key]
+            if value is not None and not isinstance(value, str):
+                raise BridgeError("INVALID_INPUT", f"{key} must be a string or null")
+            out[key] = value
+    return out
+
+
+def _attachment(body: dict[str, Any]) -> dict[str, Any]:
+    name = body.get("name") if isinstance(body.get("name"), str) else ""
+    if isinstance(body.get("path"), str):
+        return {"name": name, "path": body["path"]}
+    if isinstance(body.get("data"), str):
+        try:
+            data = base64.b64decode(body["data"], validate=True)
+        except ValueError:
+            raise BridgeError("INVALID_INPUT", "data is not valid base64") from None
+        return {"name": name, "data": data}
+    raise BridgeError("INVALID_INPUT", "attachment needs data (base64) or path")
 
 
 def _appearance(body: dict[str, Any]) -> str:

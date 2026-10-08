@@ -68,7 +68,9 @@ def test_claude_stream_partials_final_message_and_subagent_noise() -> None:
     t.feed(
         {"type": "system", "subtype": "init", "session_id": "s", "permissionMode": "acceptEdits"}
     )
-    assert any("自动接受编辑" in i["text"] for i in conv.items() if i["type"] == "notice")
+    # The mode is shown by the composer's mode selector (host-confirmed), not as a chat notice.
+    assert t.info["permissionMode"] == "acceptEdits"
+    assert not [i for i in conv.items() if i["type"] == "notice"]
     t.feed({"type": "result", "subtype": "success", "is_error": False, "duration_ms": 5})
     assert conv.turn is None
     assert conv.items()[0] == {**conv.items()[0], "type": "user", "status": "sent"}
@@ -407,7 +409,7 @@ def test_ui_scripts_never_build_markup_from_strings() -> None:
         "new Function",
         "document.write",
     )
-    for name in ("app.js", "markdown.js"):
+    for name in ("app.js", "markdown.js", "composer.js"):
         text = (static / name).read_text(encoding="utf-8")
         assert not [f for f in forbidden if f in text], name
     markdown = (static / "markdown.js").read_text(encoding="utf-8")

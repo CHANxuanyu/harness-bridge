@@ -155,6 +155,17 @@ def _pick_folder(window: Any) -> str | None:
     return str(result[0]) if result else None
 
 
+def _pick_files(window: Any) -> list[str]:
+    """The system open panel (several files); the page only ever sees the chosen paths."""
+    import webview
+
+    kind = getattr(getattr(webview, "FileDialog", None), "OPEN", None)
+    if kind is None:
+        kind = webview.OPEN_DIALOG
+    result = window.create_file_dialog(kind, allow_multiple=True)
+    return [str(p) for p in result] if result else []
+
+
 def _run_window(url: str, base_url: str, workbench: Any, dev_dir: Path | None) -> None:
     from harness_bridge.workbench import native_mac
 
@@ -182,6 +193,7 @@ def _run_window(url: str, base_url: str, workbench: Any, dev_dir: Path | None) -
         "title": lambda title: window.set_title(title or "RepoBridge"),
         "appearance": lambda mode: native_mac.set_appearance(window, mode),
         "pick_folder": lambda: _pick_folder(window),
+        "pick_files": lambda: _pick_files(window),
         "open_url": _open_url,
     }
     if dev_dir is not None and native_mac.available():

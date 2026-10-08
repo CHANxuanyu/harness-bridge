@@ -169,8 +169,8 @@ def test_codex_conversation_approvals_unsupported_requests_and_history(wbx: WB) 
     assert command["status"] == "declined"
     assert any("answer=decline" in a["text"] for a in items(wb, sid, "assistant"))
 
-    # A request RepoBridge cannot answer is refused visibly, not approved silently.
-    say(wb, sid, "elicit")
+    # A form shape RepoBridge cannot show is refused visibly, not approved silently.
+    say(wb, sid, "elicit-array")
     assert any("MCP" in n["text"] for n in items(wb, sid, "notice"))
     assert any("elicitation=decline" in a["text"] for a in items(wb, sid, "assistant"))
 
@@ -355,7 +355,12 @@ def test_failed_native_resume_explains_itself_and_keeps_the_message(wbx: WB) -> 
     wait_for(lambda: not WB.view(wb, sid)["active"])
     # The native history disappears outside RepoBridge (e.g. purged in the CLI).
     (wbx.base / "stub-home" / "claude" / native).unlink()
-    wb.send_message(sid, "still there?")
+    # Either the message is refused with the CLI's own reason (connection already gone) or it
+    # is accepted and then marked failed; in both cases the run explains itself.
+    try:
+        wb.send_message(sid, "still there?")
+    except BridgeError as exc:
+        assert "No conversation found" in exc.message and "草稿已保留" in exc.message
     wait_for(lambda: WB.run(wb, sid)["status"] == "failed")
     run = WB.run(wb, sid)
     assert run["kind"] == "resume" and "No conversation found" in run["failure"]

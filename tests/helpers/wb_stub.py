@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -351,17 +352,73 @@ def claude_desktop(args: list[str]) -> int:
     return 0
 
 
+CLAUDE_MODELS: list[dict[str, Any]] = [
+    {
+        "value": "default",
+        "resolvedModel": "claude-stub-opus",
+        "displayName": "Default (recommended)",
+        "description": "Stub Opus · most capable",
+        "supportsEffort": True,
+        "supportedEffortLevels": ["low", "medium", "high", "xhigh", "max"],
+        "supportsAdaptiveThinking": True,
+        "supportsAutoMode": True,
+    },
+    {
+        "value": "stub-sonnet",
+        "resolvedModel": "claude-stub-sonnet",
+        "displayName": "Stub Sonnet",
+        "description": "Stub Sonnet · fast",
+        "supportsEffort": True,
+        "supportedEffortLevels": ["low", "medium", "high"],
+    },
+    {
+        "value": "stub-haiku",
+        "resolvedModel": "claude-stub-haiku",
+        "displayName": "Stub Haiku",
+        "description": "Stub Haiku · no effort control",
+    },
+    {
+        "value": "stub-locked",
+        "resolvedModel": "claude-stub-locked",
+        "displayName": "Stub Locked",
+        "description": "Listed, but the account cannot use it",
+    },
+]
+CLAUDE_MODES = ("default", "acceptEdits", "plan", "auto", "dontAsk")
+
+
+def claude_resolve(value: str | None) -> str:
+    for m in CLAUDE_MODELS:
+        if m["value"] == (value or "default"):
+            return str(m["resolvedModel"])
+    return str(value)
+
+
 class ClaudeStream:
     """stream-json emulation of ``claude -p`` with the SDK control protocol."""
 
     def __init__(self, args: list[str]) -> None:
         self.session = args[args.index("--session-id") + 1] if "--session-id" in args else None
         self.resume = args[args.index("--resume") + 1] if "--resume" in args else None
+        self.persist = "--no-session-persistence" not in args
         self.initialized = False
         self.req = 0
         self.inited = False
+        self.model = claude_resolve(args[args.index("--model") + 1] if "--model" in args else None)
+        self.effort: str | None = args[args.index("--effort") + 1] if "--effort" in args else None
+        self.mode = (
+            args[args.index("--permission-mode") + 1] if "--permission-mode" in args else "default"
+        )
+
+    def log(self, entry: dict[str, Any]) -> None:
+        HOME.mkdir(parents=True, exist_ok=True)
+        with open(HOME / "claude-controls.log", "a") as fh:
+            fh.write(json.dumps(entry) + "\n")
 
     def run(self) -> int:
+        if os.environ.get("WB_STUB_CLAUDE_INIT_FAIL"):
+            print("stub: cannot start", file=sys.stderr)
+            return 4
         if self.resume:
             self.session = self.resume
             if not (HOME / "claude" / self.resume).exists():
@@ -381,17 +438,87 @@ class ClaudeStream:
 
     def control(self, msg: dict[str, Any]) -> None:
         rid = msg.get("request_id")
-        sub = (msg.get("request") or {}).get("subtype")
+        request = msg.get("request") or {}
+        sub = request.get("subtype")
+        self.log({"subtype": sub, **{k: v for k, v in request.items() if k != "subtype"}})
+        response: dict[str, Any] = {"subtype": sub}
+        error: str | None = None
+        if sub == "initialize":
+            response = {
+                "commands": [
+                    {
+                        "name": "compact",
+                        "description": "Compact the conversation",
+                        "argumentHint": "",
+                    },
+                    {
+                        "name": "review",
+                        "description": "Review a pull request",
+                        "argumentHint": "[pr]",
+                    },
+                ],
+                "models": CLAUDE_MODELS,
+                "output_style": "default",
+                "available_output_styles": ["default"],
+            }
+        elif sub == "set_model":
+            model = request.get("model") or "default"
+            if model == "stub-locked":
+                error = "Model stub-locked is not available for your organization"
+            elif not any(m["value"] == model for m in CLAUDE_MODELS):
+                error = f"Unknown model {model}"
+            else:
+                self.model = claude_resolve(model)
+                entry = next(m for m in CLAUDE_MODELS if m["value"] == model)
+                if self.effort and self.effort not in (entry.get("supportedEffortLevels") or []):
+                    self.effort = None
+            response = {}
+        elif sub == "apply_flag_settings":
+            settings = request.get("settings") or {}
+            if "effortLevel" in settings:
+                level = settings["effortLevel"]
+                entry = next(m for m in CLAUDE_MODELS if m["resolvedModel"] == self.model)
+                if level is not None and level not in (entry.get("supportedEffortLevels") or []):
+                    error = f"apply_flag_settings: effort {level} is not available for {self.model}"
+                else:
+                    self.effort = level
+            response = {}
+        elif sub == "set_permission_mode":
+            mode = request.get("mode")
+            if mode not in CLAUDE_MODES:
+                error = f"Cannot set permission mode {mode}"
+            else:
+                self.mode = str(mode)
+                response = {"mode": self.mode}
+        elif sub == "get_settings":
+            response = {
+                "effective": {"permissions": {"defaultMode": "default"}},
+                "sources": [],
+                "applied": {"model": self.model, "effort": self.effort},
+            }
+        if error is not None:
+            emit(
+                {
+                    "type": "control_response",
+                    "response": {"subtype": "error", "request_id": rid, "error": error},
+                }
+            )
+            return
         emit(
             {
                 "type": "control_response",
-                "response": {"subtype": "success", "request_id": rid, "response": {"subtype": sub}},
+                "response": {"subtype": "success", "request_id": rid, "response": response},
             }
         )
 
     def ask(
         self, tool: str, tool_id: str, args: dict[str, Any], suggestions: Any = None
     ) -> dict[str, Any]:
+        # The permission mode decides first, as in the real CLI: no prompt when it settles it.
+        if self.mode == "acceptEdits" and tool in ("Edit", "Write", "MultiEdit"):
+            return {"behavior": "allow", "updatedInput": args}
+        if self.mode == "dontAsk" and tool != "AskUserQuestion":
+            return {"behavior": "deny", "message": "dontAsk mode"}
         self.req += 1
         rid = f"cli_{self.req}"
         emit(
@@ -553,44 +680,57 @@ class ClaudeStream:
             if isinstance(content, str)
             else "".join(b.get("text", "") for b in content or [] if isinstance(b, dict))
         )
-        if not self.inited:
-            self.inited = True
-            emit(
-                {
-                    "type": "system",
-                    "subtype": "init",
-                    "session_id": self.session,
-                    "model": "stub",
-                    "permissionMode": "default",
-                    "apiKeySource": "none",
-                    "cwd": os.getcwd(),
-                }
-            )
+        images = [
+            (b.get("source") or {}).get("media_type")
+            for b in (content if isinstance(content, list) else [])
+            if isinstance(b, dict) and b.get("type") == "image"
+        ]
+        self.log({"turn": line, "images": images, "model": self.model, "effort": self.effort})
+        emit(
+            {
+                "type": "system",
+                "subtype": "init",
+                "session_id": self.session,
+                "model": self.model,
+                "permissionMode": self.mode,
+                "apiKeySource": "none",
+                "cwd": os.getcwd(),
+            }
+        )
         emit(
             {
                 "type": "user",
                 "session_id": self.session,
                 "parent_tool_use_id": None,
-                "uuid": str(uuid.uuid4()),
-                "message": {"role": "user", "content": [{"type": "text", "text": line}]},
+                "uuid": msg.get("uuid") or str(uuid.uuid4()),
+                "message": {"role": "user", "content": content},
             }
         )
         if line == "crash":
             return 3
         assert self.session is not None
-        (HOME / "claude").mkdir(parents=True, exist_ok=True)
-        (HOME / "claude" / self.session).write_text("turn\n")
-        transcript_add(self.session, {"type": "user", "message": {"role": "user", "content": line}})
+        if self.persist:
+            (HOME / "claude").mkdir(parents=True, exist_ok=True)
+            (HOME / "claude" / self.session).write_text("turn\n")
+            transcript_add(
+                self.session, {"type": "user", "message": {"role": "user", "content": content}}
+            )
         msg_id = f"msg_{uuid.uuid4().hex[:8]}"
         emit(
             {
                 "type": "stream_event",
                 "parent_tool_use_id": None,
                 "session_id": self.session,
-                "event": {"type": "message_start", "message": {"id": msg_id}},
+                "event": {"type": "message_start", "message": {"id": msg_id, "model": self.model}},
             }
         )
         reply = f"assistant: {line}"
+        mentions = re.findall(r'@"([^"]+)"', line)
+        if images or mentions:
+            seen = [Path(m).read_text().splitlines()[0] for m in mentions if Path(m).is_file()]
+            reply = f"images={images} files={seen}"
+        elif line == "whoami":
+            reply = f"model={self.model} effort={self.effort} mode={self.mode}"
         if line == "authfail":
             self.result("success", "Invalid API key · Please run /login")
             return None
@@ -689,6 +829,7 @@ class ClaudeStream:
                 "message": {
                     "id": msg_id,
                     "role": "assistant",
+                    "model": self.model,
                     "content": [{"type": "text", "text": reply}],
                 },
             },
@@ -790,6 +931,49 @@ class ClaudeStream:
         return None
 
 
+CODEX_MODELS: list[dict[str, Any]] = [
+    {
+        "id": "stub-codex",
+        "model": "stub-codex",
+        "displayName": "Stub Codex",
+        "description": "Stub workhorse",
+        "hidden": False,
+        "isDefault": True,
+        "supportedReasoningEfforts": [
+            {"reasoningEffort": "low", "description": "Fast responses"},
+            {"reasoningEffort": "medium", "description": "Balanced"},
+            {"reasoningEffort": "high", "description": "Deeper reasoning"},
+        ],
+        "defaultReasoningEffort": "medium",
+        "inputModalities": ["text", "image"],
+    },
+    {
+        "id": "stub-codex-mini",
+        "model": "stub-codex-mini",
+        "displayName": "Stub Codex Mini",
+        "description": "Text only",
+        "hidden": False,
+        "isDefault": False,
+        "supportedReasoningEfforts": [
+            {"reasoningEffort": "low", "description": "Fast"},
+            {"reasoningEffort": "medium", "description": "Balanced"},
+        ],
+        "defaultReasoningEffort": "low",
+        "inputModalities": ["text"],
+    },
+    {
+        "id": "stub-hidden",
+        "model": "stub-hidden",
+        "displayName": "Hidden",
+        "description": "",
+        "hidden": True,
+        "isDefault": False,
+        "supportedReasoningEfforts": [],
+        "defaultReasoningEffort": "low",
+    },
+]
+
+
 class CodexAppServer:
     """JSON-RPC emulation of ``codex app-server`` (stdio)."""
 
@@ -798,6 +982,43 @@ class CodexAppServer:
         self.turns = 0
         self.next_req = 1000
         self.interrupt: str | None = None
+        self.model = "stub-codex"
+        self.effort: str | None = "medium"
+        self.approval = "on-request"
+        self.sandbox: dict[str, Any] = {"type": "workspaceWrite"}
+
+    def log(self, entry: dict[str, Any]) -> None:
+        HOME.mkdir(parents=True, exist_ok=True)
+        with open(HOME / "codex-rpc.log", "a") as fh:
+            fh.write(json.dumps(entry) + "\n")
+
+    def settings(self, params: dict[str, Any]) -> None:
+        """thread/start and thread/resume overrides (the sandbox is not persisted, as in 0.162)."""
+        if params.get("model"):
+            self.model = str(params["model"])
+        effort = (params.get("config") or {}).get("model_reasoning_effort")
+        if effort:
+            self.effort = str(effort)
+        if params.get("approvalPolicy"):
+            self.approval = str(params["approvalPolicy"])
+        sandbox = params.get("sandbox")
+        if sandbox:
+            self.sandbox = {
+                "type": {
+                    "read-only": "readOnly",
+                    "workspace-write": "workspaceWrite",
+                    "danger-full-access": "dangerFullAccess",
+                }[sandbox]
+            }
+
+    def settings_result(self) -> dict[str, Any]:
+        return {
+            "model": self.model,
+            "reasoningEffort": self.effort,
+            "approvalPolicy": self.approval,
+            "sandbox": dict(self.sandbox),
+            "modelProvider": "openai",
+        }
 
     def respond(self, rid: Any, result: dict[str, Any]) -> None:
         emit({"id": rid, "result": result})
@@ -818,6 +1039,8 @@ class CodexAppServer:
             "cliVersion": "0.0.0-stub",
             "preview": "",
             "name": None,
+            "model": self.model,
+            "reasoningEffort": self.effort,
         }
 
     def run(self) -> int:
@@ -832,6 +1055,19 @@ class CodexAppServer:
 
     def request(self, msg: dict[str, Any]) -> int | None:
         method, rid, params = msg["method"], msg["id"], msg.get("params") or {}
+        self.log({"method": method, "params": params})
+        if method == "model/list":
+            self.respond(rid, {"data": CODEX_MODELS, "nextCursor": None})
+            return None
+        if method == "configRequirements/read":
+            req = None
+            if os.environ.get("WB_STUB_CODEX_READONLY_ONLY"):
+                req = {"allowedSandboxModes": ["read-only"]}
+            self.respond(rid, {"requirements": req})
+            return None
+        if method == "thread/read":
+            self.respond(rid, {"thread": self.thread_obj(str(params.get("threadId")))})
+            return None
         if method == "initialize":
             self.respond(
                 rid,
@@ -844,21 +1080,24 @@ class CodexAppServer:
             )
         elif method == "thread/start":
             self.thread = str(uuid.uuid4())
+            self.settings(params)
             self.respond(
                 rid,
                 {
                     "thread": self.thread_obj(self.thread),
-                    "model": "stub-model",
-                    "approvalPolicy": "on-request",
-                    "sandbox": {"type": "workspaceWrite"},
                     "cwd": params.get("cwd"),
-                    "modelProvider": "openai",
+                    **self.settings_result(),
                 },
             )
             self.note("thread/started", {"thread": self.thread_obj(self.thread)})
         elif method == "thread/resume":
             tid = params.get("threadId")
-            if not (HOME / "codex" / str(tid)).exists():
+            if self.thread == tid:
+                # Already loaded: report the live settings.
+                self.respond(
+                    rid, {"thread": self.thread_obj(self.thread), **self.settings_result()}
+                )
+            elif not (HOME / "codex" / str(tid)).exists():
                 self.error(rid, f"no rollout found for thread id {tid}")
             else:
                 self.thread = str(tid)
@@ -868,14 +1107,9 @@ class CodexAppServer:
                     else []
                 )
                 self.turns = len(turns)
+                self.settings(params)
                 self.respond(
-                    rid,
-                    {
-                        "thread": self.thread_obj(self.thread),
-                        "model": "stub-model",
-                        "approvalPolicy": "on-request",
-                        "sandbox": {"type": "workspaceWrite"},
-                    },
+                    rid, {"thread": self.thread_obj(self.thread), **self.settings_result()}
                 )
         elif method == "thread/name/set":
             self.respond(rid, {})
@@ -918,6 +1152,16 @@ class CodexAppServer:
 
     def turn(self, rid: Any, params: dict[str, Any]) -> int | None:
         text = "".join(i.get("text", "") for i in params.get("input") or [] if isinstance(i, dict))
+        images = [i.get("path") for i in params.get("input") or [] if i.get("type") == "localImage"]
+        if params.get("model"):
+            self.model = str(params["model"])
+        if params.get("effort"):
+            self.effort = str(params["effort"])
+        if params.get("approvalPolicy"):
+            self.approval = str(params["approvalPolicy"])
+        if params.get("sandboxPolicy"):
+            self.sandbox = dict(params["sandboxPolicy"])
+        self.log({"turn": text, "images": images, "model": self.model, "effort": self.effort})
         self.turns += 1
         tid = f"turn-{self.turns}"
         assert self.thread is not None
@@ -944,6 +1188,42 @@ class CodexAppServer:
             return 3
         status, error = "completed", None
         reply = f"codex: {text}"
+        if images:
+            reply = f"images={len(images)}"
+        if text == "whoami":
+            reply = (
+                f"model={self.model} effort={self.effort} approval={self.approval} "
+                f"sandbox={self.sandbox.get('type')}"
+            )
+        if text == "ask":
+            answer = self.ask(
+                "item/tool/requestUserInput",
+                {
+                    "threadId": self.thread,
+                    "turnId": tid,
+                    "itemId": f"q{self.turns}",
+                    "isBlocking": True,
+                    "questions": [
+                        {
+                            "id": "lang",
+                            "header": "Language",
+                            "question": "Which language?",
+                            "options": [
+                                {"label": "Python", "description": "scripts"},
+                                {"label": "Go", "description": "services"},
+                            ],
+                            "isOther": True,
+                        },
+                        {
+                            "id": "token",
+                            "header": "Token",
+                            "question": "Paste it",
+                            "isSecret": True,
+                        },
+                    ],
+                },
+            )
+            reply = f"answers={json.dumps(answer.get('answers'), sort_keys=True)}"
         if text.startswith("edit "):
             path = os.path.abspath(text.split(" ", 1)[1])
             change = {
@@ -1025,7 +1305,41 @@ class CodexAppServer:
         elif text == "elicit":
             answer = self.ask(
                 "mcpServer/elicitation/request",
-                {"threadId": self.thread, "turnId": tid, "serverName": "stub"},
+                {
+                    "threadId": self.thread,
+                    "turnId": tid,
+                    "serverName": "stub",
+                    "mode": "form",
+                    "message": "Deploy settings",
+                    "requestedSchema": {
+                        "type": "object",
+                        "properties": {
+                            "env": {"type": "string", "enum": ["staging", "prod"], "title": "Env"},
+                            "replicas": {"type": "integer", "title": "Replicas", "minimum": 1},
+                            "dry": {"type": "boolean", "title": "Dry run"},
+                        },
+                        "required": ["env"],
+                    },
+                },
+            )
+            reply = (
+                f"elicitation={answer.get('action')} "
+                f"content={json.dumps(answer.get('content'), sort_keys=True)}"
+            )
+        elif text == "elicit-array":
+            answer = self.ask(
+                "mcpServer/elicitation/request",
+                {
+                    "threadId": self.thread,
+                    "turnId": tid,
+                    "serverName": "stub",
+                    "mode": "form",
+                    "message": "Pick many",
+                    "requestedSchema": {
+                        "type": "object",
+                        "properties": {"tags": {"type": "array", "items": {"type": "string"}}},
+                    },
+                },
             )
             reply = f"elicitation={answer.get('action')}"
         elif text == "slow":

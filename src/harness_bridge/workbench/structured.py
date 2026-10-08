@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any
 
+from harness_bridge.workbench.controls import CODEX_MODE_BY_ID
 from harness_bridge.workbench.conversation import (
     ClaudeTranslator,
     CodexTranslator,
@@ -254,6 +255,9 @@ class SessionCallbacks:
     on_activity: Callable[[dict[str, Any]], None]
     on_exit: Callable[[ExitInfo], None]
     on_fatal: Callable[[str], None] = field(default=lambda _m: None)
+    # Host-reported settings ({"model"?, "effort"?, "mode"?, "source"}) and the harness catalog.
+    on_settings: Callable[[dict[str, Any]], None] = field(default=lambda _s: None)
+    on_catalog: Callable[[dict[str, Any]], None] = field(default=lambda _c: None)
 
 
 class StructuredSession:
@@ -268,7 +272,7 @@ class StructuredSession:
         self.ready = threading.Event()
         self.process: PipeProcess | None = None
         self.info: dict[str, Any] = {}
-        self.queue: list[tuple[str, str]] = []
+        self.queue: list[Any] = []
         self._lock = threading.RLock()
         self.permission_requests: dict[str, dict[str, Any]] = {}
 
@@ -299,8 +303,12 @@ class StructuredSession:
         raise NotImplementedError
 
     def answer(
-        self, request_id: str, decision: str, answers: Mapping[str, str] | None = None
+        self, request_id: str, decision: str, answers: Mapping[str, Any] | None = None
     ) -> None:
+        raise NotImplementedError
+
+    def apply_settings(self, chosen: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+        """Ask the harness to use these settings; per field {"ok", "error"?, "pending"?}."""
         raise NotImplementedError
 
 
@@ -317,40 +325,95 @@ class ClaudeStreamSession(StructuredSession):
         self.cb = cb
         self.translator = ClaudeTranslator(conv)
         self._req = 0
-        self._confirmed = False
+        self._control_waiters: dict[str, tuple[threading.Event, dict[str, Any]]] = {}
+        self._init_rid: str | None = None
+        self.initialized = threading.Event()
 
     def start(self) -> None:
         self.process = PipeProcess(
             self.spec,
             self.run_dir / "stderr.log",
             on_line=self._on_line,
-            on_exit=self.cb.on_exit,
+            on_exit=self._exit,
         )
         self.process.start()
-        # The SDK handshake: the CLI answers with its capabilities; hooks stay the user's own.
-        self._control({"subtype": "initialize", "hooks": None})
+        # The SDK handshake: the CLI answers with its commands and model catalog; hooks stay the
+        # user's own.
+        self._init_rid = self._control({"subtype": "initialize", "hooks": None})
         self.ready.set()
         self.cb.on_ready()
 
-    def _control(self, request: dict[str, Any]) -> str:
+    def _exit(self, info: ExitInfo) -> None:
+        for event, box in list(self._control_waiters.values()):
+            box["error"] = "Claude Code 进程已退出"
+            event.set()
+        self.initialized.set()
+        self.cb.on_exit(info)
+
+    def _control(self, request: dict[str, Any], *, waiter: bool = False) -> str:
         self._req += 1
         rid = f"rb_{self._req}_{uuid.uuid4().hex[:8]}"
+        if waiter:
+            self._control_waiters[rid] = (threading.Event(), {})
         assert self.process is not None
-        self.process.write({"type": "control_request", "request_id": rid, "request": request})
+        try:
+            self.process.write({"type": "control_request", "request_id": rid, "request": request})
+        except OSError:
+            self._control_waiters.pop(rid, None)
+            raise
         return rid
 
-    def send(self, text: str, client_id: str) -> None:
+    def control_wait(self, request: dict[str, Any], timeout: float = 20) -> dict[str, Any]:
+        """Send a control request and wait for the CLI's answer (raises with its error text)."""
+        try:
+            rid = self._control(request, waiter=True)
+        except OSError as exc:
+            raise StructuredError(f"Claude Code 连接已断开：{exc}") from None
+        event, box = self._control_waiters[rid]
+        try:
+            if not event.wait(timeout):
+                raise StructuredError(
+                    f"Claude Code 没有在 {int(timeout)} 秒内回应 {request['subtype']}"
+                )
+        finally:
+            self._control_waiters.pop(rid, None)
+        if "error" in box:
+            raise StructuredError(str(box["error"]) or f"{request['subtype']} 失败")
+        response = box.get("response")
+        return response if isinstance(response, dict) else {}
+
+    def wait_initialized(self, timeout: float = 30) -> bool:
+        return self.initialized.wait(timeout)
+
+    def send(
+        self,
+        text: str,
+        client_id: str,
+        blocks: list[dict[str, Any]] | None = None,
+        attachments: list[dict[str, Any]] | None = None,
+        display: str | None = None,
+    ) -> None:
         with self._lock:
             if self.busy:
                 raise StructuredError("上一轮还在进行；可以先停止它")
-            self.translator.begin_turn(client_id, text)
+            native_uuid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"repobridge:{client_id}"))
+            self.translator.begin_turn(
+                client_id,
+                text if display is None else display,
+                attachments,
+                native_uuid,
+                echo_text=text,
+            )
+            content: list[dict[str, Any]] = [{"type": "text", "text": text}] if text else []
+            content.extend(blocks or [])
             assert self.process is not None
             self.process.write(
                 {
                     "type": "user",
-                    "message": {"role": "user", "content": [{"type": "text", "text": text}]},
+                    "message": {"role": "user", "content": content},
                     "parent_tool_use_id": None,
                     "session_id": self.spec.native_session_id or "",
+                    "uuid": native_uuid,
                 }
             )
         self.cb.on_turn_started()
@@ -366,14 +429,61 @@ class ClaudeStreamSession(StructuredSession):
             self._control({"subtype": "interrupt"})
         return True
 
+    def apply_settings(self, chosen: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+        """Apply each chosen field with its own control request (read back separately)."""
+        results: dict[str, dict[str, Any]] = {}
+        requests: dict[str, Callable[[Any], dict[str, Any]]] = {
+            "model": lambda v: {"subtype": "set_model", "model": v or "default"},
+            "effort": lambda v: {"subtype": "apply_flag_settings", "settings": {"effortLevel": v}},
+            "mode": lambda v: {"subtype": "set_permission_mode", "mode": v or "default"},
+        }
+        report: dict[str, Any] = {"source": "control_response"}
+        for key, build in requests.items():
+            if key not in chosen:
+                continue
+            try:
+                response = self.control_wait(build(chosen[key]))
+            except StructuredError as exc:
+                results[key] = {"ok": False, "error": str(exc)}
+                continue
+            results[key] = {"ok": True}
+            if key == "mode" and isinstance(response.get("mode"), str):
+                report["mode"] = response["mode"]
+                self.info["mode"] = response["mode"]
+        if "mode" in report:
+            self.cb.on_settings(dict(report))
+        return results
+
+    def read_settings(self) -> dict[str, Any] | None:
+        """``get_settings``: the model and effort Claude Code has actually applied."""
+        try:
+            response = self.control_wait({"subtype": "get_settings"})
+        except StructuredError as exc:
+            self.info["settings_error"] = str(exc)
+            return None
+        applied = _obj(response.get("applied"))
+        effective = _obj(response.get("effective"))
+        report: dict[str, Any] = {"source": "get_settings"}
+        if isinstance(applied.get("model"), str):
+            report["model"] = applied["model"]
+        if "effort" in applied:
+            report["effort"] = applied.get("effort")
+        permissions = effective.get("permissions")
+        if "mode" not in self.info and isinstance(permissions, dict):
+            default_mode = permissions.get("defaultMode")
+            if isinstance(default_mode, str):
+                report["mode"] = "default" if default_mode == "manual" else default_mode
+        self.cb.on_settings(report)
+        return report
+
     def answer(
-        self, request_id: str, decision: str, answers: Mapping[str, str] | None = None
+        self, request_id: str, decision: str, answers: Mapping[str, Any] | None = None
     ) -> None:
         with self._lock:
             self._respond_permission(request_id, decision, answers)
 
     def _respond_permission(
-        self, request_id: str, decision: str, answers: Mapping[str, str] | None
+        self, request_id: str, decision: str, answers: Mapping[str, Any] | None
     ) -> None:
         request = self.permission_requests.pop(request_id, None)
         if request is None:
@@ -396,17 +506,52 @@ class ClaudeStreamSession(StructuredSession):
             {"event": "PermissionDecision", "decision": decision, "tool_name": request.get("tool")}
         )
 
+    def _control_response(self, msg: dict[str, Any]) -> None:
+        response = _obj(msg.get("response"))
+        rid = str(response.get("request_id") or "")
+        ok = response.get("subtype") == "success"
+        payload = _obj(response.get("response"))
+        if rid and rid == self._init_rid:
+            if ok:
+                self.cb.on_catalog(dict(payload))
+            else:
+                self.info["init_error"] = str(response.get("error") or "initialize failed")
+            self.initialized.set()
+        waiter = self._control_waiters.get(rid)
+        if waiter is not None:
+            event, box = waiter
+            if ok:
+                box["response"] = payload
+            else:
+                box["error"] = str(response.get("error") or "")
+            event.set()
+
     def _on_line(self, msg: dict[str, Any]) -> None:
         kind = msg.get("type")
         if kind == "control_response":
+            self._control_response(msg)
             return
         sid = msg.get("session_id")
         if isinstance(sid, str) and sid and kind == "system" and msg.get("subtype") == "init":
             self.cb.on_native_id(
                 sid, "confirmed" if sid == self.spec.native_session_id else "observed"
             )
+            report: dict[str, Any] = {"source": "system/init"}
+            if isinstance(msg.get("model"), str):
+                report["model"] = msg["model"]
+            if isinstance(msg.get("permissionMode"), str):
+                report["mode"] = msg["permissionMode"]
+                self.info["mode"] = msg["permissionMode"]
+            self.cb.on_settings(report)
+        if kind == "stream_event" and msg.get("parent_tool_use_id") is None:
+            event = msg.get("event") or {}
+            if event.get("type") == "message_start":
+                model = (event.get("message") or {}).get("model")
+                if isinstance(model, str) and model:
+                    # The model that actually answered this turn, from the API response itself.
+                    self.cb.on_settings({"source": "message_start", "turn_model": model})
         out = self.translator.feed(msg)
-        self.info = dict(self.translator.info)
+        self.info.update({k: v for k, v in self.translator.info.items() if k != "mode"})
         if out and "unsupported" in out:
             assert self.process is not None
             self.process.write(
@@ -482,6 +627,9 @@ class CodexAppServerSession(StructuredSession):
         self._server_requests: dict[str, tuple[Any, str, dict[str, Any]]] = {}
         self.thread_id: str | None = spec.native_session_id
         self.failure: str | None = None
+        # Settings to pass when the thread is started or resumed (set by the service).
+        self.connect_settings: dict[str, Any] = {}
+        self._confirm_after_turn = False
 
     def start(self) -> None:
         self.process = PipeProcess(
@@ -512,13 +660,18 @@ class CodexAppServerSession(StructuredSession):
                 },
             )
             self._notify("initialized", None)
+            self._load_catalog()
+            params: dict[str, Any] = {
+                "cwd": self.spec.cwd,
+                **codex_thread_settings(self.connect_settings),
+            }
             if self.spec.mode == "resume" and self.thread_id:
                 result = self.call(
                     "thread/resume",
-                    {"threadId": self.thread_id, "cwd": self.spec.cwd, "excludeTurns": True},
+                    {"threadId": self.thread_id, "excludeTurns": True, **params},
                 )
             else:
-                result = self.call("thread/start", {"cwd": self.spec.cwd})
+                result = self.call("thread/start", params)
             thread = result.get("thread") or {}
             self.thread_id = str(thread.get("id") or self.thread_id or "")
             self.translator.thread_id = self.thread_id
@@ -531,6 +684,15 @@ class CodexAppServerSession(StructuredSession):
                     if isinstance(result.get("sandbox"), dict)
                     else result.get("sandbox"),
                     "cli_version": thread.get("cliVersion"),
+                }
+            )
+            self.cb.on_settings(
+                {
+                    "source": "thread/resume" if self.spec.mode == "resume" else "thread/start",
+                    "model": result.get("model") or thread.get("model"),
+                    "effort": result.get("reasoningEffort", thread.get("reasoningEffort")),
+                    "approval": result.get("approvalPolicy"),
+                    "sandbox": result.get("sandbox"),
                 }
             )
             if self.spec.mode == "new":
@@ -547,8 +709,63 @@ class CodexAppServerSession(StructuredSession):
         self.cb.on_ready()
         with self._lock:
             queued, self.queue = self.queue, []
-        for text, client_id in queued:
-            self._start_turn(text, client_id)
+        for turn in queued:
+            self._start_turn(turn)
+
+    def _load_catalog(self) -> None:
+        """``model/list`` and ``configRequirements/read``: what the selectors may offer."""
+        models: list[dict[str, Any]] = []
+        cursor: str | None = None
+        try:
+            for _ in range(10):
+                page = self.call("model/list", {"cursor": cursor} if cursor else {})
+                models.extend(m for m in page.get("data") or [] if isinstance(m, dict))
+                cursor = page.get("nextCursor")
+                if not cursor:
+                    break
+        except StructuredError as exc:
+            self.cb.on_catalog({"error": f"model/list 失败：{exc}"})
+            return
+        requirements: dict[str, Any] | None = None
+        try:
+            raw = self.call("configRequirements/read", {}).get("requirements")
+            requirements = raw if isinstance(raw, dict) else None
+        except StructuredError:
+            requirements = None
+        self.cb.on_catalog({"models": models, "requirements": requirements})
+
+    def read_settings(self, with_mode: bool) -> None:
+        """Read back what the thread now uses: ``thread/read`` (model, effort) and, after a
+        turn, ``thread/resume`` on the loaded thread (approval policy and sandbox)."""
+        if not self.thread_id:
+            return
+        try:
+            thread = self.call("thread/read", {"threadId": self.thread_id}).get("thread") or {}
+            self.cb.on_settings(
+                {
+                    "source": "thread/read",
+                    "model": thread.get("model"),
+                    "effort": thread.get("reasoningEffort"),
+                }
+            )
+            if with_mode:
+                result = self.call(
+                    "thread/resume",
+                    {"threadId": self.thread_id, "cwd": self.spec.cwd, "excludeTurns": True},
+                )
+                self.cb.on_settings(
+                    {
+                        "source": "thread/resume",
+                        "approval": result.get("approvalPolicy"),
+                        "sandbox": result.get("sandbox"),
+                    }
+                )
+        except StructuredError as exc:
+            self.info["settings_error"] = str(exc)
+
+    def apply_settings(self, chosen: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+        # Codex has no per-thread "set" request: overrides travel with the next turn/start.
+        return {key: {"ok": True, "pending": True} for key in chosen}
 
     def load_history(self) -> None:
         if not self.thread_id:
@@ -612,10 +829,19 @@ class CodexAppServerSession(StructuredSession):
             self.translator.notification(method, params)
             if method == "turn/started":
                 self.cb.on_turn_started()
+                if self._confirm_after_turn:
+                    threading.Thread(target=self.read_settings, args=(False,), daemon=True).start()
             elif method == "turn/completed":
                 turn = params.get("turn") or {}
                 self.cb.on_activity({"event": "Stop", "status": turn.get("status")})
                 self.cb.on_turn_finished()
+                if self._confirm_after_turn:
+                    self._confirm_after_turn = False
+                    threading.Thread(target=self.read_settings, args=(True,), daemon=True).start()
+            elif method == "model/rerouted":
+                self.cb.on_settings(
+                    {"source": "model/rerouted", "model": params.get("toModel"), "rerouted": True}
+                )
             elif method == "item/started":
                 item = params.get("item") or {}
                 if item.get("type") in (
@@ -675,14 +901,16 @@ class CodexAppServerSession(StructuredSession):
             return
         # Requests RepoBridge cannot answer are refused visibly, never silently approved.
         notice = {
-            "mcpServer/elicitation/request": "MCP 服务器请求填写信息；RepoBridge 暂不支持，已拒绝",
-            "item/tool/requestUserInput": "Codex 想向你提问；RepoBridge 暂不支持这种交互，已拒绝",
+            "mcpServer/elicitation/request": "MCP 服务器请求的表单格式 RepoBridge 无法显示；已拒绝",
+            "item/tool/requestUserInput": "Codex 发来的提问没有可显示的问题；已回复空答案",
             "execCommandApproval": "收到旧版命令审批请求；已拒绝",
             "applyPatchApproval": "收到旧版补丁审批请求；已拒绝",
         }.get(method, f"收到不支持的请求 {method}；已拒绝")
         self.conv.upsert({"id": f"n:req:{key}", "type": "notice", "level": "warn", "text": notice})
         if method == "mcpServer/elicitation/request":
             self._respond(rid, {"action": "decline"})
+        elif method == "item/tool/requestUserInput":
+            self._respond(rid, {"answers": {}})
         elif method in ("execCommandApproval", "applyPatchApproval"):
             self._respond(rid, {"decision": "denied"})
         elif method == "item/tool/call":
@@ -693,30 +921,43 @@ class CodexAppServerSession(StructuredSession):
 
     # --- user actions -----------------------------------------------------------------------
 
-    def send(self, text: str, client_id: str) -> None:
+    def send(
+        self,
+        text: str,
+        client_id: str,
+        inputs: list[dict[str, Any]] | None = None,
+        attachments: list[dict[str, Any]] | None = None,
+        overrides: Mapping[str, Any] | None = None,
+        display: str | None = None,
+    ) -> None:
+        turn = _CodexTurn(text, client_id, list(inputs or []), dict(overrides or {}))
         with self._lock:
             if self.busy:
                 raise StructuredError("上一轮还在进行；可以先停止它")
-            self.translator.begin_turn(client_id, text)
+            self.translator.begin_turn(client_id, text if display is None else display, attachments)
             if not self.ready.is_set():
-                self.queue.append((text, client_id))
+                self.queue.append(turn)
                 return
-        self._start_turn(text, client_id)
+        self._start_turn(turn)
 
-    def _start_turn(self, text: str, client_id: str) -> None:
+    def _start_turn(self, turn: _CodexTurn) -> None:
+        text, client_id = turn.text, turn.client_id
         self.cb.on_activity({"event": "UserPromptSubmit", "prompt": text[:2000]})
+        params: dict[str, Any] = {
+            "threadId": self.thread_id,
+            "input": ([{"type": "text", "text": text}] if text else []) + turn.inputs,
+            "clientUserMessageId": client_id,
+            **codex_turn_settings(turn.overrides),
+        }
+        if turn.overrides:
+            self._confirm_after_turn = True
 
         def run() -> None:
             try:
-                result = self.call(
-                    "turn/start",
-                    {
-                        "threadId": self.thread_id,
-                        "input": [{"type": "text", "text": text}],
-                        "clientUserMessageId": client_id,
-                    },
-                )
+                result = self.call("turn/start", params)
             except StructuredError as exc:
+                if turn.overrides:
+                    self.cb.on_settings({"source": "turn/start", "error": str(exc)})
                 self.conv.upsert({"id": f"user:{client_id}", "status": "failed"})
                 self.conv.upsert(
                     {
@@ -729,9 +970,9 @@ class CodexAppServerSession(StructuredSession):
                 self.conv.set_turn(None)
                 self.cb.on_turn_finished()
                 return
-            turn = result.get("turn") or {}
-            if turn.get("id") and not self.translator.turn_id:
-                self.translator.turn_id = str(turn["id"])
+            started = result.get("turn") or {}
+            if started.get("id") and not self.translator.turn_id:
+                self.translator.turn_id = str(started["id"])
 
         threading.Thread(target=run, name="codex-turn", daemon=True).start()
 
@@ -759,13 +1000,65 @@ class CodexAppServerSession(StructuredSession):
             entry = self._server_requests.pop(request_id, None)
         if entry is None:
             raise StructuredError("这个权限请求已经结束")
-        if decision not in ("allow", "allow_session", "deny"):
-            raise StructuredError(f"unknown decision {decision!r}")
         rid, method, params = entry
-        self._respond(rid, codex_permission_response(method, decision, params))
-        label = "denied" if decision == "deny" else "allowed"
+        allowed = {
+            "item/tool/requestUserInput": ("answer", "deny"),
+            "mcpServer/elicitation/request": ("accept", "decline", "cancel"),
+        }.get(method, ("allow", "allow_session", "deny"))
+        if decision not in allowed:
+            with self._lock:
+                self._server_requests[request_id] = entry
+            raise StructuredError(f"unknown decision {decision!r}")
+        try:
+            response = codex_permission_response(method, decision, params, answers)
+        except ValueError as exc:
+            with self._lock:
+                self._server_requests[request_id] = entry
+            raise StructuredError(str(exc)) from None
+        self._respond(rid, response)
+        label = "denied" if decision in ("deny", "decline", "cancel") else "allowed"
         self.conv.upsert({"id": f"perm:{request_id}", "status": label, "decision": decision})
         self.cb.on_activity({"event": "PermissionDecision", "decision": decision})
+
+
+@dataclass
+class _CodexTurn:
+    text: str
+    client_id: str
+    inputs: list[dict[str, Any]]
+    overrides: dict[str, Any]
+
+
+def codex_thread_settings(chosen: Mapping[str, Any]) -> dict[str, Any]:
+    """``thread/start`` / ``thread/resume`` parameters for the chosen settings."""
+    out: dict[str, Any] = {}
+    if chosen.get("model"):
+        out["model"] = chosen["model"]
+    if chosen.get("effort"):
+        out["config"] = {"model_reasoning_effort": chosen["effort"]}
+    mode = CODEX_MODE_BY_ID.get(str(chosen.get("mode") or ""))
+    if mode is not None:
+        out["approvalPolicy"] = mode["approval"]
+        out["sandbox"] = mode["sandbox_mode"]
+    return out
+
+
+def codex_turn_settings(chosen: Mapping[str, Any]) -> dict[str, Any]:
+    """``turn/start`` overrides (they apply to this turn and the ones after it)."""
+    out: dict[str, Any] = {}
+    if chosen.get("model"):
+        out["model"] = chosen["model"]
+    if chosen.get("effort"):
+        out["effort"] = chosen["effort"]
+    mode = CODEX_MODE_BY_ID.get(str(chosen.get("mode") or ""))
+    if mode is not None:
+        out["approvalPolicy"] = mode["approval"]
+        out["sandboxPolicy"] = dict(mode["sandbox"])
+    return out
+
+
+def _obj(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _quiet(fn: Callable[[], Any]) -> None:
@@ -857,6 +1150,72 @@ def read_codex_history(
         return codex_turn_items(codex_read_turns(reader.call, thread_id))
     finally:
         reader.process.terminate(1.0)
+
+
+def probe_catalog(
+    kind: str, binary: str, cwd: str, base_env: Mapping[str, str], run_dir: Path
+) -> dict[str, Any]:
+    """Ask a short-lived CLI process for its model catalog: no session, no turn, no model call.
+
+    Claude Code: ``initialize`` on a ``-p`` stream-json process with ``--no-session-persistence``
+    (nothing is written to its session store). Codex: ``model/list`` and
+    ``configRequirements/read`` on an app-server that starts no thread.
+    """
+    env, stripped = session_env(base_env)
+    captured: dict[str, Any] = {}
+    done = threading.Event()
+
+    def on_catalog(payload: dict[str, Any]) -> None:
+        captured.update(payload)
+        done.set()
+
+    callbacks = SessionCallbacks(
+        on_native_id=lambda *_: None,
+        on_turn_started=lambda: None,
+        on_turn_finished=lambda: None,
+        on_ready=lambda: None,
+        on_activity=lambda _r: None,
+        on_exit=lambda _i: done.set(),
+        on_catalog=on_catalog,
+    )
+    if kind == CLAUDE:
+        argv = [
+            binary,
+            "-p",
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--no-session-persistence",
+        ]
+        spec = StructuredSpec(argv, env, cwd, None, "none", stripped, "probe", "")
+        claude = ClaudeStreamSession(spec, run_dir, Conversation(), callbacks)
+        claude.start()
+        try:
+            if not claude.wait_initialized(40):
+                raise StructuredError("Claude Code 没有回应 initialize")
+            if claude.info.get("init_error"):
+                raise StructuredError(str(claude.info["init_error"]))
+        finally:
+            claude.terminate(2.0)
+        return captured
+    spec = StructuredSpec(codex_argv(binary), env, cwd, None, "none", stripped, "probe", "")
+    codex = CodexAppServerSession(spec, run_dir, Conversation(), callbacks)
+    codex.process = PipeProcess(
+        spec, run_dir / "catalog-stderr.log", on_line=codex._on_line, on_exit=codex._exit
+    )
+    codex.process.start()
+    try:
+        client = {"name": "repobridge", "title": "RepoBridge", "version": CLIENT_VERSION}
+        codex.call("initialize", {"clientInfo": client}, timeout=20)
+        codex._notify("initialized", None)
+        codex._load_catalog()
+    finally:
+        codex.process.terminate(1.0)
+    if captured.get("error"):
+        raise StructuredError(str(captured["error"]))
+    return captured
 
 
 def read_claude_history(
