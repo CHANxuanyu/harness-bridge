@@ -2,7 +2,7 @@
 
 ## W5 redesign done; W4 real acceptance next — 2026-10-08
 
-Code: branch `claude/repobridge-product-direction-8e26f9` (pushed; see STATUS for the PR), local
+Code: branch `claude/repobridge-product-direction-8e26f9`, [PR #1](https://github.com/CHANxuanyu/harness-bridge/pull/1) into `claude/new-repo-plan-dn1eac` (not merged), local
 worktree `/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9`.
 Read [WORKBENCH.md](docs/WORKBENCH.md) and DECISIONS 124–131 before changing the UI.
 

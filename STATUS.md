@@ -29,6 +29,11 @@ Not verified: real Claude Code / Codex sessions in the new UI (T3-W/T4-W; this d
 runs inside Claude Code), real IME composition, system clipboard paste, pointer-drag resizing,
 VoiceOver. No model call, credential read, release, tag or visibility change.
 
+GitHub: development branch `claude/repobridge-product-direction-8e26f9` pushed (non-force) and
+[PR #1](https://github.com/CHANxuanyu/harness-bridge/pull/1) opened against the default branch
+`claude/new-repo-plan-dn1eac`, which was **not** updated (no explicit authorization to merge this new
+direction). The repository's CI workflow is manual-dispatch only, so the PR shows no checks.
+
 Next: the user runs W4 real acceptance from WORKBENCH.md; then fix what real TUIs reveal inside
 xterm.js (keys, IME, alt-screen, Codex resume) and decide on `.app` packaging/launch from Finder.
 
