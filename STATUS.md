@@ -6,6 +6,8 @@ Worktree `/Users/chan/Downloads/repobridge-backend`, branch `codex/existing-sess
 base `ef75a625577c1848e1079dd6d487a5cdc3afa166`. Contract-first commit:
 `c20679e3d7e0915756a4901ab1b80a5ef91123c3`. [API contract](docs/EXISTING_SESSIONS_API.md)
 now includes exact examples, limits and state fields for Opus's frontend.
+Implementation `d638e9aec41ee193db3283efccc3fc029ca13b3f` is pushed in draft
+[PR #4](https://github.com/CHANxuanyu/harness-bridge/pull/4), based on the frontend handoff branch.
 
 Implemented scoped native discovery/search/pagination, preview, atomic link/dedupe/relink/unlink,
 paged/delta history, original-ID resume and the existing desktop-open/return integration. Native

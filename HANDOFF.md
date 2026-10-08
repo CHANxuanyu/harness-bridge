@@ -7,6 +7,10 @@ it starts at exact common handoff `ef75a625577c1848e1079dd6d487a5cdc3afa166`. Th
 `c20679e3d7e0915756a4901ab1b80a5ef91123c3` delivered the API/ownership contract before implementation.
 The frontend worktree/branch and old main checkout have not been switched or edited.
 
+Pushed implementation: `d638e9aec41ee193db3283efccc3fc029ca13b3f`.
+Draft [backend PR #4](https://github.com/CHANxuanyu/harness-bridge/pull/4) targets the frontend
+handoff branch (stacked on open PR #3), not the default branch. No merge or release performed.
+
 For Opus: implement the scoped discovery/preview/link UI against
 [EXISTING_SESSIONS_API.md](docs/EXISTING_SESSIONS_API.md). Keep current /api/state + SSE, session
 detail, conversation, start and desktop routes; new fields/route examples are exact in that document.
