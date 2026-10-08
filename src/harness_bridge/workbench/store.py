@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_REVISION = 3
+SCHEMA_REVISION = 4
 ACTIVE = ("starting", "running")
 ENDED = ("exited", "failed", "stopped", "interrupted")
 
@@ -96,6 +96,17 @@ CREATE TABLE IF NOT EXISTS handoffs (
 """
 
 
+_LINK_SCHEMA = """CREATE TABLE IF NOT EXISTS native_links (
+    harness TEXT NOT NULL,
+    environment_id TEXT NOT NULL,
+    native_session_id TEXT NOT NULL,
+    session_id TEXT NOT NULL UNIQUE REFERENCES sessions(session_id),
+    metadata_json TEXT NOT NULL,
+    linked INTEGER NOT NULL DEFAULT 1 CHECK (linked IN (0,1)),
+    PRIMARY KEY (harness, environment_id, native_session_id)
+)"""
+
+
 def now() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds")
 
@@ -121,6 +132,7 @@ class WorkbenchStore:
         self._db.executescript(_SCHEMA)
         row = self._db.execute("SELECT value FROM meta WHERE key='schema_revision'").fetchone()
         if row is None:
+            self._db.execute(_LINK_SCHEMA)
             self._db.execute(
                 "INSERT INTO meta(key, value) VALUES ('schema_revision', ?)",
                 (str(SCHEMA_REVISION),),
@@ -133,6 +145,11 @@ class WorkbenchStore:
             if revision == 2:
                 self._migrate_2_to_3()
                 revision = 3
+            if revision == 3:
+                with self.tx() as db:
+                    db.execute(_LINK_SCHEMA)
+                    db.execute("UPDATE meta SET value='4' WHERE key='schema_revision'")
+                revision = 4
             if revision != SCHEMA_REVISION:
                 raise RuntimeError(
                     f"workbench schema revision {row['value']} is not supported "
@@ -335,6 +352,113 @@ class WorkbenchStore:
                 (now(), session_id),
             )
 
+    def native_link(self, session_id: str) -> dict[str, Any] | None:
+        return self._row("SELECT * FROM native_links WHERE session_id=?", (session_id,))
+
+    def find_native_link(
+        self, harness: str, environment: str, native: str
+    ) -> dict[str, Any] | None:
+        return self._row(
+            "SELECT l.*, s.archived FROM native_links l JOIN sessions s USING (session_id) "
+            "WHERE l.harness=? AND l.environment_id=? AND l.native_session_id=?",
+            (harness, environment, native),
+        )
+
+    def link_native(
+        self, project_id: str, meta: dict[str, Any], view: str
+    ) -> tuple[str, bool, bool]:
+        """Atomic identity reservation; keep the same local row when unlinking/relinking."""
+        harness, native, environment = (
+            meta["harness"],
+            meta["native_session_id"],
+            meta["environment"]["id"],
+        )
+        with self.tx() as db:
+            old = db.execute(
+                "SELECT * FROM native_links WHERE harness=? AND environment_id=? "
+                "AND native_session_id=?",
+                (harness, environment, native),
+            ).fetchone()
+            if old:
+                sid = str(old["session_id"])
+                relinked = not bool(old["linked"])
+                if relinked:
+                    db.execute(
+                        "UPDATE native_links SET linked=1, metadata_json=? WHERE session_id=?",
+                        (json.dumps(meta, ensure_ascii=False), sid),
+                    )
+                    db.execute(
+                        "UPDATE sessions SET archived=0, external_json=? WHERE session_id=?",
+                        (
+                            json.dumps(
+                                {
+                                    "app": "external client",
+                                    "status": "unknown",
+                                    "via": "native-link",
+                                }
+                            ),
+                            sid,
+                        ),
+                    )
+                return sid, False, relinked
+            # Existing App-created rows predate native_links. Reuse only a unique exact identity.
+            rows = db.execute(
+                "SELECT s.* FROM sessions s LEFT JOIN native_links l USING (session_id) "
+                "WHERE s.harness=? AND s.native_session_id=? AND l.session_id IS NULL",
+                (harness, native),
+            ).fetchall()
+            if rows:
+                if len(rows) != 1 or rows[0]["workdir"] != meta["workdir"]:
+                    raise ValueError("Existing native identity has conflicting local associations")
+                other = db.execute(
+                    "SELECT 1 FROM native_links WHERE session_id=?", (rows[0]["session_id"],)
+                ).fetchone()
+                if other:
+                    raise ValueError("Native identity belongs to another storage environment")
+                sid = str(rows[0]["session_id"])
+            else:
+                sid = "ses_" + uuid.uuid4().hex[:12]
+                db.execute(
+                    "INSERT INTO sessions(session_id, project_id, harness, title, workdir, "
+                    "native_session_id, native_binding, created_at, updated_at, "
+                    "view_mode, external_json) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        sid,
+                        project_id,
+                        harness,
+                        meta["title"],
+                        meta["workdir"],
+                        native,
+                        "linked",
+                        now(),
+                        now(),
+                        view,
+                        json.dumps(
+                            {"app": "external client", "status": "unknown", "via": "native-link"}
+                        ),
+                    ),
+                )
+            db.execute(
+                "INSERT INTO native_links(harness,environment_id,native_session_id,session_id,"
+                "metadata_json) VALUES (?,?,?,?,?)",
+                (harness, environment, native, sid, json.dumps(meta, ensure_ascii=False)),
+            )
+            return sid, not bool(rows), False
+
+    def unlink_native(self, session_id: str) -> None:
+        with self.tx() as db:
+            row = db.execute(
+                "SELECT s.title,s.workdir FROM sessions s WHERE s.session_id=? AND "
+                "(s.external_json IS NOT NULL OR EXISTS (SELECT 1 FROM runs r "
+                "WHERE r.session_id=s.session_id AND r.status IN ('starting','running')))",
+                (session_id,),
+            ).fetchone()
+            if row:
+                raise WorkdirBusy(row["workdir"], session_id, row["title"])
+            db.execute("UPDATE native_links SET linked=0 WHERE session_id=?", (session_id,))
+            db.execute("UPDATE sessions SET archived=1 WHERE session_id=?", (session_id,))
+
     # --- runs -----------------------------------------------------------------------------------
 
     def begin_run(
@@ -350,6 +474,11 @@ class WorkbenchStore:
     ) -> dict[str, Any]:
         """Admit a writer for ``workdir`` or raise WorkdirBusy, atomically."""
         with self.tx() as db:
+            link = db.execute(
+                "SELECT linked FROM native_links WHERE session_id=?", (session_id,)
+            ).fetchone()
+            if link and (not link["linked"] or kind != "resume"):
+                raise ValueError("Existing-session association must be linked and resumed")
             busy = db.execute(
                 "SELECT r.session_id, s.title FROM runs r JOIN sessions s USING (session_id) "
                 "WHERE r.workdir=? AND r.status IN ('starting','running') LIMIT 1",

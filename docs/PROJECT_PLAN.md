@@ -110,8 +110,10 @@ v1.5 及以前（下文附录 A）以 “Advisor 会话领导跨 harness Executo
 - 会话环境继承用户环境，但移除 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等 API/provider 变量（沿用
   `config.API_PROVIDER_ENV` / `CODEX_PROVIDER_ENV`），只记录和显示变量名。
 - App 不读取 `~/.claude`、`~/.codex` 的认证文件，不调用登录接口；未登录时由原生 CLI 自己引导登录。
-  对话视图显示历史时只读 RepoBridge 创建的会话：Claude Code 该会话自己的记录文件、Codex 经 app-server 的
-  `thread/turns/list`；Codex 要求刷新登录令牌的请求一律拒绝。
+  对话视图读取 RepoBridge 创建的会话，以及用户在已登记项目范围内发现并明确关联的既有原生会话：
+  Claude Code 读取已核对 ID/cwd 的记录文件，Codex 经 app-server 的 `thread/turns/list`。
+  发现使用项目范围过滤，不扫描其他项目；接口见 [EXISTING_SESSIONS_API.md](EXISTING_SESSIONS_API.md)。
+  Codex 要求刷新登录令牌的请求一律拒绝。
 - App 检测到自身运行在另一 agent 会话（`CLAUDECODE`）或云 agent 环境中时，拒绝启动真实会话。
 - 从不添加 `--dangerously-skip-permissions`、`--dangerously-bypass-approvals-and-sandbox`、`--bare`，
   不提供 Claude `bypassPermissions` 与 Codex 完全访问。模型、思考强度、权限模式只在用户于 App 中明确选择后，

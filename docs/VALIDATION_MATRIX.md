@@ -10,6 +10,23 @@ SQLite/loopback HTTP with **stub** harness executables) · UI-offline (browser/w
 harnesses) · T3-W real single native harness session on the user's machine · T4-W real Claude Code +
 Codex sessions with handoff.
 
+## Existing sessions created outside RepoBridge — 2026-10-09
+
+| ID | Check | Level | Result |
+|---|---|---|---|
+| E01 | Scoped Claude metadata and Codex cwd-filtered native list; title search, native/index paging, invalid metadata/symlink refusal; unrelated transcript open explicitly guarded in test | T2-W synthetic outside-created fixtures | pass |
+| E02 | Preview/link perform no start/send/replay; four concurrent adds dedupe; restart/relink retains local/native ID; same UUID in different storage environments stays distinct; legacy registered row reused | T2-W | pass |
+| E03 | Original native ID resumes with zero invented App turns; fresh start/unlinked/environment mismatch/missing directory refused; native writer conflict and wrong resume ID fail without takeover/rebinding | T2-W | pass |
+| E04 | Stable history pages, native page order, updated-tool delta, reset/expired cursor, malformed/empty/unavailable distinction; live connection paging remains valid | T1/T2-W | pass |
+| E05 | Stub official-desktop open → hold → append in the same external native history → return/refresh → resume same ID; relink renews confirmation | T2-W simulated desktop | pass; **not real desktop acceptance** |
+| E06 | Additive schema 3→4 preserves old session; HTTP routes/error envelope/auth and legacy conversation response compatible | T2-W isolated DB/server port 0 | pass |
+| E07 | Installed Codex `generate-json-schema` confirms `thread/list` exact cwd and useStateDbOnly, search/cursor/order and turns pagination; isolated credential-free HOME/CODEX_HOME, no app-server/session started | real binary, schema only | pass (shape only) |
+| E08 | Final affected regression 102 tests / 70.35s (21 external-session cases + 81 existing workbench checks); ruff check/format (185 files), strict mypy (59 files) | static + T1/T2-W | pass |
+| E09 | Opus's new discovery/link UI and integrated interaction | UI-offline | pending frontend implementation |
+| E10 | Designated native sessions actually created outside RepoBridge; real official desktop open/history/continuation/return/resume | T3-W/T4-W | **not run**; prior App-created samples do not qualify; prior turn allowance exhausted |
+
+Reproduction and limits: [EXISTING_SESSIONS_RESULT.md](EXISTING_SESSIONS_RESULT.md).
+
 ## W6 conversation view / W7 official desktop continuation — 2026-10-08
 
 | ID | Check | Level | Result |

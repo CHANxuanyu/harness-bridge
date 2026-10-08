@@ -841,7 +841,7 @@ def find_claude_transcript(env: Mapping[str, str], session_id: str) -> Path | No
     return None
 
 
-def claude_transcript_items(path: Path) -> list[Item]:
+def claude_transcript_items(path: Path, *, diagnostics: list[str] | None = None) -> list[Item]:
     items: dict[str, Item] = {}
     names: dict[str, str] = {}
     # The model each reply came from (the API's own answer, recorded in the transcript).
@@ -864,11 +864,13 @@ def claude_transcript_items(path: Path) -> list[Item]:
         try:
             entry = json.loads(raw)
         except ValueError:
+            if diagnostics is not None and "malformed_native_record" not in diagnostics:
+                diagnostics.append("malformed_native_record")
             continue
         if not isinstance(entry, dict) or entry.get("isSidechain"):
             continue
         kind = entry.get("type")
-        stamp = entry.get("timestamp") or now()
+        stamp = entry.get("timestamp") or ""
         uid = str(entry.get("uuid") or n)
         message = _dict(entry.get("message"))
         content = message.get("content")

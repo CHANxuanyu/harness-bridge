@@ -156,8 +156,11 @@ class PipeProcess:
             raise OSError("session process has exited")
         line = (json.dumps(message, ensure_ascii=False) + "\n").encode("utf-8")
         with self._write_lock:
-            self.proc.stdin.write(line)
-            self.proc.stdin.flush()
+            try:
+                self.proc.stdin.write(line)
+                self.proc.stdin.flush()
+            except ValueError:
+                raise OSError("session process input has closed") from None
 
     def close_input(self) -> None:
         if self.proc is not None and self.proc.stdin is not None:
@@ -673,6 +676,8 @@ class CodexAppServerSession(StructuredSession):
             else:
                 result = self.call("thread/start", params)
             thread = result.get("thread") or {}
+            if self.spec.mode == "resume" and thread.get("id") != self.spec.native_session_id:
+                raise StructuredError("Native resume returned a different session ID")
             self.thread_id = str(thread.get("id") or self.thread_id or "")
             self.translator.thread_id = self.thread_id
             self.info.update(
@@ -1114,6 +1119,26 @@ def read_codex_history(
     binary: str, env: Mapping[str, str], cwd: str, thread_id: str, run_dir: Path
 ) -> list[dict[str, Any]]:
     """Read history with a short-lived app-server: no thread is resumed, no turn is started."""
+    result = read_codex_data(
+        binary,
+        env,
+        cwd,
+        thread_id,
+        run_dir,
+        lambda call: {"items": codex_turn_items(codex_read_turns(call, thread_id))},
+    )
+    return list(result["items"])
+
+
+def read_codex_data(
+    binary: str,
+    env: Mapping[str, str],
+    cwd: str,
+    thread_id: str,
+    run_dir: Path,
+    operation: Callable[[Callable[..., dict[str, Any]]], dict[str, Any]],
+) -> dict[str, Any]:
+    """Read-only native operation; no handshake that starts/resumes a thread or probes models."""
     spec = StructuredSpec(
         argv=codex_argv(binary),
         env=dict(env),
@@ -1156,9 +1181,11 @@ def read_codex_history(
             timeout=20,
         )
         reader._notify("initialized", None)
-        return codex_turn_items(codex_read_turns(reader.call, thread_id))
+        return operation(reader.call)
     finally:
-        reader.process.terminate(1.0)
+        exited = reader.process.terminate(1.0)
+        if exited is None or not exited.confirmed:
+            raise StructuredError("Native history reader exit is unconfirmed")
 
 
 def probe_catalog(

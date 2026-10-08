@@ -1,7 +1,8 @@
 # Existing native sessions — frontend/backend contract v1
 
 2026-10-09. Base: `ef75a625577c1848e1079dd6d487a5cdc3afa166` (code `2f26d23`).
-Owner: Codex backend/integration. This commit freezes the minimal interface; implementation follows.
+Owner: Codex backend/integration. Implemented on `codex/existing-session-backend`.
+The contract-first commit is `c20679e3d7e0915756a4901ab1b80a5ef91123c3`.
 No frontend/native-shell files change. No new model allowance is granted.
 
 ## Boundary and ownership
@@ -48,10 +49,10 @@ session for history; restoring the directory is required before native resume.
 ```json
 {
   "items": [{
-    "candidate_id": "nat_example",
+    "candidate_id": "nat_000000000000000000000001",
     "harness": "claude-code",
     "native_session_id": "00000000-0000-4000-8000-000000000001",
-    "environment": {"id":"env_example","kind":"local","label":"Claude Code local"},
+    "environment": {"id":"env_000000000000000000000001","kind":"local","label":"Claude Code local"},
     "source": "unknown",
     "title": "Fix parser",
     "updated_at": "2026-10-09T00:00:00Z",
@@ -70,12 +71,15 @@ session for history; restoring the directory is required before native resume.
 
 source: `cli | desktop | cloud | other | unknown`; only label proven origin. Local unknown origin can
 be resumable when native ID/cwd/local history are verified; cloud/unsupported sources cannot.
+Current local discovery emits `cli`, `other` or `unknown`; desktop/cloud are reserved for proven
+sources, not inferred. Codex's native default interactive-source and non-archived filters apply.
 already_linked: null or `{"session_id":"ses_…","archived":false}`.
 directory_state: `available | missing`; project_match: `root | registered_workdir`.
 occupancy.state: `repobridge | external | unknown`; unknown never means free. A linked external
 hold is reported as external. Existing same-workdir admission plus native writer refusal remain.
 Freshly linked unknown occupancy requires user confirmation before first resume/send; confirmation
 is not proof that every external process has exited. No automatic takeover or killing outside apps.
+Relinking after removal requires this confirmation again.
 Completeness refers to the native source, not whether pagination has more rows. `local_only` means
 cloud/unindexed/other-project histories were not searched; bounded/malformed sources add reasons.
 
@@ -85,6 +89,7 @@ cloud/unindexed/other-project histories were not searched; bounded/malformed sou
 {
   "items": [{"id":"user:example","type":"user","text":"Fix parser","history":true}],
   "history": {"source":"claude-transcript","error":null},
+  "partial_reasons": [],
   "page": {
     "state":"ready", "next_before":null, "next_since":"opaque-token",
     "has_more":false, "reset":false,
@@ -100,6 +105,61 @@ items/transcript UUIDs; no terminal parsing. A since cursor compares item conten
 so completed tool results replace their earlier versions. `reset=true` tells the UI to replace its
 loaded history (e.g. native rewrite or expired snapshot); otherwise merge by ID. before cursors use
 an immutable bounded snapshot, so appends do not shift older pages. Cursors never grant new scope.
+Preview returns exactly `items`, `history`, `partial_reasons`, `page`. Session conversation retains
+its existing additional fields (`live`, `run_id`, `turn`, and live `info`). For a live connection,
+paging adds `history.source="live-structured"`; unpaged legacy responses are unchanged. Consumers
+should use `page.completeness` (not assume `partial_reasons` exists on live/legacy responses).
+
+Snapshots are local and bounded: cursors expire after 10 minutes, on restart or cache eviction
+(64 entries, 32 MiB total); candidates are retained for the latest 2,000 discoveries. Claude scans
+at most 2,000 transcript candidates in the scoped directories and validates the first 256 KiB of
+metadata. Its history reader has a 64 MiB file cap. Codex reads at most 20 native pages of 100 turns,
+newest first; normalized history retains at most 10,000 items / 8 MiB. Truncation is explicit in
+`page.completeness.reasons` (`native_file_limit`, `native_page_limit`, `history_snapshot_limit`),
+so a page is only the newest part of the **visible bounded history**, not proof of exhaustive history.
+Discovery reasons include `local_only`, `native_index_only`, `scan_limit`, `symlink_skipped`,
+`directory_unreadable`, `invalid_native_metadata`; malformed JSONL history adds
+`malformed_native_record`. Native read failures appear in `history.error`.
+
+## Link response and state integration (synthetic)
+
+Request: `POST /api/sessions/link`, body
+`{"candidate_id":"nat_000000000000000000000001","view_mode":"conversation"}`.
+Successful `result` below reuses **the full existing session-detail response** under `session`.
+Select `result.session.session.session_id`; do not invent a flat response:
+
+```json
+{
+  "session": {
+    "session": {
+      "session_id":"ses_000000000001", "project_id":"prj_000000000001",
+      "harness":"claude-code", "title":"Fix parser", "workdir":"/example/project",
+      "native_session_id":"00000000-0000-4000-8000-000000000001",
+      "native_binding":"linked", "handoff_from":null, "turns_observed":0,
+      "created_at":"2026-10-09T00:00:00.000+00:00",
+      "updated_at":"2026-10-09T00:00:00.000+00:00",
+      "archived":0, "view_mode":"conversation"
+    },
+    "structured_info":{}, "runs":[], "handoffs_in":[], "handoffs_out":[]
+  },
+  "created":true, "relinked":false
+}
+```
+
+Duplicate: same local/native IDs, `created=false,relinked=false`. Re-add after unlink: same IDs,
+`created=false,relinked=true`. Existing runs/handoffs remain in their existing arrays; no history
+is copied into them. `turns_observed=0` counts App-observed turns, not native history length.
+
+The existing `/api/state` / SSE session row adds `native_link` (null for ordinary App sessions):
+`{"linked":true,"environment":{"id":"env_…","kind":"local","label":"Claude Code local"},
+"source":"unknown","resumable":true,"resume_reason":null,"directory_state":"available"}`.
+`resume_reason`: null, `unsupported_source`, `directory_missing`, `environment_changed`, `unlinked`.
+Existing `can_resume` reflects capability/current directory/environment and active run;
+`can_start_fresh=false` for associations. It does **not** override external-writer confirmation.
+Read existing `external` for the hold; an initial/relinked hold is
+`{"app":"external client","status":"unknown","via":"native-link"}`.
+Unlink archives the session; `native_link.linked=false` distinguishes it from ordinary archive.
+Display it only where removed/archived records are intended, not as a resumable active association.
 
 Requests are synchronous: show loading while pending; no new progress SSE protocol. Do not poll
 while the dialog is closed. Refresh is user initiated; transient failures preserve the last view
@@ -109,6 +169,14 @@ restart from first page. Bad input:400 INVALID_INPUT; unknown candidate/session/
 unavailable native capability or missing directory:412 PREFLIGHT_FAILED; busy/unlinked/env mismatch:
 409 STATE_CONFLICT. Known unsupported discovery returns a capability error, never an empty list.
 Native failures are sanitized; no raw credentials or unrelated transcript content in errors.
+The existing external-hold error has `details.external`; same-workdir busy has
+`details.busy_session_id`. Do not parse message text for these states. Native writer conflicts
+detected after asynchronous resume appear in the existing failed run/state event, not a successful
+connection. Example error envelope:
+
+```json
+{"ok":false,"error":{"code":"STATE_CONFLICT","message":"History cursor expired; reload the first page","details":{"reason":"cursor_expired"}}}
+```
 
 ## Verification and acceptance boundary
 

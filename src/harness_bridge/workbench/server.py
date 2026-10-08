@@ -226,6 +226,25 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                 self._run(wb.snapshot)
             elif path == "/api/stream":
                 self._stream()
+            elif path == "/api/history":
+                self._run(
+                    lambda: wb.native_history.discover(
+                        query.get("project_id", ""),
+                        query.get("harness", ""),
+                        limit=query.get("limit", "20"),
+                        q=query.get("q", ""),
+                        cursor=query.get("cursor"),
+                    )
+                )
+            elif re.fullmatch(r"/api/history/nat_[0-9a-f]{24}", path):
+                self._run(
+                    lambda: wb.native_history.preview(
+                        path.rsplit("/", 1)[1],
+                        limit=query.get("limit", "50"),
+                        before=query.get("before"),
+                        since=query.get("since"),
+                    )
+                )
             elif m := _SESSION_PATH.match(path):
                 sid, action = m.group(1), m.group(2)
                 if action is None:
@@ -241,7 +260,15 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                     self._run(lambda: wb.diff(sid, query.get("path", "")))
                 elif action == "conversation":
                     refresh = query.get("refresh") == "1"
-                    self._run(lambda: wb.conversation(sid, refresh=refresh))
+                    self._run(
+                        lambda: wb.conversation(
+                            sid,
+                            refresh=refresh,
+                            limit=query.get("limit"),
+                            before=query.get("before"),
+                            since=query.get("since"),
+                        )
+                    )
                 elif action == "files":
                     self._run(lambda: wb.search_files(sid, query.get("q", "")[:200]))
                 else:
@@ -291,6 +318,12 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                 self._run(lambda: [h.to_dict() for h in wb.harnesses(refresh=True).values()])
             elif path == "/api/projects":
                 self._run(lambda: wb.add_project(_str(body, "path"), body.get("name")))
+            elif path == "/api/sessions/link":
+                self._run(
+                    lambda: wb.link_session(
+                        _str(body, "candidate_id"), body.get("view_mode", "conversation")
+                    )
+                )
             elif path == "/api/sessions":
                 self._run(
                     lambda: wb.create_session(
@@ -376,6 +409,8 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                 self._run(lambda: wb.rename_session(sid, _str(body, "title")))
             elif action == "archive":
                 self._run(lambda: wb.archive_session(sid))
+            elif action == "unlink":
+                self._run(lambda: wb.unlink_session(sid))
             elif action == "unarchive":
                 self._run(lambda: wb.unarchive_session(sid))
             elif action == "handoff/draft":

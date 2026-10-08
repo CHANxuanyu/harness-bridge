@@ -1,5 +1,31 @@
 # Status
 
+## Existing-session backend implemented; frontend/real acceptance pending — 2026-10-09
+
+Worktree `/Users/chan/Downloads/repobridge-backend`, branch `codex/existing-session-backend`,
+base `ef75a625577c1848e1079dd6d487a5cdc3afa166`. Contract-first commit:
+`c20679e3d7e0915756a4901ab1b80a5ef91123c3`. [API contract](docs/EXISTING_SESSIONS_API.md)
+now includes exact examples, limits and state fields for Opus's frontend.
+
+Implemented scoped native discovery/search/pagination, preview, atomic link/dedupe/relink/unlink,
+paged/delta history, original-ID resume and the existing desktop-open/return integration. Native
+identity changes, removed associations, missing directories, storage-environment changes and writer
+conflicts refuse continuation. Relink requires renewed external-writer confirmation. Existing API
+calls remain compatible; no frontend/static/app.py/native_mac.py files changed.
+
+Schema 3→4 adds only `native_links`, with a unique harness/environment/native-ID constraint; existing
+session/run/history rows keep their meaning. Tested only on temporary databases. No real state
+opened or upgraded, no unrelated private-history scan, no real session/model call or budget renewal.
+
+Validation: 102 affected workbench tests passed (70.35s), including 21 external-session tests seeded
+outside RepoBridge in synthetic native stores. Ruff + formatting passed (185 files); strict mypy
+passed (59 files). Baseline full 942-test evidence is retained, not rerun or relabelled. See
+[acceptance record](docs/EXISTING_SESSIONS_RESULT.md) and VALIDATION_MATRIX for reproducible checks.
+
+Still pending: Opus's discovery/link dialog and UI integration; scoped real sessions created outside
+RepoBridge and real official-desktop continuity. The W6–W8 App-created samples do not satisfy this
+new real acceptance. Current prior allowance remains exhausted (Claude 6/6, Codex 6/6).
+
 ## Existing-session backend contract — 2026-10-09
 
 Backend branch `codex/existing-session-backend`, independent worktree

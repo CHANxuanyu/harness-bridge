@@ -1,5 +1,34 @@
 # Handoff
 
+## Backend ready for frontend integration — 2026-10-09
+
+Use backend branch `codex/existing-session-backend` in `/Users/chan/Downloads/repobridge-backend`;
+it starts at exact common handoff `ef75a625577c1848e1079dd6d487a5cdc3afa166`. The first pushed commit
+`c20679e3d7e0915756a4901ab1b80a5ef91123c3` delivered the API/ownership contract before implementation.
+The frontend worktree/branch and old main checkout have not been switched or edited.
+
+For Opus: implement the scoped discovery/preview/link UI against
+[EXISTING_SESSIONS_API.md](docs/EXISTING_SESSIONS_API.md). Keep current /api/state + SSE, session
+detail, conversation, start and desktop routes; new fields/route examples are exact in that document.
+In particular, link's local ID is `result.session.session.session_id`, association history is not
+copied, `turns_observed=0` does not imply an empty native session, and `can_start_fresh=false`.
+An unknown/external writer requires the user's confirmation; never infer idle from unknown.
+
+Backend acceptance: 102 related tests passed, 21 new external-session cases; static checks passed.
+Details and test command: [EXISTING_SESSIONS_RESULT.md](docs/EXISTING_SESSIONS_RESULT.md).
+Schema 3→4 is one additive association table. Test with a **fresh isolated state directory and
+port 0**; do not point this branch at the user's live database. Runtime tools were reused read-only
+from the frontend `.venv`, with `PYTHONPATH=src` selecting this backend worktree.
+
+Next integration owner remains Codex: combine Opus's frontend commits in an integration checkout,
+run its UI-specific checks against these endpoints, then check user-designated outside-created
+native samples. Do not use prior App-created acceptance threads, scan other project histories, or
+start model turns under the exhausted W6–W8 allowance. Full real continuation needs a new explicit
+bounded allowance and designated samples. Read-only scoped checks need no model allowance.
+
+Public status docs and AGENTS are Codex-owned; Opus reports via its commits/PR. No merge to default,
+release, automatic frontend cherry-pick, new PRD, or phase-approval cycle is part of this delivery.
+
 ## Existing-session backend contract — 2026-10-09
 
 Backend branch `codex/existing-session-backend`, independent worktree
