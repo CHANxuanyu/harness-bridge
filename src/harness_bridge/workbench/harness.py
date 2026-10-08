@@ -1,7 +1,8 @@
 """Native harness discovery, launch argv and session environment.
 
-Only interactive native CLIs are launched. Side channels are record-only: Claude Code hooks from a
+Terminal view: the interactive native CLIs. Side channels are record-only: Claude Code hooks from a
 per-run ``--settings`` file and Codex per-invocation ``-c notify`` / ``tui.notifications`` (OSC 9).
+Conversation view: the harnesses' own structured protocols (see ``structured.py``).
 Nothing here reads login state, and API/provider variables are removed from the session env so a
 subscription session is never silently switched to API billing.
 """
@@ -51,6 +52,8 @@ DEFAULT_LOCATIONS: dict[str, tuple[str, ...]] = {
     ),
 }
 EXTRA_PATH_DIRS = (str(_HOME / ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin")
+# Where official desktop clients (Claude Desktop, Codex) are looked up; tests point elsewhere.
+DEFAULT_APP_DIRS = ("/Applications", str(_HOME / "Applications"))
 
 # Terminal identity inherited from whatever launched the App would mislead the native TUI.
 _TERMINAL_IDENTITY_ENV = (
@@ -126,6 +129,8 @@ class WorkbenchConfig:
     discover: bool = True
     locations: Mapping[str, tuple[str, ...]] = field(default_factory=lambda: DEFAULT_LOCATIONS)
     python: str = sys.executable
+    app_dirs: tuple[str, ...] = DEFAULT_APP_DIRS
+    opener: str = "/usr/bin/open"
 
 
 def environment_refusal(env: Mapping[str, str]) -> str | None:

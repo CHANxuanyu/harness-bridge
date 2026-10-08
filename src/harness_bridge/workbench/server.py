@@ -237,6 +237,9 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                     self._run(lambda: wb.changes(sid))
                 elif action == "diff":
                     self._run(lambda: wb.diff(sid, query.get("path", "")))
+                elif action == "conversation":
+                    refresh = query.get("refresh") == "1"
+                    self._run(lambda: wb.conversation(sid, refresh=refresh))
                 else:
                     self._error(HTTPStatus.NOT_FOUND, "NOT_FOUND", "unknown route")
             else:
@@ -279,6 +282,7 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                         _str(body, "harness"),
                         title=body.get("title"),
                         start=body.get("start", True) is not False,
+                        view_mode=_view(body) if body.get("view_mode") is not None else None,
                     )
                 )
             elif m := _PROJECT_PATH.match(path):
@@ -300,7 +304,51 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
             elif action == "resize":
                 self._run(lambda: wb.resize(sid, _int(body, "cols"), _int(body, "rows")))
             elif action == "start":
-                self._run(lambda: wb.start_run(sid, _str(body, "kind")))
+                self._run(
+                    lambda: wb.start_run(
+                        sid,
+                        _str(body, "kind"),
+                        confirm_external=body.get("confirm_external") is True,
+                    )
+                )
+            elif action == "send":
+                self._run(
+                    lambda: wb.send_message(
+                        sid,
+                        _str(body, "text"),
+                        client_id=body.get("client_id")
+                        if isinstance(body.get("client_id"), str)
+                        else None,
+                        confirm_external=body.get("confirm_external") is True,
+                    )
+                )
+            elif action == "interrupt":
+                self._run(lambda: wb.interrupt(sid))
+            elif action == "permission":
+                self._run(
+                    lambda: wb.answer_permission(
+                        sid,
+                        _str(body, "request_id"),
+                        _str(body, "decision"),
+                        _answers(body),
+                    )
+                )
+            elif action == "view":
+                self._run(
+                    lambda: wb.switch_view(
+                        sid, _view(body), confirm_unknown=body.get("confirm_unknown") is True
+                    )
+                )
+            elif action == "desktop/open":
+                self._run(
+                    lambda: wb.open_in_desktop(
+                        sid,
+                        release=body.get("release") is True,
+                        confirm_unknown=body.get("confirm_unknown") is True,
+                    )
+                )
+            elif action == "desktop/return":
+                self._run(lambda: wb.desktop_return(sid))
             elif action == "stop":
                 self._run(lambda: wb.stop(sid))
             elif action == "rename":
@@ -396,6 +444,24 @@ def _str(body: dict[str, Any], key: str) -> str:
     if not isinstance(value, str):
         raise BridgeError("INVALID_INPUT", f"{key} must be a string")
     return value
+
+
+def _view(body: dict[str, Any]) -> str:
+    mode = body.get("view_mode")
+    if mode not in ("terminal", "conversation"):
+        raise BridgeError("INVALID_INPUT", "view_mode must be terminal or conversation")
+    return str(mode)
+
+
+def _answers(body: dict[str, Any]) -> dict[str, str] | None:
+    answers = body.get("answers")
+    if answers is None:
+        return None
+    if not isinstance(answers, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in answers.items()
+    ):
+        raise BridgeError("INVALID_INPUT", "answers must map questions to strings")
+    return answers
 
 
 def _appearance(body: dict[str, Any]) -> str:

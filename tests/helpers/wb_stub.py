@@ -14,6 +14,20 @@ Emulates only what the workbench relies on, never a model:
   prints N numbered lines (long output). Anything else is echoed as an assistant reply.
 
 ``WB_STUB_HOME`` holds the fake native history so resume can succeed or fail realistically.
+
+Structured protocols (conversation view), shaped after the official interfaces:
+
+* ``claude -p --input-format stream-json --output-format stream-json ...``: SDK control protocol
+  (``initialize``, ``can_use_tool`` permission requests, ``interrupt``), partial ``stream_event``
+  deltas, replayed user messages, ``result``. Transcript lines go to
+  ``$WB_STUB_HOME/claude-config/projects/<dir>/<id>.jsonl`` like Claude Code's own.
+* ``claude --desktop --resume <id>``: prints the official acknowledgement (needs a tty).
+* ``codex app-server``: JSON-RPC lines (``initialize``, ``thread/start|resume|name/set``,
+  ``thread/turns/list``, ``turn/start|interrupt``; approval server requests; item notifications).
+
+Structured commands: plain text (reply), ``edit <file>`` (asks to write), ``perm`` (asks to run a
+command), ``slow`` (waits for an interrupt), ``authfail``, ``retry``, ``ask``, ``elicit``,
+``fail``, ``crash``.
 """
 
 from __future__ import annotations
@@ -30,6 +44,37 @@ from pathlib import Path
 from typing import Any
 
 HOME = Path(os.environ.get("WB_STUB_HOME", "/nonexistent-wb-stub-home"))
+
+
+def transcript_path(session_id: str) -> Path:
+    slug = "".join(c if c.isalnum() else "-" for c in os.getcwd())
+    return HOME / "claude-config" / "projects" / slug / f"{session_id}.jsonl"
+
+
+def transcript_add(session_id: str, entry: dict[str, Any]) -> None:
+    path = transcript_path(session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "uuid": str(uuid.uuid4()),
+        "sessionId": session_id,
+        "timestamp": "2026-10-08T00:00:00Z",
+        **entry,
+    }
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry) + "\n")
+
+
+def codex_turns_path(thread: str) -> Path:
+    return HOME / "codex" / f"{thread}.turns.json"
+
+
+def codex_add_turn(thread: str, turn: dict[str, Any]) -> None:
+    path = codex_turns_path(thread)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    turns = json.loads(path.read_text()) if path.exists() else []
+    turns.append(turn)
+    path.write_text(json.dumps(turns))
+    (HOME / "codex" / thread).write_text("rollout\n")
 
 
 def out(text: str) -> None:
@@ -110,6 +155,9 @@ class Claude:
         if line == "size":
             on_winch(0, None)
             return None
+        if line == "/desktop":
+            out(f"Opening session {self.session} in Claude Desktop\r\n")
+            return 0
         if line == "/clear":
             self.session = str(uuid.uuid4())
             self.hook("SessionStart", source="clear")
@@ -118,6 +166,20 @@ class Claude:
         self.hook("UserPromptSubmit", prompt=line)
         self.history().parent.mkdir(parents=True, exist_ok=True)
         self.history().write_text("turn\n")
+        transcript_add(
+            str(self.session), {"type": "user", "message": {"role": "user", "content": line}}
+        )
+        transcript_add(
+            str(self.session),
+            {
+                "type": "assistant",
+                "message": {
+                    "id": f"msg_{uuid.uuid4().hex[:8]}",
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": f"assistant: {line}"}],
+                },
+            },
+        )
         if line.startswith("edit "):
             name = line.split(" ", 1)[1]
             tool = {"file_path": name, "content": "x"}
@@ -202,6 +264,21 @@ class Codex:
         self.turns += 1
         self.history().parent.mkdir(parents=True, exist_ok=True)
         self.history().write_text("rollout\n")
+        codex_add_turn(
+            str(self.thread),
+            {
+                "id": f"turn-{self.turns}",
+                "status": "completed",
+                "items": [
+                    {
+                        "type": "userMessage",
+                        "id": f"u{self.turns}",
+                        "content": [{"type": "text", "text": line}],
+                    },
+                    {"type": "agentMessage", "id": f"a{self.turns}", "text": f"codex: {line}"},
+                ],
+            },
+        )
         if self.notify:
             payload = {
                 "type": "agent-turn-complete",
@@ -237,11 +314,692 @@ def loop(cli: Claude | Codex) -> int:
             return result
 
 
+# --- structured protocols ------------------------------------------------------------------------
+
+
+def emit(obj: dict[str, Any]) -> None:
+    sys.stdout.write(json.dumps(obj) + "\n")
+    sys.stdout.flush()
+
+
+def read_json() -> dict[str, Any] | None:
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            return None
+        try:
+            value = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            return value
+
+
+def claude_desktop(args: list[str]) -> int:
+    log = HOME / "desktop-calls.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with open(log, "a") as fh:
+        fh.write(json.dumps({"argv": args, "tty": os.isatty(0) and os.isatty(1)}) + "\n")
+    if not (os.isatty(0) and os.isatty(1)):
+        print("Error: --desktop needs an interactive terminal", file=sys.stderr)
+        return 1
+    sid = args[args.index("--resume") + 1] if "--resume" in args else ""
+    if not (HOME / "claude" / sid).exists():
+        print(f"No conversation found with session ID: {sid}")
+        return 1
+    print(f"Opening session {sid} in Claude Desktop")
+    return 0
+
+
+class ClaudeStream:
+    """stream-json emulation of ``claude -p`` with the SDK control protocol."""
+
+    def __init__(self, args: list[str]) -> None:
+        self.session = args[args.index("--session-id") + 1] if "--session-id" in args else None
+        self.resume = args[args.index("--resume") + 1] if "--resume" in args else None
+        self.initialized = False
+        self.req = 0
+        self.inited = False
+
+    def run(self) -> int:
+        if self.resume:
+            self.session = self.resume
+            if not (HOME / "claude" / self.resume).exists():
+                print(f"No conversation found with session ID: {self.resume}", file=sys.stderr)
+                return 1
+        self.session = self.session or str(uuid.uuid4())
+        while True:
+            msg = read_json()
+            if msg is None:
+                return 0
+            if msg.get("type") == "control_request":
+                self.control(msg)
+            elif msg.get("type") == "user":
+                code = self.turn(msg)
+                if code is not None:
+                    return code
+
+    def control(self, msg: dict[str, Any]) -> None:
+        rid = msg.get("request_id")
+        sub = (msg.get("request") or {}).get("subtype")
+        emit(
+            {
+                "type": "control_response",
+                "response": {"subtype": "success", "request_id": rid, "response": {"subtype": sub}},
+            }
+        )
+
+    def ask(
+        self, tool: str, tool_id: str, args: dict[str, Any], suggestions: Any = None
+    ) -> dict[str, Any]:
+        self.req += 1
+        rid = f"cli_{self.req}"
+        emit(
+            {
+                "type": "control_request",
+                "request_id": rid,
+                "request": {
+                    "subtype": "can_use_tool",
+                    "tool_name": tool,
+                    "input": args,
+                    "tool_use_id": tool_id,
+                    "permission_suggestions": suggestions,
+                },
+            }
+        )
+        while True:
+            msg = read_json()
+            if msg is None:
+                sys.exit(0)
+            if msg.get("type") == "control_response":
+                response = msg.get("response") or {}
+                if response.get("request_id") == rid:
+                    return dict(response.get("response") or {})
+            elif msg.get("type") == "control_request":
+                self.control(msg)
+
+    def text(self, msg_id: str, index: int, text: str) -> None:
+        emit(
+            {
+                "type": "stream_event",
+                "parent_tool_use_id": None,
+                "session_id": self.session,
+                "event": {
+                    "type": "content_block_start",
+                    "index": index,
+                    "content_block": {"type": "text", "text": ""},
+                },
+            }
+        )
+        half = len(text) // 2
+        for part in (text[:half], text[half:]):
+            emit(
+                {
+                    "type": "stream_event",
+                    "parent_tool_use_id": None,
+                    "session_id": self.session,
+                    "event": {
+                        "type": "content_block_delta",
+                        "index": index,
+                        "delta": {"type": "text_delta", "text": part},
+                    },
+                }
+            )
+        emit(
+            {
+                "type": "stream_event",
+                "parent_tool_use_id": None,
+                "session_id": self.session,
+                "event": {"type": "content_block_stop", "index": index},
+            }
+        )
+        emit(
+            {
+                "type": "assistant",
+                "parent_tool_use_id": None,
+                "session_id": self.session,
+                "message": {
+                    "id": msg_id,
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": text}],
+                },
+            }
+        )
+
+    def tool(self, msg_id: str, index: int, tool_id: str, name: str, args: dict[str, Any]) -> None:
+        emit(
+            {
+                "type": "stream_event",
+                "parent_tool_use_id": None,
+                "session_id": self.session,
+                "event": {
+                    "type": "content_block_start",
+                    "index": index,
+                    "content_block": {"type": "tool_use", "id": tool_id, "name": name, "input": {}},
+                },
+            }
+        )
+        emit(
+            {
+                "type": "stream_event",
+                "parent_tool_use_id": None,
+                "session_id": self.session,
+                "event": {
+                    "type": "content_block_delta",
+                    "index": index,
+                    "delta": {"type": "input_json_delta", "partial_json": json.dumps(args)},
+                },
+            }
+        )
+        emit(
+            {
+                "type": "stream_event",
+                "parent_tool_use_id": None,
+                "session_id": self.session,
+                "event": {"type": "content_block_stop", "index": index},
+            }
+        )
+        emit(
+            {
+                "type": "assistant",
+                "parent_tool_use_id": None,
+                "session_id": self.session,
+                "message": {
+                    "id": msg_id,
+                    "role": "assistant",
+                    "content": [{"type": "tool_use", "id": tool_id, "name": name, "input": args}],
+                },
+            }
+        )
+
+    def tool_result(self, tool_id: str, text: str, error: bool = False) -> None:
+        emit(
+            {
+                "type": "user",
+                "parent_tool_use_id": None,
+                "session_id": self.session,
+                "message": {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": text,
+                            "is_error": error,
+                        }
+                    ],
+                },
+            }
+        )
+
+    def result(self, subtype: str = "success", error: str | None = None) -> None:
+        emit(
+            {
+                "type": "result",
+                "subtype": subtype,
+                "is_error": error is not None,
+                "result": error or "done",
+                "session_id": self.session,
+                "duration_ms": 12,
+                "num_turns": 1,
+                "permission_denials": [],
+            }
+        )
+
+    def turn(self, msg: dict[str, Any]) -> int | None:
+        content = (msg.get("message") or {}).get("content")
+        line = (
+            content
+            if isinstance(content, str)
+            else "".join(b.get("text", "") for b in content or [] if isinstance(b, dict))
+        )
+        if not self.inited:
+            self.inited = True
+            emit(
+                {
+                    "type": "system",
+                    "subtype": "init",
+                    "session_id": self.session,
+                    "model": "stub",
+                    "permissionMode": "default",
+                    "apiKeySource": "none",
+                    "cwd": os.getcwd(),
+                }
+            )
+        emit(
+            {
+                "type": "user",
+                "session_id": self.session,
+                "parent_tool_use_id": None,
+                "uuid": str(uuid.uuid4()),
+                "message": {"role": "user", "content": [{"type": "text", "text": line}]},
+            }
+        )
+        if line == "crash":
+            return 3
+        assert self.session is not None
+        (HOME / "claude").mkdir(parents=True, exist_ok=True)
+        (HOME / "claude" / self.session).write_text("turn\n")
+        transcript_add(self.session, {"type": "user", "message": {"role": "user", "content": line}})
+        msg_id = f"msg_{uuid.uuid4().hex[:8]}"
+        emit(
+            {
+                "type": "stream_event",
+                "parent_tool_use_id": None,
+                "session_id": self.session,
+                "event": {"type": "message_start", "message": {"id": msg_id}},
+            }
+        )
+        reply = f"assistant: {line}"
+        if line == "authfail":
+            self.result("success", "Invalid API key · Please run /login")
+            return None
+        if line == "retry":
+            emit(
+                {
+                    "type": "system",
+                    "subtype": "api_retry",
+                    "attempt": 1,
+                    "max_retries": 3,
+                    "retry_delay_ms": 10,
+                    "error_status": 529,
+                    "error": "overloaded",
+                    "session_id": self.session,
+                }
+            )
+        if line.startswith("edit "):
+            path = os.path.abspath(line.split(" ", 1)[1])
+            self.text(msg_id, 0, "我来创建这个文件。")
+            self.tool(msg_id, 1, "toolu_w1", "Write", {"file_path": path, "content": "x"})
+            answer = self.ask("Write", "toolu_w1", {"file_path": path, "content": "x"})
+            if answer.get("behavior") == "allow":
+                Path(path).write_text("written by stub stream\n")
+                self.tool_result("toolu_w1", f"File created successfully at: {path}")
+                reply = "已创建文件。"
+            else:
+                self.tool_result("toolu_w1", f"denied: {answer.get('message')}", error=True)
+                reply = "好的，没有写入。"
+        elif line == "perm":
+            args = {"command": "rm -rf build", "description": "Remove build output"}
+            self.tool(msg_id, 0, "toolu_b1", "Bash", args)
+            suggestions = [
+                {
+                    "type": "addRules",
+                    "rules": [{"toolName": "Bash", "ruleContent": "rm -rf build"}],
+                    "behavior": "allow",
+                    "destination": "localSettings",
+                }
+            ]
+            answer = self.ask("Bash", "toolu_b1", args, suggestions)
+            granted = answer.get("behavior") == "allow"
+            remembered = bool(answer.get("updatedPermissions"))
+            self.tool_result("toolu_b1", "removed" if granted else "denied", error=not granted)
+            reply = f"permission answer={answer.get('behavior')} remembered={remembered}"
+        elif line == "ask":
+            args = {
+                "questions": [
+                    {
+                        "question": "Which color?",
+                        "header": "Color",
+                        "multiSelect": False,
+                        "options": [
+                            {"label": "red", "description": "warm"},
+                            {"label": "blue", "description": "cool"},
+                        ],
+                    }
+                ]
+            }
+            self.tool(msg_id, 0, "toolu_q1", "AskUserQuestion", args)
+            answer = self.ask("AskUserQuestion", "toolu_q1", args)
+            answers = (answer.get("updatedInput") or {}).get("answers")
+            self.tool_result("toolu_q1", f"answers={json.dumps(answers)}")
+            reply = f"you chose {json.dumps(answers)}"
+        elif line == "slow":
+            self.text(msg_id, 0, "working slowly…")
+            while True:
+                msg = read_json()
+                if msg is None:
+                    return 0
+                if msg.get("type") == "control_request":
+                    self.control(msg)
+                    if (msg.get("request") or {}).get("subtype") == "interrupt":
+                        emit(
+                            {
+                                "type": "user",
+                                "session_id": self.session,
+                                "parent_tool_use_id": None,
+                                "message": {
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "text", "text": "[Request interrupted by user]"}
+                                    ],
+                                },
+                            }
+                        )
+                        self.result("error_during_execution", "interrupted")
+                        return None
+        self.text(msg_id, 5, reply)
+        transcript_add(
+            self.session,
+            {
+                "type": "assistant",
+                "message": {
+                    "id": msg_id,
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": reply}],
+                },
+            },
+        )
+        self.result()
+        return None
+
+
+class CodexAppServer:
+    """JSON-RPC emulation of ``codex app-server`` (stdio)."""
+
+    def __init__(self) -> None:
+        self.thread: str | None = None
+        self.turns = 0
+        self.next_req = 1000
+        self.interrupt: str | None = None
+
+    def respond(self, rid: Any, result: dict[str, Any]) -> None:
+        emit({"id": rid, "result": result})
+
+    def error(self, rid: Any, message: str) -> None:
+        emit({"id": rid, "error": {"code": -32600, "message": message}})
+
+    def note(self, method: str, params: dict[str, Any]) -> None:
+        emit({"method": method, "params": params})
+
+    def thread_obj(self, tid: str) -> dict[str, Any]:
+        return {
+            "id": tid,
+            "source": "vscode",
+            "status": {"type": "idle"},
+            "turns": [],
+            "cwd": os.getcwd(),
+            "cliVersion": "0.0.0-stub",
+            "preview": "",
+            "name": None,
+        }
+
+    def run(self) -> int:
+        while True:
+            msg = read_json()
+            if msg is None:
+                return 0
+            if "method" in msg and "id" in msg:
+                code = self.request(msg)
+                if code is not None:
+                    return code
+
+    def request(self, msg: dict[str, Any]) -> int | None:
+        method, rid, params = msg["method"], msg["id"], msg.get("params") or {}
+        if method == "initialize":
+            self.respond(
+                rid,
+                {
+                    "userAgent": "stub",
+                    "codexHome": str(HOME),
+                    "platformFamily": "unix",
+                    "platformOs": "macos",
+                },
+            )
+        elif method == "thread/start":
+            self.thread = str(uuid.uuid4())
+            self.respond(
+                rid,
+                {
+                    "thread": self.thread_obj(self.thread),
+                    "model": "stub-model",
+                    "approvalPolicy": "on-request",
+                    "sandbox": {"type": "workspaceWrite"},
+                    "cwd": params.get("cwd"),
+                    "modelProvider": "openai",
+                },
+            )
+            self.note("thread/started", {"thread": self.thread_obj(self.thread)})
+        elif method == "thread/resume":
+            tid = params.get("threadId")
+            if not (HOME / "codex" / str(tid)).exists():
+                self.error(rid, f"no rollout found for thread id {tid}")
+            else:
+                self.thread = str(tid)
+                turns = (
+                    json.loads(codex_turns_path(self.thread).read_text())
+                    if codex_turns_path(self.thread).exists()
+                    else []
+                )
+                self.turns = len(turns)
+                self.respond(
+                    rid,
+                    {
+                        "thread": self.thread_obj(self.thread),
+                        "model": "stub-model",
+                        "approvalPolicy": "on-request",
+                        "sandbox": {"type": "workspaceWrite"},
+                    },
+                )
+        elif method == "thread/name/set":
+            self.respond(rid, {})
+            self.note(
+                "thread/name/updated",
+                {"threadId": params.get("threadId"), "threadName": params.get("name")},
+            )
+        elif method == "thread/turns/list":
+            path = codex_turns_path(str(params.get("threadId")))
+            if not path.exists():
+                self.error(
+                    rid,
+                    f"thread {params.get('threadId')} is not materialized yet; "
+                    "thread/turns/list is unavailable before first user message",
+                )
+            else:
+                self.respond(rid, {"data": json.loads(path.read_text()), "nextCursor": None})
+        elif method == "turn/start":
+            return self.turn(rid, params)
+        elif method == "turn/interrupt":
+            self.interrupt = params.get("turnId")
+            self.respond(rid, {})
+        else:
+            self.error(rid, f"stub does not implement {method}")
+        return None
+
+    def ask(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        self.next_req += 1
+        rid = self.next_req
+        emit({"id": rid, "method": method, "params": params})
+        while True:
+            msg = read_json()
+            if msg is None:
+                sys.exit(0)
+            if msg.get("id") == rid and "method" not in msg:
+                self.note("serverRequest/resolved", {"threadId": self.thread, "requestId": rid})
+                return dict(msg.get("result") or {})
+            if "method" in msg and "id" in msg:
+                self.request(msg)
+
+    def turn(self, rid: Any, params: dict[str, Any]) -> int | None:
+        text = "".join(i.get("text", "") for i in params.get("input") or [] if isinstance(i, dict))
+        self.turns += 1
+        tid = f"turn-{self.turns}"
+        assert self.thread is not None
+        self.respond(rid, {"turn": {"id": tid, "items": [], "status": "inProgress"}})
+        self.note(
+            "turn/started",
+            {"threadId": self.thread, "turn": {"id": tid, "items": [], "status": "inProgress"}},
+        )
+        user = {
+            "type": "userMessage",
+            "id": f"u{self.turns}",
+            "clientId": params.get("clientUserMessageId"),
+            "content": [{"type": "text", "text": text}],
+        }
+        self.note(
+            "item/started", {"threadId": self.thread, "turnId": tid, "item": user, "startedAtMs": 0}
+        )
+        self.note(
+            "item/completed",
+            {"threadId": self.thread, "turnId": tid, "item": user, "completedAtMs": 0},
+        )
+        items: list[dict[str, Any]] = [user]
+        if text == "crash":
+            return 3
+        status, error = "completed", None
+        reply = f"codex: {text}"
+        if text.startswith("edit "):
+            path = os.path.abspath(text.split(" ", 1)[1])
+            change = {
+                "type": "fileChange",
+                "id": "fc1",
+                "status": "inProgress",
+                "changes": [
+                    {"path": path, "kind": {"type": "add"}, "diff": "+written by stub codex\n"}
+                ],
+            }
+            self.note(
+                "item/started",
+                {"threadId": self.thread, "turnId": tid, "item": change, "startedAtMs": 0},
+            )
+            answer = self.ask(
+                "item/fileChange/requestApproval",
+                {
+                    "threadId": self.thread,
+                    "turnId": tid,
+                    "itemId": "fc1",
+                    "startedAtMs": 0,
+                    "reason": "create file",
+                },
+            )
+            if answer.get("decision") in ("accept", "acceptForSession"):
+                Path(path).write_text("written by stub codex\n")
+                change["status"] = "completed"
+            else:
+                change["status"] = "declined"
+            self.note(
+                "item/completed",
+                {"threadId": self.thread, "turnId": tid, "item": change, "completedAtMs": 0},
+            )
+            items.append(change)
+            reply = f"edit {change['status']}"
+        elif text == "perm":
+            cmd = {
+                "type": "commandExecution",
+                "id": "c1",
+                "command": "rm -rf build",
+                "cwd": os.getcwd(),
+                "status": "inProgress",
+                "commandActions": [],
+            }
+            self.note(
+                "item/started",
+                {"threadId": self.thread, "turnId": tid, "item": cmd, "startedAtMs": 0},
+            )
+            answer = self.ask(
+                "item/commandExecution/requestApproval",
+                {
+                    "threadId": self.thread,
+                    "turnId": tid,
+                    "itemId": "c1",
+                    "startedAtMs": 0,
+                    "command": "rm -rf build",
+                    "cwd": os.getcwd(),
+                },
+            )
+            if answer.get("decision") in ("accept", "acceptForSession"):
+                self.note(
+                    "item/commandExecution/outputDelta",
+                    {"threadId": self.thread, "turnId": tid, "itemId": "c1", "delta": "removed\n"},
+                )
+                cmd.update({"status": "completed", "exitCode": 0, "aggregatedOutput": "removed\n"})
+            else:
+                cmd["status"] = "declined"
+            self.note(
+                "item/completed",
+                {"threadId": self.thread, "turnId": tid, "item": cmd, "completedAtMs": 0},
+            )
+            items.append(cmd)
+            reply = f"approval answer={answer.get('decision')}"
+        elif text == "elicit":
+            answer = self.ask(
+                "mcpServer/elicitation/request",
+                {"threadId": self.thread, "turnId": tid, "serverName": "stub"},
+            )
+            reply = f"elicitation={answer.get('action')}"
+        elif text == "slow":
+            self.note(
+                "item/started",
+                {
+                    "threadId": self.thread,
+                    "turnId": tid,
+                    "item": {"type": "agentMessage", "id": "a-slow", "text": ""},
+                    "startedAtMs": 0,
+                },
+            )
+            self.note(
+                "item/agentMessage/delta",
+                {"threadId": self.thread, "turnId": tid, "itemId": "a-slow", "delta": "working…"},
+            )
+            while self.interrupt != tid:
+                msg = read_json()
+                if msg is None:
+                    return 0
+                if "method" in msg and "id" in msg:
+                    self.request(msg)
+            self.note(
+                "turn/completed",
+                {
+                    "threadId": self.thread,
+                    "turn": {"id": tid, "items": [], "status": "interrupted"},
+                },
+            )
+            return None
+        elif text == "fail":
+            status, error = "failed", {"message": "stub failure"}
+            self.note(
+                "error",
+                {"threadId": self.thread, "turnId": tid, "willRetry": False, "error": error},
+            )
+        agent = {"type": "agentMessage", "id": f"a{self.turns}", "text": ""}
+        self.note(
+            "item/started",
+            {"threadId": self.thread, "turnId": tid, "item": agent, "startedAtMs": 0},
+        )
+        half = len(reply) // 2
+        for part in (reply[:half], reply[half:]):
+            self.note(
+                "item/agentMessage/delta",
+                {"threadId": self.thread, "turnId": tid, "itemId": agent["id"], "delta": part},
+            )
+        agent["text"] = reply
+        self.note(
+            "item/completed",
+            {"threadId": self.thread, "turnId": tid, "item": agent, "completedAtMs": 0},
+        )
+        items.append(agent)
+        codex_add_turn(self.thread, {"id": tid, "status": status, "error": error, "items": items})
+        self.note(
+            "turn/completed",
+            {
+                "threadId": self.thread,
+                "turn": {"id": tid, "items": [], "status": status, "error": error},
+            },
+        )
+        return None
+
+
 def main(argv: list[str]) -> int:
     kind, args = argv[1], argv[2:]
     if "--version" in args:
         print("2.1.291 (Claude Code) [stub]" if kind == "claude" else "codex-cli 0.0.0-stub")
         return 0
+    if kind == "claude" and "--desktop" in args:
+        return claude_desktop(args)
+    if kind == "claude" and "--input-format" in args:
+        return ClaudeStream(args).run()
+    if kind == "codex" and args[:1] == ["app-server"]:
+        return CodexAppServer().run()
     signal.signal(signal.SIGWINCH, on_winch)
     if not os.isatty(0):
         print("stub: stdin is not a tty", file=sys.stderr)

@@ -270,3 +270,73 @@ def test_create_unstarted_archive_and_project_branch(served: tuple[WB, Client]) 
     assert view["archived"] == 1, "archived sessions stay in the snapshot, flagged"
     client.api("POST", f"/api/sessions/{sid}/unarchive", {})
     assert client.api("GET", "/api/state")["projects"][0]["sessions"][0]["archived"] == 0
+
+
+def test_conversation_routes_stream_events_and_validation(served: tuple[WB, Client]) -> None:
+    fx, client = served
+    client.login()
+    project = client.api("POST", "/api/projects", {"path": str(fx.repo)})
+    session = client.api(
+        "POST",
+        "/api/sessions",
+        {"project_id": project["project_id"], "harness": CLAUDE, "view_mode": "conversation"},
+    )
+    sid = session["session_id"]
+    assert session["view_mode"] == "conversation"
+    conn = http.client.HTTPConnection("127.0.0.1", client.server.port, timeout=10)
+    assert client.cookie is not None
+    conn.request(
+        "GET",
+        "/api/stream",
+        headers={"Host": f"127.0.0.1:{client.server.port}", "Cookie": client.cookie},
+    )
+    res = conn.getresponse()
+    conv_events: list[dict[str, Any]] = []
+
+    def pump(until: Any, timeout: float = 15) -> None:
+        deadline = time.monotonic() + timeout
+        event = None
+        while time.monotonic() < deadline:
+            line = res.fp.readline().decode().rstrip("\n")
+            if line.startswith("event: "):
+                event = line[7:]
+            elif line.startswith("data: ") and event == "conv":
+                conv_events.append(json.loads(line[6:]))
+                if until():
+                    return
+        raise AssertionError("conv events not seen")
+
+    client.api("POST", f"/api/sessions/{sid}/send", {"text": "hello", "client_id": "c-1"})
+    pump(lambda: any(e.get("op") == "delta" for e in conv_events))
+    pump(lambda: any(e.get("op") == "turn" and e["turn"] is None for e in conv_events))
+    assert all(e["session_id"] == sid for e in conv_events)
+    conv = client.api("GET", f"/api/sessions/{sid}/conversation")
+    assert conv["live"] and [i["id"] for i in conv["items"] if i["type"] == "user"] == ["user:c-1"]
+
+    client.api("POST", f"/api/sessions/{sid}/send", {"text": "edit h.txt"})
+    perm = wait_for(
+        lambda: [
+            i
+            for i in client.api("GET", f"/api/sessions/{sid}/conversation")["items"]
+            if i["type"] == "permission" and i["status"] == "pending"
+        ]
+    )[0]
+    status, _, body = client.request(
+        "POST",
+        f"/api/sessions/{sid}/permission",
+        {"request_id": perm["request_id"], "decision": "allow", "answers": {"q": 1}},
+    )
+    assert status == 400
+    client.api(
+        "POST",
+        f"/api/sessions/{sid}/permission",
+        {"request_id": perm["request_id"], "decision": "allow"},
+    )
+    wait_for(lambda: (fx.repo / "h.txt").exists())
+    status, _, body = client.request("POST", f"/api/sessions/{sid}/view", {"view_mode": "sideways"})
+    assert status == 400
+    status, _, body = client.request("POST", f"/api/sessions/{sid}/desktop/open", {})
+    assert status == 412 and "没有在" in json.loads(body)["error"]["message"]
+    status, _, body = client.request("POST", f"/api/sessions/{sid}/send", {"text": "  "})
+    assert status == 400
+    conn.close()

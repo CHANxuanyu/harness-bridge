@@ -57,6 +57,7 @@ SCHEMA: dict[str, Callable[[Any], bool]] = {
     "selected_session": _optional_session,
     "show_archived": _bool,
     "last_harness": _choice("claude-code", "codex"),
+    "default_view": _choice("terminal", "conversation"),
 }
 DEFAULTS: dict[str, Any] = {
     "appearance": "system",
@@ -71,6 +72,8 @@ DEFAULTS: dict[str, Any] = {
     "selected_session": None,
     "show_archived": False,
     "last_harness": "claude-code",
+    # The terminal stays the default until the conversation view passes real acceptance.
+    "default_view": "terminal",
 }
 
 
