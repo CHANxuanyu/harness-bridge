@@ -3,3 +3,7 @@ Copyright 2026 Xuanyu CHAN
 
 Licensed under the Apache License, Version 2.0.
 This project is independent of OpenAI, Anthropic and Z.AI.
+
+Third-party components:
+- xterm.js 6.0.0 and @xterm/addon-fit 0.11.0, MIT License, Copyright (c) The xterm.js authors.
+  Vendored unmodified under src/harness_bridge/workbench/static/vendor/xterm/ with their licenses.

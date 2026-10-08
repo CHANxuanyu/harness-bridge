@@ -5,6 +5,47 @@ T0 static/schema · T1 unit · T2 offline integration with a **simulated** execu
 subprocess, real git, real SQLite, real verifier) · T3 live single harness (real Claude CLI) ·
 T4 live dual harness (Codex/Astra → bridge → Claude) · T5 comparative evaluation.
 
+Workbench levels (plan v2.0 §8): T1 unit · T2-W offline integration (real PTY/subprocess/git/
+SQLite/loopback HTTP with **stub** harness executables) · UI-offline (browser/window with stub
+harnesses) · T3-W real single native harness session on the user's machine · T4-W real Claude Code +
+Codex sessions with handoff.
+
+## W5 workbench redesign — 2026-10-08
+
+| Check | Level | Result |
+|---|---|---|
+| Native pywebview window real pixels (own-window capture incl. title bar): dark/light main, changes+diff, handoff dialog, failure+details, first run, 900×640 overlay | Native-W (stub CLIs) | pass |
+| Browser-driven operations on the same server: add project error/success, ⌘N busy explanation, Esc, rename, stop confirm/cancel, restart, resume, focus, dialog focus trap, input routing between sessions, ⌃Tab, filter, inspector shortcuts, sidebar overlay, archive/unarchive, remove project, failure notice, 20 000-line output, stop-and-handoff | UI-offline | pass |
+| Reopen: running sessions become interrupted + resumable; selection, panel, widths and appearance restored from prefs | UI-offline + T2-W | pass |
+| Prefs whitelist/persistence, phases, native/dev routes absent by default, unstarted create, archive/unarchive, quick branch, single-instance lock | T1/T2-W | pass |
+| Real Claude Code / Codex in the new UI; IME composition; system clipboard; pointer-drag resize; VoiceOver | — | **not run** |
+
+## W1–W3 workbench — 2026-10-07
+
+| ID | Check | Level | Result |
+|---|---|---|---|
+| W01 | Window opens; harness availability/version or reason shown | UI-offline + window (stub CLIs); real `--version` discovery | pass |
+| W02 | Claude session in PTY; input/output; preassigned ID confirmed by SessionStart | T2-W stub | pass |
+| W03 | Codex session; thread ID observed only after first turn; resume keeps it | T2-W stub | pass |
+| W04 | Second writer on the same realpath refused (same and second App instance) | T1 + T2-W | pass |
+| W05 | Stop = SIGHUP group, exit confirmed; failure code/reason/output tail kept | T2-W stub | pass |
+| W06 | Restart: dead run → interrupted + resumable; live orphan keeps slot, terminable | T2-W stub | pass |
+| W07 | Permission requests visible (Claude PermissionRequest; Codex OSC 9), answered in terminal | T2-W stub + UI-offline | pass |
+| W08 | Git changes and per-file diff, path traversal refused | T2-W + UI-offline | pass |
+| W09 | Handoff A→B across harnesses, source must be stopped, chain kept, note outside repo | T2-W + UI-offline | pass |
+| W10 | API/provider env stripped (names only); nested/cloud refusal; no forbidden flags | T1 + T2-W | pass |
+| W11 | Loopback only; token cookie, Host/Origin/X-RepoBridge/JSON guards; CSP | T2-W | pass |
+| W12 | Offline evidence uses stub CLIs only; sentinel binaries untouched | suite | pass |
+| T3-W/T4-W | Real Claude Code / Codex sessions, resume and handoff in the App | — | **not run** (development session is inside Claude Code; user-run or separately authorized) |
+
+Stub CLIs emulate only the interfaces the App relies on (tty, hooks via `--settings`, notify,
+OSC 9). Passing them does not prove the real CLIs behave identically; W4 decides that.
+
+## W0 product direction v2.0 — 2026-10-07
+
+Documentation only (T0): product form, plan v2.0 with superseded-scope table, decisions 112–117,
+AGENTS rules. No code, tests, model calls or credential reads in this step.
+
 ## P8 native initialization / Start Plan / route templates — 2026-10-07
 
 **Native non-inference, separate from T3/T4:** read-only account/model/MCP/hooks UI plus two

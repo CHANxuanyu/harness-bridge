@@ -51,6 +51,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"hbridge {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    from harness_bridge.workbench.app import add_arguments as add_app_arguments
+
+    p = sub.add_parser(
+        "app",
+        parents=[common],
+        help="RepoBridge desktop workbench for native Codex / Claude Code sessions",
+    )
+    add_app_arguments(p, state_dir=False)
+
     p = sub.add_parser("doctor", parents=[common], help="non-inference environment diagnostics")
     p.add_argument("--offline", action="store_true", help="do not execute any external binary")
 
@@ -424,6 +433,10 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
     except SystemExit as exc:
         return int(exc.code or 0)
+    if args.command == "app":
+        from harness_bridge.workbench.app import run as run_app
+
+        return run_app(args)
     as_json = bool(getattr(args, "json", False))
     try:
         result = _dispatch(args)

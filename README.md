@@ -1,4 +1,28 @@
-# Harness Bridge
+# Harness Bridge → RepoBridge
+
+> **Direction since 2026-10-07 (plan v2.0):** RepoBridge is a project-centred, lightweight local
+> desktop workbench for people who hold several coding plans. It runs the native **Codex** and
+> **Claude Code** CLIs as real interactive sessions inside one window: projects organise sessions,
+> each session keeps one harness, switching harness means a new session with an explicit handoff,
+> and one App-managed writer runs per working directory. Models, tools, permissions, login and
+> billing stay with each CLI. See the [product form](docs/PRODUCT_FORM.md) and
+> [project plan](docs/PROJECT_PLAN.md). The Advisor/Executor kernel described below remains
+> available with its evidence, but it is no longer the first-version path.
+
+```bash
+uv sync --frozen --extra desktop                  # optional native window (pywebview)
+uv run --frozen --extra desktop hbridge app       # add --browser to use the default browser
+```
+
+Run these in a checkout that contains commit `aa9a404` or later; older branches have neither the
+`app` command nor the `desktop` extra.
+
+Start it from a normal terminal (not from inside another agent session). Usage, interface, implementation
+and evidence levels: [docs/WORKBENCH.md](docs/WORKBENCH.md).
+
+![RepoBridge workbench, dark appearance](docs/screenshots/after-dark-main.jpg)
+ Real Claude Code / Codex sessions in the App
+have not yet been accepted on this machine; offline checks use stub CLIs.
 
 > **Experimental local candidate:** runtime 0.1.0.dev2, Advisor plugin alpha.6, Apache-2.0.
 > Real Claude/Codex parallel work, exact-session repair and integrated local delivery passed.

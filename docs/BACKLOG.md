@@ -1,9 +1,16 @@
 # Backlog
 
-The canonical scope is `docs/PROJECT_PLAN.md` (P0–P7, V01–V15), extended by `docs/ROUTING_PROFILE.md` for P8.
-This file indexes remaining work; it does not maintain a competing implementation plan.
+The canonical scope is `docs/PROJECT_PLAN.md` v2.0: the RepoBridge desktop workbench (W0–W4,
+W01–W12). The earlier Advisor/Executor plan (P0–P8, V01–V15, `docs/ROUTING_PROFILE.md`) is kept
+as appendix/history. This file indexes remaining work; it does not maintain a competing plan.
 
-## Current next work — P8 user-selected route
+## Current next work — RepoBridge workbench
+
+W1 desktop window with real native sessions → W2 same-project session management → W3 manual
+handoff → W4 local real acceptance/packaging. See `STATUS.md` for what is implemented. The P8
+items below are paused, not deleted: they are no longer on the first-version path.
+
+## Paused — P8 user-selected route (Advisor/Executor)
 
 Codex Astra is the Advisor; Claude Code Opus 5.5 handles difficult work and ZCode GLM 5.3 Flash
 handles bounded simple work. P7 is accepted for its existing scope and source113b0a7 was pushed.

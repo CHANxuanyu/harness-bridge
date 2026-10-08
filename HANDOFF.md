@@ -1,5 +1,57 @@
 # Handoff
 
+## W5 redesign done; W4 real acceptance next — 2026-10-08
+
+Code: branch `claude/repobridge-product-direction-8e26f9`, [PR #1](https://github.com/CHANxuanyu/harness-bridge/pull/1) into `claude/new-repo-plan-dn1eac` (not merged), local
+worktree `/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9`.
+Read [WORKBENCH.md](docs/WORKBENCH.md) and DECISIONS 124–131 before changing the UI.
+
+Frontend lives in `src/harness_bridge/workbench/static/` (no build step). Native window glue:
+`workbench/app.py` (single-instance lock, pywebview window, native hooks) and `workbench/native_mac.py`.
+Layout/appearance prefs: `workbench/prefs.py` (whitelist). Do not re-enable pywebview js_api or add
+`unsafe-eval`; extend `/api/native/*` instead.
+
+Visual check loop (no real CLI, no model): start
+`hbridge app --state-dir <test-state> --claude-binary <stub> --codex-binary <stub> --dev-snapshot-dir <dir>`
+outside an agent env (`env -u CLAUDECODE`), open `<dir>/launch-url.txt` in a browser to drive the
+same server, then `POST /api/dev/reload` (optional `{"hash": "dev=handoff|settings|new|diff:N"}`),
+`/api/dev/resize`, `/api/dev/snapshot {"name": ...}` and read `<dir>/<name>-window.png`. Stub wrappers
+exec `tests/helpers/wb_stub.py` (supports `edit`, `perm`, `crash`, `/clear`, `size`, `spam N`).
+
+## W1–W3 workbench implemented; W4 real acceptance next — 2026-10-07
+
+State: workbench code in `src/harness_bridge/workbench/`, tests in
+`tests/unit/test_workbench_units.py`, `tests/integration/test_workbench.py`,
+`tests/integration/test_workbench_server.py`, stub CLIs in `tests/helpers/wb_stub.py`.
+Read [WORKBENCH.md](docs/WORKBENCH.md) (run/use/structure/evidence/W4 steps) and DECISIONS 112–122.
+
+To continue:
+0. Location: this code is on branch `claude/repobridge-product-direction-8e26f9` in worktree
+   `/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9`; the main
+   checkout `/Users/chan/Downloads/harness-bridge` (`local/glm-macos-validation`, f2cd6e6) does not contain
+   it until the user chooses to merge. Running there gives "Extra desktop is not defined"/"invalid choice: app".
+1. W4: in a normal terminal (not an agent session), from that worktree:
+   `uv sync --frozen --extra desktop && uv run --frozen --extra desktop hbridge app`,
+   then follow WORKBENCH.md "真实验收步骤". Record results as T3-W/T4-W in VALIDATION_MATRIX with
+   exact CLI versions; keep failures as found.
+2. Likely follow-ups: native quirks of Claude/Codex TUIs inside xterm.js (keys, IME, alt-screen),
+   Codex resume semantics for the bundled 0.162 CLI, `.app` packaging/launch from Finder.
+3. Offline UI checks: start `hbridge app --no-open --claude-binary <stub> --codex-binary <stub>`
+   with `WB_STUB_HOME` set and without `CLAUDECODE`; stub wrappers exec `tests/helpers/wb_stub.py`.
+
+Boundaries unchanged: no real `claude`/`codex` spawn from tests or agent sessions, no token reads,
+no API-billing switch, no push/release without the user's instruction, commit author = owner.
+
+## W0 product direction v2.0 — 2026-10-07
+
+Read [PRODUCT_FORM.md](docs/PRODUCT_FORM.md) and [PROJECT_PLAN.md](docs/PROJECT_PLAN.md) §0–§9
+first; everything below this section describes the paused Advisor/Executor line and its evidence.
+The workbench lives in `src/harness_bridge/workbench/` (from W1). Development rules: AGENTS.md.
+Boundaries still in force: no real `claude`/`codex` spawn in tests, no token reads, no API billing
+switch, no push/release without the user's instruction, commit author = repository owner.
+
+Next work package: W1 desktop window + native sessions (see STATUS for the latest state).
+
 ## P8 native findings and Advisor routing source — 2026-10-07
 
 Source58a3771 is already pushed. This continuation adds explicit Z.ai/BigModel **Start Plan**
