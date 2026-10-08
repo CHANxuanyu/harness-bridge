@@ -1,31 +1,59 @@
 'use strict';
-/* RepoBridge workbench UI. Plain DOM, no build step. All untrusted text goes through textContent. */
+/* RepoBridge workbench UI — plain DOM, no build step. Untrusted text only via textContent.
+   The terminal is the native CLI itself; everything around it organises, explains and recovers. */
 
-const LABEL = { 'claude-code': 'Claude Code', codex: 'Codex' };
-const STATUS = {
-  new: '未启动', starting: '启动中', running: '运行中', exited: '已退出',
-  failed: '失败', stopped: '已停止', interrupted: '已中断',
+// ---------------------------------------------------------------- constants
+
+const HARNESS = {
+  'claude-code': { label: 'Claude Code', short: 'Claude', resume: (id) => `claude --resume ${id}` },
+  codex: { label: 'Codex', short: 'Codex', resume: (id) => `codex resume ${id}` },
 };
-const BINDING = {
-  pending: '未知（等待首轮完成）',
-  preassigned: '已预分配（等待 CLI 确认）',
-  confirmed: '已由 CLI 确认',
-  observed: '由 CLI 报告',
+const KEY_LABELS = [
+  ['新建会话', '⌘N'], ['显示/隐藏变更', '⌘⇧D'], ['显示/隐藏活动', '⌘⇧A'], ['显示/隐藏详情', '⌘⇧I'],
+  ['关闭辅助面板', '⌘\\'], ['显示/隐藏侧边栏', '⌃⌘S'], ['下一个 / 上一个会话', '⌃Tab / ⌃⇧Tab'],
+  ['设置', '⌘,'], ['键盘快捷键', '⌘/'], ['终端内换行', '⇧↩'], ['强制选择终端文本', '⌥ + 拖动'],
+];
+const LIGHT_TERM = {
+  background: '#fbfaf8', foreground: '#1f1e1c', cursor: '#1f1e1c', cursorAccent: '#fbfaf8',
+  selectionBackground: 'rgba(47, 98, 201, 0.22)',
+  black: '#1f1e1c', red: '#b3261e', green: '#1f7a46', yellow: '#8a5a00', blue: '#2a5bc4',
+  magenta: '#8a3fa8', cyan: '#0d7480', white: '#6e6b65',
+  brightBlack: '#7c7973', brightRed: '#d0392f', brightGreen: '#238a51', brightYellow: '#9c6a00',
+  brightBlue: '#346ad8', brightMagenta: '#9b4fbd', brightCyan: '#118a95', brightWhite: '#8f8b84',
 };
+const DARK_TERM = {
+  background: '#1c1b1a', foreground: '#e6e3dc', cursor: '#e6e3dc', cursorAccent: '#1c1b1a',
+  selectionBackground: 'rgba(122, 162, 255, 0.32)',
+  black: '#2b2a28', red: '#ec7a72', green: '#7ccb93', yellow: '#e6bb62', blue: '#7aa7ec',
+  magenta: '#c9a0e4', cyan: '#62c6bc', white: '#d9d5cd',
+  brightBlack: '#77746d', brightRed: '#f4958e', brightGreen: '#98dbab', brightYellow: '#f0cd85',
+  brightBlue: '#9cc0f5', brightMagenta: '#dab8ef', brightCyan: '#86d6cd', brightWhite: '#f5f3ee',
+};
+
+// ---------------------------------------------------------------- state
 
 const S = {
   state: null,
-  selected: null,
-  tab: 'activity',
+  prefs: null,
+  prefsLocalAt: 0,
+  sel: null,              // {type: 'session'|'project', id}
   terms: new Map(),
   events: new Map(),
-  changes: null,
-  diffPath: null,
-  diffText: null,
+  changes: new Map(),     // session_id -> changes payload
+  diff: null,             // {sid, path, text}
+  details: new Map(),     // session_id -> detail payload
+  filter: '',
+  pending: new Set(),
+  sidebarOverlayOpen: false,
+  renaming: false,
   connected: false,
+  lastTitle: '',
+  pendingFocus: null,
 };
 
-// ---------- helpers ----------
+// ---------------------------------------------------------------- helpers
+
+const $ = (sel, root = document) => root.querySelector(sel);
 
 function h(tag, props, ...children) {
   const el = document.createElement(tag);
@@ -43,7 +71,43 @@ function h(tag, props, ...children) {
   }
   return el;
 }
-const $ = (sel) => document.querySelector(sel);
+
+function icon(name, cls = '') {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', `i ${cls}`.trim());
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', `#i-${name}`);
+  svg.append(use);
+  return svg;
+}
+
+function glyph(kind) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 12 12');
+  svg.setAttribute('aria-hidden', 'true');
+  const add = (tag, attrs) => {
+    const el = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    svg.append(el);
+    return el;
+  };
+  const stroke = { fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round' };
+  if (kind === 'dot') add('circle', { cx: 6, cy: 6, r: 3.5, fill: 'currentColor' });
+  else if (kind === 'ring') add('circle', { cx: 6, cy: 6, r: 4, ...stroke });
+  else if (kind === 'dashed') add('circle', { cx: 6, cy: 6, r: 4, ...stroke, 'stroke-dasharray': '2 2.2' });
+  else if (kind === 'ringdot') { add('circle', { cx: 6, cy: 6, r: 4, ...stroke }); add('circle', { cx: 6, cy: 6, r: 1.4, fill: 'currentColor' }); }
+  else if (kind === 'spin') { const c = add('circle', { cx: 6, cy: 6, r: 4, ...stroke, 'stroke-dasharray': '15 10' }); c.setAttribute('class', 'spin'); }
+  else if (kind === 'alert') {
+    add('circle', { cx: 6, cy: 6, r: 5.25, fill: 'currentColor' });
+    add('path', { d: 'M6 3.3v3.3M6 8.6v.1', fill: 'none', stroke: 'var(--bg)', 'stroke-width': '1.6', 'stroke-linecap': 'round' });
+  } else if (kind === 'x') {
+    add('circle', { cx: 6, cy: 6, r: 5.25, fill: 'currentColor' });
+    add('path', { d: 'M4.2 4.2l3.6 3.6M7.8 4.2 4.2 7.8', fill: 'none', stroke: 'var(--bg)', 'stroke-width': '1.4', 'stroke-linecap': 'round' });
+  }
+  return svg;
+}
 
 class ApiError extends Error {
   constructor(error) { super(error.message || '请求失败'); this.code = error.code; this.details = error.details || {}; }
@@ -57,10 +121,10 @@ async function api(method, path, body) {
     opts.body = JSON.stringify(body || {});
   }
   let res;
-  try { res = await fetch(path, opts); } catch (e) { throw new ApiError({ message: '无法连接本地内核' }); }
+  try { res = await fetch(path, opts); } catch (e) { throw new ApiError({ message: '无法连接 RepoBridge 本地服务' }); }
   let json = null;
-  try { json = await res.json(); } catch (e) { /* fallthrough */ }
-  if (!json || !json.ok) throw new ApiError((json && json.error) || { message: `HTTP ${res.status}` });
+  try { json = await res.json(); } catch (e) { /* not JSON */ }
+  if (!json || !json.ok) throw new ApiError((json && json.error) || { message: `请求失败（HTTP ${res.status}）` });
   return json.result;
 }
 
@@ -71,43 +135,133 @@ function b64bytes(b64) {
   return out;
 }
 
-function toast(message, kind = 'error', actions = []) {
-  const el = h('div', { class: `toast ${kind === 'info' ? 'info' : ''}` }, h('div', { text: message }));
-  if (actions.length) el.append(h('div', { class: 'row' }, actions.map(([label, fn]) =>
-    h('button', { class: 'btn btn-small', onclick: () => { el.remove(); fn(); } }, label))));
-  $('#toasts').append(el);
-  setTimeout(() => el.remove(), actions.length ? 12000 : 6000);
+function homeify(path) {
+  const home = S.state && S.state.home;
+  if (home && (path === home || path.startsWith(home + '/'))) return '~' + path.slice(home.length);
+  return path;
 }
 
-function fail(err) {
-  const actions = [];
-  if (err.details && err.details.busy_session_id) {
-    actions.push(['切换到占用会话', () => select(err.details.busy_session_id)]);
-  }
-  toast(err.message || String(err), 'error', actions);
+function shortPath(path, max = 48) {
+  const p = homeify(path);
+  if (p.length <= max) return p;
+  const parts = p.split('/');
+  const last = parts.pop();
+  let head = parts[0] === '' ? '/' + (parts[1] || '') : parts[0];
+  if (head.length + last.length + 4 > max) head = parts[0] === '~' ? '~' : '';
+  return `${head}/…/${last}`;
 }
 
-function fmtTime(iso) {
+function clock(iso) {
   if (!iso) return '';
   const d = new Date(iso);
-  return d.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const now = new Date();
+  const same = d.toDateString() === now.toDateString();
+  const t = d.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  return same ? t : `${d.getMonth() + 1}月${d.getDate()}日 ${t}`;
 }
 
-function shortId(id) { return id ? id.slice(0, 8) : '—'; }
-
-function allSessions() {
-  return S.state ? S.state.projects.flatMap((p) => p.sessions) : [];
+function allSessions(includeArchived = true) {
+  if (!S.state) return [];
+  const list = S.state.projects.flatMap((p) => p.sessions);
+  return includeArchived ? list : list.filter((s) => !s.archived);
 }
-function findSession(id) { return allSessions().find((s) => s.session_id === id) || null; }
-function findProject(id) { return S.state ? S.state.projects.find((p) => p.project_id === id) || null : null; }
-function harnessInfo(kind) { return S.state ? S.state.harnesses.find((x) => x.kind === kind) : null; }
+const findSession = (id) => allSessions().find((s) => s.session_id === id) || null;
+const findProject = (id) => (S.state ? S.state.projects.find((p) => p.project_id === id) || null : null);
+const harnessInfo = (kind) => (S.state ? S.state.harnesses.find((x) => x.kind === kind) : null);
+const harnessOk = (kind) => { const x = harnessInfo(kind); return !!(x && x.available); };
+const selectedSession = () => (S.sel && S.sel.type === 'session' ? findSession(S.sel.id) : null);
+const selectedProject = () => {
+  if (!S.sel) return null;
+  if (S.sel.type === 'project') return findProject(S.sel.id);
+  const s = findSession(S.sel.id);
+  return s ? findProject(s.project_id) : null;
+};
+const busySessionIn = (project) => (project ? project.sessions.find((s) => s.active) || null : null);
 
-// ---------- stream ----------
+function statusOf(s) {
+  const label = HARNESS[s.harness].label;
+  if (s.active && !s.attached) return { key: 'orphan', label: '后台遗留进程', tone: 'warn', glyph: 'alert' };
+  if (s.active && s.stopping) return { key: 'stopping', label: '正在停止…', tone: 'idle', glyph: 'spin' };
+  if (s.attention) return { key: 'attention', label: '需要你确认', tone: 'warn', glyph: 'alert' };
+  if (s.active) {
+    if (s.phase === 'starting') return { key: 'starting', label: `正在启动 ${label}…`, tone: 'ok', glyph: 'spin' };
+    if (s.phase === 'working') return { key: 'working', label: '工作中', tone: 'ok', glyph: 'spin' };
+    if (s.phase === 'waiting') return { key: 'waiting', label: '等待输入', tone: 'ok', glyph: 'dot' };
+    return { key: 'running', label: '运行中', tone: 'ok', glyph: 'dot' };
+  }
+  return {
+    new: { key: 'new', label: '未启动', tone: 'idle', glyph: 'dashed' },
+    exited: { key: 'exited', label: '已退出', tone: 'idle', glyph: 'ring' },
+    stopped: { key: 'stopped', label: '已停止', tone: 'idle', glyph: 'ring' },
+    failed: { key: 'failed', label: '失败', tone: 'bad', glyph: 'x' },
+    interrupted: { key: 'interrupted', label: '已中断', tone: 'warn', glyph: 'ringdot' },
+  }[s.status] || { key: s.status, label: s.status, tone: 'idle', glyph: 'ring' };
+}
+
+function stGlyph(st) { return h('span', { class: `st st-${st.tone}`, title: st.label || null }, glyph(st.glyph)); }
+
+// ---------------------------------------------------------------- prefs & theme
+
+let prefsTimer = null;
+const prefsQueue = {};
+function setPref(key, value) {
+  if (!S.prefs) return;
+  S.prefs[key] = value;
+  S.prefsLocalAt = Date.now();
+  prefsQueue[key] = value;
+  clearTimeout(prefsTimer);
+  prefsTimer = setTimeout(() => {
+    const body = { ...prefsQueue };
+    for (const k of Object.keys(prefsQueue)) delete prefsQueue[k];
+    api('POST', '/api/prefs', body).catch(() => {});
+  }, 250);
+}
+
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+function resolvedTheme() {
+  const mode = S.prefs ? S.prefs.appearance : 'system';
+  return mode === 'system' ? (darkQuery.matches ? 'dark' : 'light') : mode;
+}
+function termTheme() {
+  return (S.prefs && S.prefs.terminal_theme === 'dark') || resolvedTheme() === 'dark' ? DARK_TERM : LIGHT_TERM;
+}
+function applyTheme() {
+  document.documentElement.dataset.theme = resolvedTheme();
+  const theme = termTheme();
+  for (const t of S.terms.values()) {
+    t.term.options.theme = theme;
+    t.term.options.minimumContrastRatio = theme === LIGHT_TERM ? 4.5 : 1;
+    if (S.prefs) t.term.options.fontSize = S.prefs.terminal_font_size;
+  }
+  $('#stage').style.background = theme.background;
+  if (S.prefs) nativeCall('appearance', { mode: S.prefs.appearance });
+  scheduleFit();
+}
+darkQuery.addEventListener('change', applyTheme);
+
+// Native window integration goes through the authenticated loopback API (no page eval/JS bridge).
+function hasNative(name) { return !!(S.state && S.state.native && S.state.native.includes(name)); }
+function nativeCall(name, body) {
+  const route = { title: 'title', appearance: 'appearance', pick_folder: 'pick-folder' }[name];
+  if (!hasNative(name)) return Promise.resolve(null);
+  return api('POST', `/api/native/${route}`, body || {}).catch(() => null);
+}
+
+function updateWindowTitle(force = false) {
+  const s = selectedSession();
+  const p = selectedProject();
+  const title = s ? `${s.title} — ${p ? p.name : ''}` : (p ? p.name : 'RepoBridge');
+  document.title = title;
+  if (force || title !== S.lastTitle) nativeCall('title', { title });
+  S.lastTitle = title;
+}
+
+// ---------------------------------------------------------------- stream
 
 function connect() {
   const es = new EventSource('/api/stream');
-  es.addEventListener('open', () => setConn(true));
-  es.addEventListener('error', () => setConn(false));
+  es.addEventListener('open', () => { S.connected = true; renderNotice(); });
+  es.addEventListener('error', () => { S.connected = false; renderNotice(); });
   es.addEventListener('state', (e) => onState(JSON.parse(e.data)));
   es.addEventListener('reset', (e) => onReset(JSON.parse(e.data)));
   es.addEventListener('output', (e) => onOutput(JSON.parse(e.data)));
@@ -115,57 +269,74 @@ function connect() {
   es.addEventListener('ended', (e) => onEnded(JSON.parse(e.data)));
 }
 
-function setConn(ok) {
-  S.connected = ok;
-  $('#conn').classList.toggle('down', !ok);
-  $('#conn').title = ok ? '已连接本地内核' : '与本地内核的连接已断开，正在重连…';
-}
-
 function onState(state) {
+  const first = !S.state;
   S.state = state;
-  if (S.selected && !findSession(S.selected)) S.selected = null;
+  if (first || Date.now() - S.prefsLocalAt > 1500) {
+    const before = S.prefs ? `${S.prefs.appearance}|${S.prefs.terminal_theme}|${S.prefs.terminal_font_size}` : '';
+    S.prefs = { ...state.prefs };
+    if (!first && before !== `${S.prefs.appearance}|${S.prefs.terminal_theme}|${S.prefs.terminal_font_size}`) applyTheme();
+  }
+  if (first) {
+    applyTheme();
+    updateWindowTitle(true);
+    const want = S.prefs.selected_session && findSession(S.prefs.selected_session);
+    if (want) S.sel = { type: 'session', id: want.session_id };
+    else if (state.projects.length) S.sel = { type: 'project', id: state.projects[0].project_id };
+  }
+  if (S.sel && S.sel.type === 'session' && !findSession(S.sel.id)) S.sel = null;
+  if (S.sel && S.sel.type === 'project' && !findProject(S.sel.id)) S.sel = null;
   for (const s of allSessions()) {
     const t = S.terms.get(s.session_id);
-    if (t) t.term.options.disableStdin = !s.attached;
+    if (t) { t.term.options.disableStdin = !s.attached; t.el.classList.toggle('readonly', !s.attached); }
   }
   render();
+  if (first && selectedSession()) { loadForSession(selectedSession()); focusTerminal(S.sel.id); }
+  if (S.pendingFocus) setTimeout(tryPendingFocus, 0);
+  if (first) runDevHash();
 }
 
-// ---------- terminals ----------
+// ---------------------------------------------------------------- terminals
 
 function termFor(sessionId) {
   let t = S.terms.get(sessionId);
   if (t) return t;
-  const el = h('div', { class: 'term-host' });
+  const el = h('div', { class: 'term-host readonly', dataset: { session: sessionId } });
   $('#terminals').append(el);
+  const theme = termTheme();
   const term = new Terminal({
-    fontFamily: 'Menlo, "SF Mono", Monaco, "Cascadia Mono", monospace',
-    fontSize: 13,
-    lineHeight: 1.12,
+    fontFamily: 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, monospace',
+    fontSize: S.prefs ? S.prefs.terminal_font_size : 13,
+    lineHeight: 1.15,
     cursorBlink: true,
-    scrollback: 8000,
-    allowProposedApi: false,
-    theme: {
-      background: '#0f1115', foreground: '#d9dce3', cursor: '#d9dce3',
-      selectionBackground: '#33415e', black: '#1b1f29', brightBlack: '#5d6474',
-    },
+    scrollback: 10000,
+    macOptionClickForcesSelection: true,
+    minimumContrastRatio: theme === LIGHT_TERM ? 4.5 : 1,
+    theme,
   });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.open(el);
-  t = { term, fit, el, runId: null, end: 0, queue: [], flushing: false, sent: '' };
+  t = { term, fit, el, runId: null, end: 0, queue: [], flushing: false, sent: '', loaded: false };
   term.onData((d) => enqueueInput(sessionId, { data: d }));
   term.onBinary((d) => enqueueInput(sessionId, { b64: btoa(d) }));
   term.attachCustomKeyEventHandler((ev) => {
-    // Shift+Enter inserts a newline in both TUIs via Ctrl+J (line feed).
     if (ev.type === 'keydown' && ev.key === 'Enter' && ev.shiftKey && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
-      enqueueInput(sessionId, { data: '\n' });
+      enqueueInput(sessionId, { data: '\n' }); // Ctrl+J: newline in both TUIs
       return false;
     }
     return true;
   });
   S.terms.set(sessionId, t);
   return t;
+}
+
+function disposeTerm(sessionId) {
+  const t = S.terms.get(sessionId);
+  if (!t) return;
+  t.term.dispose();
+  t.el.remove();
+  S.terms.delete(sessionId);
 }
 
 function enqueueInput(sessionId, item) {
@@ -190,43 +361,42 @@ async function flushInput(sessionId, t) {
 
 function writeChunk(t, runId, offset, bytes) {
   if (t.runId !== runId) {
-    if (t.runId !== null) t.term.write('\r\n\x1b[2m──────── 新的运行 ────────\x1b[0m\r\n');
+    // A new run (start/resume) is a new native process: start clean; the CLI redraws its history.
+    t.term.reset();
     t.runId = runId;
     t.end = offset;
     t.sent = '';
   }
   const end = offset + bytes.length;
   if (end <= t.end) return;
-  const slice = offset < t.end ? bytes.subarray(t.end - offset) : bytes;
-  t.term.write(slice);
+  t.term.write(offset < t.end ? bytes.subarray(t.end - offset) : bytes);
   t.end = end;
 }
 
 function onReset(msg) {
   const t = termFor(msg.session_id);
   const bytes = b64bytes(msg.data);
-  if (t.runId === msg.run_id && t.end >= msg.offset) {
-    writeChunk(t, msg.run_id, msg.offset, bytes);
-  } else {
-    t.term.reset();
-    t.runId = msg.run_id;
-    t.end = msg.offset;
-    t.term.write(bytes);
-    t.end = msg.offset + bytes.length;
-    t.sent = '';
-  }
-  if (msg.session_id === S.selected) requestAnimationFrame(syncSize);
+  if (t.runId === msg.run_id && t.end >= msg.offset) writeChunk(t, msg.run_id, msg.offset, bytes);
+  else { t.term.reset(); t.runId = msg.run_id; t.end = msg.offset; t.term.write(bytes); t.end = msg.offset + bytes.length; t.sent = ''; }
+  t.loaded = true;
+  if (S.sel && msg.session_id === S.sel.id) scheduleFit();
 }
 
 function onOutput(msg) {
   const t = termFor(msg.session_id);
+  const fresh = t.runId !== msg.run_id;
+  const wasEmpty = t.end === 0;
   writeChunk(t, msg.run_id, msg.offset, b64bytes(msg.data));
-  if (msg.session_id === S.selected && !t.sent) requestAnimationFrame(syncSize);
+  t.loaded = true;
+  if (S.sel && msg.session_id === S.sel.id) {
+    if (fresh || !t.sent) scheduleFit();
+    if (fresh || wasEmpty) renderOverlay();
+  }
 }
 
 function onEnded(msg) {
-  const t = S.terms.get(msg.session_id);
-  if (t) t.term.write('\r\n\x1b[2m[会话进程已结束]\x1b[0m\r\n');
+  scheduleChanges(msg.session_id, 300);
+  S.details.delete(msg.session_id);
 }
 
 async function loadHistory(sessionId) {
@@ -240,579 +410,1274 @@ async function loadHistory(sessionId) {
     const bytes = b64bytes(out.data);
     t.term.write(bytes);
     t.end = out.offset + bytes.length;
-    if (!out.live) t.term.write('\r\n\x1b[2m[以上为上次运行的终端输出]\x1b[0m\r\n');
+    if (S.sel && S.sel.id === sessionId) renderOverlay();
   } catch (e) { fail(e); }
 }
 
-function syncSize() {
-  const s = S.selected && findSession(S.selected);
-  const t = s && S.terms.get(s.session_id);
-  if (!t || !t.el.classList.contains('visible')) return;
-  try { t.fit.fit(); } catch (e) { return; }
-  const size = `${t.term.cols}x${t.term.rows}`;
-  if (s.attached && t.sent !== `${t.runId}:${size}`) {
-    t.sent = `${t.runId}:${size}`;
-    api('POST', `/api/sessions/${s.session_id}/resize`, { cols: t.term.cols, rows: t.term.rows }).catch(() => {});
-  }
+let fitFrame = 0;
+let resizeTimer = null;
+function scheduleFit() {
+  cancelAnimationFrame(fitFrame);
+  fitFrame = requestAnimationFrame(() => {
+    const s = selectedSession();
+    const t = s && S.terms.get(s.session_id);
+    if (!t || !t.el.classList.contains('visible')) return;
+    try { t.fit.fit(); } catch (e) { return; }
+    const size = `${t.runId}:${t.term.cols}x${t.term.rows}`;
+    if (s.attached && t.sent !== size) {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        t.sent = size;
+        api('POST', `/api/sessions/${s.session_id}/resize`, { cols: t.term.cols, rows: t.term.rows }).catch(() => {});
+      }, 60);
+    }
+  });
 }
 
-// ---------- actions ----------
+// Focus intent survives until the session is attached: a just-created or just-resumed session
+// appears in the state stream slightly after the request returns.
+function focusTerminal(sessionId) {
+  S.pendingFocus = { id: sessionId, until: Date.now() + 5000 };
+  setTimeout(tryPendingFocus, 0);
+}
+function tryPendingFocus() {
+  const want = S.pendingFocus;
+  if (!want) return;
+  if (Date.now() > want.until || !S.sel || S.sel.id !== want.id) { S.pendingFocus = null; return; }
+  const t = S.terms.get(want.id);
+  const s = findSession(want.id);
+  if (t && s && s.attached && !layerOpen()) { t.term.focus(); S.pendingFocus = null; }
+}
 
-function select(sessionId) {
-  S.selected = sessionId;
-  S.changes = null; S.diffPath = null; S.diffText = null;
+// ---------------------------------------------------------------- selection & loading
+
+function select(sel, { focus = true } = {}) {
+  const prev = selectedSession();
+  if (prev && S.terms.get(prev.session_id)) S.terms.get(prev.session_id).term.blur();
+  S.sel = sel;
+  S.diff = null;
+  if (sel && sel.type === 'session') {
+    setPref('selected_session', sel.id);
+    const s = findSession(sel.id);
+    if (s && S.prefs.collapsed_projects.includes(s.project_id)) {
+      setPref('collapsed_projects', S.prefs.collapsed_projects.filter((x) => x !== s.project_id));
+    }
+    if (s) loadForSession(s);
+  } else {
+    setPref('selected_session', null);
+  }
+  if (window.innerWidth < 760) S.sidebarOverlayOpen = false;
   render();
-  if (sessionId) {
-    loadEvents(sessionId);
-    if (S.tab === 'changes') loadChanges();
-    focusTerminal(sessionId);
-  }
+  if (focus && sel && sel.type === 'session') focusTerminal(sel.id);
 }
 
-async function loadEvents(sessionId) {
+function loadForSession(s) {
+  loadEvents(s.session_id);
+  scheduleChanges(s.session_id, 0);
+  if (S.prefs.inspector_open && S.prefs.inspector_tab === 'details') loadDetails(s.session_id);
+}
+
+async function loadEvents(sid) {
   try {
-    const events = await api('GET', `/api/sessions/${sessionId}/activity`);
-    S.events.set(sessionId, events);
-    if (S.selected === sessionId) renderPanel();
-  } catch (e) { fail(e); }
+    const events = await api('GET', `/api/sessions/${sid}/activity`);
+    S.events.set(sid, events);
+    if (S.sel && S.sel.id === sid) renderInspector();
+  } catch (e) { /* the notice area shows connection problems */ }
 }
 
 function onActivity(ev) {
   const list = S.events.get(ev.session_id);
   if (list && !list.some((x) => x.seq === ev.seq)) list.push(ev);
-  if (ev.session_id === S.selected) {
-    if (S.tab === 'activity') renderPanel();
-    if (S.tab === 'changes') scheduleChanges();
+  if (S.sel && ev.session_id === S.sel.id) {
+    if (S.prefs.inspector_open && S.prefs.inspector_tab === 'activity') scheduleActivityRender();
+    scheduleChanges(ev.session_id, 1200);
   }
 }
 
-let changesTimer = null;
-function scheduleChanges() {
-  clearTimeout(changesTimer);
-  changesTimer = setTimeout(loadChanges, 1200);
+const changeTimers = new Map();
+function scheduleChanges(sid, delay) {
+  clearTimeout(changeTimers.get(sid));
+  changeTimers.set(sid, setTimeout(() => loadChanges(sid), delay));
 }
-
-async function loadChanges() {
-  const sid = S.selected;
-  if (!sid) return;
+async function loadChanges(sid) {
   try {
-    S.changes = await api('GET', `/api/sessions/${sid}/changes`);
-    if (S.diffPath && !S.changes.files.some((f) => f.path === S.diffPath)) { S.diffPath = null; S.diffText = null; }
-    if (S.diffPath) await loadDiff(S.diffPath, false);
-    if (S.selected === sid && S.tab === 'changes') renderPanel();
+    const c = await api('GET', `/api/sessions/${sid}/changes`);
+    S.changes.set(sid, c);
+    if (S.diff && S.diff.sid === sid) {
+      if (!c.files.some((f) => f.path === S.diff.path)) S.diff = null;
+      else loadDiff(sid, S.diff.path);
+    }
+    if (S.sel && S.sel.id === sid) { renderToolbar(); if (S.prefs.inspector_tab === 'changes') renderInspector(); }
+  } catch (e) { /* not fatal: the chip just stays hidden */ }
+}
+setInterval(() => { const s = selectedSession(); if (s && s.active && !document.hidden) loadChanges(s.session_id); }, 8000);
+
+async function loadDiff(sid, path) {
+  try {
+    const d = await api('GET', `/api/sessions/${sid}/diff?path=${encodeURIComponent(path)}`);
+    S.diff = { sid, path, text: d.diff, truncated: d.truncated };
+    if (S.sel && S.sel.id === sid) renderInspector();
   } catch (e) { fail(e); }
 }
 
-async function loadDiff(path, rerender = true) {
+async function loadDetails(sid) {
   try {
-    const d = await api('GET', `/api/sessions/${S.selected}/diff?path=${encodeURIComponent(path)}`);
-    S.diffPath = path; S.diffText = d.diff + (d.truncated ? '\n… (已截断)' : '');
-    if (rerender) renderPanel();
-  } catch (e) { fail(e); }
+    S.details.set(sid, await api('GET', `/api/sessions/${sid}`));
+    if (S.sel && S.sel.id === sid && S.prefs.inspector_tab === 'details') renderInspector();
+  } catch (e) { /* ignore */ }
 }
 
-async function newSession(projectId, harness) {
-  try {
-    const s = await api('POST', '/api/sessions', { project_id: projectId, harness });
-    select(s.session_id);
-  } catch (e) { fail(e); }
+// ---------------------------------------------------------------- actions
+
+async function guarded(key, fn, button) {
+  if (S.pending.has(key)) return undefined;
+  S.pending.add(key);
+  if (button) button.classList.add('busy');
+  try { return await fn(); } catch (e) { fail(e); return undefined; } finally {
+    S.pending.delete(key);
+    if (button) button.classList.remove('busy');
+  }
 }
 
-async function startRun(sessionId, kind) {
-  try { await api('POST', `/api/sessions/${sessionId}/start`, { kind }); } catch (e) { fail(e); }
-  setTimeout(() => focusTerminal(sessionId), 300);
+async function startRun(s, kind, button) {
+  await guarded(`start:${s.session_id}`, () => api('POST', `/api/sessions/${s.session_id}/start`, { kind }), button);
+  focusTerminal(s.session_id);
 }
 
-async function stopSession(sessionId) {
-  try { await api('POST', `/api/sessions/${sessionId}/stop`, {}); } catch (e) { fail(e); }
+function stopSession(s, anchor) {
+  confirmPopover(anchor, {
+    title: `停止 ${HARNESS[s.harness].label}？`,
+    text: s.phase === 'working'
+      ? '它正在处理当前请求，停止会中断这一轮。原生会话已保存，之后可以恢复。'
+      : '这会结束会话进程（相当于关闭终端）。原生会话已保存，之后可以恢复。',
+    confirm: '停止',
+    danger: true,
+    onConfirm: () => guarded(`stop:${s.session_id}`, () => api('POST', `/api/sessions/${s.session_id}/stop`, {})),
+  });
 }
 
-async function renameSession(s) {
-  const title = window.prompt('会话标题', s.title);
-  if (title === null || !title.trim()) return;
-  try { await api('POST', `/api/sessions/${s.session_id}/rename`, { title }); } catch (e) { fail(e); }
+function archiveSession(s, anchor) {
+  confirmPopover(anchor, {
+    title: '归档这个会话？',
+    text: '它会从列表中隐藏，可在侧边栏底部的设置里显示已归档会话后找回。原生会话历史和项目文件不会被删除。',
+    confirm: '归档',
+    onConfirm: () => guarded(`archive:${s.session_id}`, async () => {
+      await api('POST', `/api/sessions/${s.session_id}/archive`, {});
+      disposeTerm(s.session_id);
+      if (S.sel && S.sel.id === s.session_id && !S.prefs.show_archived) select({ type: 'project', id: s.project_id }, { focus: false });
+    }),
+  });
 }
 
-async function archiveSession(s) {
-  if (!window.confirm(`从列表中移除会话「${s.title}」？原生 CLI 中的历史不受影响。`)) return;
-  try {
-    await api('POST', `/api/sessions/${s.session_id}/archive`, {});
-    if (S.selected === s.session_id) select(null);
-  } catch (e) { fail(e); }
+function unarchiveSession(s) {
+  guarded(`unarchive:${s.session_id}`, () => api('POST', `/api/sessions/${s.session_id}/unarchive`, {}));
 }
 
-async function archiveProject(p) {
-  if (!window.confirm(`从 RepoBridge 中移除项目「${p.name}」？不会删除任何文件。`)) return;
-  try { await api('POST', `/api/projects/${p.project_id}/archive`, {}); } catch (e) { fail(e); }
+function removeProject(p, anchor) {
+  confirmPopover(anchor, {
+    title: `从 RepoBridge 移除「${p.name}」？`,
+    text: '只是不再在这里显示。文件夹、其中的文件和原生会话历史都不会被删除，之后可以重新添加。',
+    confirm: '移除',
+    danger: true,
+    onConfirm: () => guarded(`rmproj:${p.project_id}`, async () => {
+      await api('POST', `/api/projects/${p.project_id}/archive`, {});
+      const sp = selectedProject();
+      if (sp && sp.project_id === p.project_id) S.sel = null;
+    }),
+  });
 }
 
-// ---------- rendering ----------
+function revealProject(p) { guarded(`reveal:${p.project_id}`, () => api('POST', `/api/projects/${p.project_id}/reveal`, {})); }
+
+async function copyText(text, done = '已复制') {
+  try { await navigator.clipboard.writeText(text); } catch (e) {
+    const ta = h('textarea', { style: 'position:fixed;opacity:0' });
+    ta.value = text;
+    document.body.append(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+  toast(done);
+}
+
+function resumeCommand(s) { return `cd ${shellQuote(s.workdir)} && ${HARNESS[s.harness].resume(s.native_session_id)}`; }
+
+function toggleInspector(tab) {
+  const s = selectedSession();
+  if (!s) return;
+  if (S.prefs.inspector_open && (!tab || S.prefs.inspector_tab === tab)) setPref('inspector_open', false);
+  else {
+    setPref('inspector_open', true);
+    if (tab) setPref('inspector_tab', tab);
+    if (S.prefs.inspector_tab === 'details') loadDetails(s.session_id);
+    if (S.prefs.inspector_tab === 'activity' && !S.events.has(s.session_id)) loadEvents(s.session_id);
+    if (S.prefs.inspector_tab === 'changes') loadChanges(s.session_id);
+  }
+  render();
+}
+
+function toggleSidebar() {
+  if (window.innerWidth < 760) S.sidebarOverlayOpen = !S.sidebarOverlayOpen;
+  else setPref('sidebar_collapsed', !S.prefs.sidebar_collapsed);
+  applyLayout();
+}
+
+function cycleSession(dir) {
+  const list = visibleTree().flatMap((g) => g.sessions);
+  if (!list.length) return;
+  const i = list.findIndex((s) => S.sel && s.session_id === S.sel.id);
+  const next = list[(i + dir + list.length) % list.length];
+  select({ type: 'session', id: next.session_id });
+}
+
+// ---------------------------------------------------------------- render: layout
 
 function render() {
-  renderTop();
-  renderSidebar();
-  renderMain();
-  const s = S.selected && findSession(S.selected);
-  const sig = s ? [S.tab, s.session_id, s.status, s.native_session_id, s.native_binding,
-    s.turns_observed, s.run && s.run.seq, s.attention ? 1 : 0].join('|') : '';
-  if (S.tab !== 'details' || sig !== S.panelSig) renderPanel();
-  S.panelSig = sig;
-}
-
-function renderTop() {
-  const chips = $('#harness-chips');
-  chips.replaceChildren();
   if (!S.state) return;
-  for (const hinfo of S.state.harnesses) {
-    chips.append(h('span', {
-      class: `chip ${hinfo.available ? '' : 'bad'}`,
-      title: hinfo.available ? `${hinfo.binary}\n点击重新检测` : `${hinfo.problem}\n点击重新检测`,
-    },
-    h('span', { class: `dot ${hinfo.available ? hinfo.kind : 'off'}` }),
-    h('button', { onclick: refreshHarnesses }, hinfo.label),
-    h('span', { class: 'ver', text: hinfo.available ? (hinfo.version || '') : '未找到' })));
-  }
-  const env = $('#env-chips');
-  env.replaceChildren();
-  const e = S.state.environment;
-  if (e.stripped_env.length) {
-    env.append(h('span', {
-      class: 'chip warn',
-      title: '这些变量可能把订阅会话切换为 API 计费。RepoBridge 启动会话时不传递它们（只显示名称）。',
-    }, `未传递 API 变量：${e.stripped_env.join(', ')}`));
-  }
+  applyLayout();
+  renderSidebar();
+  renderToolbar();
+  renderNotice();
+  renderStage();
+  renderInspector();
+  updateWindowTitle();
 }
 
-async function refreshHarnesses() {
-  try { await api('POST', '/api/harnesses/refresh', {}); toast('已重新检测 CLI', 'info'); } catch (e) { fail(e); }
+function applyLayout() {
+  if (!S.prefs) return;
+  const app = $('#app');
+  const W = window.innerWidth;
+  const narrow = W < 760;
+  const sideVisible = narrow ? S.sidebarOverlayOpen : !S.prefs.sidebar_collapsed;
+  const sideW = S.prefs.sidebar_width;
+  const inspOpen = !!(S.prefs.inspector_open && selectedSession());
+  const inspW = Math.min(S.prefs.inspector_width, Math.max(300, W - 360));
+  app.style.setProperty('--sidebar-w', `${sideW}px`);
+  app.classList.toggle('sidebar-overlay', narrow);
+  app.classList.toggle('sidebar-hidden', !sideVisible);
+  const inlineSide = !narrow && sideVisible ? sideW : 0;
+  const inspOverlay = inspOpen && W - inlineSide - inspW < 520;
+  // Width of the inspector's grid column: zero unless it is open and docked (inline var wins over CSS).
+  app.style.setProperty('--inspector-w', `${inspOpen ? inspW : 0}px`);
+  app.classList.toggle('inspector-overlay', inspOverlay);
+  app.classList.toggle('inspector-hidden', !inspOpen);
+  $('#scrim').hidden = !((narrow && sideVisible) || inspOverlay);
+  const mainWidth = W - inlineSide - (inspOpen && !inspOverlay ? inspW : 0);
+  // Labels collapse in two steps so the status and primary action keep their words longest.
+  $('#toolbar').classList.toggle('compact', mainWidth < 860);
+  $('#toolbar').classList.toggle('tight', mainWidth < 600);
+  scheduleFit();
 }
 
-function statusChip(s) {
-  if (s.attention) return h('span', { class: 'status attention', title: s.attention.message || '' }, '等待权限');
-  if (s.stopping && s.active) return h('span', { class: 'status running' }, '停止中');
-  return h('span', { class: `status ${s.status}` }, STATUS[s.status] || s.status);
+$('#scrim').addEventListener('click', () => {
+  if ($('#app').classList.contains('sidebar-overlay') && S.sidebarOverlayOpen) S.sidebarOverlayOpen = false;
+  else if ($('#app').classList.contains('inspector-overlay')) setPref('inspector_open', false);
+  render();
+});
+window.addEventListener('resize', () => applyLayout());
+
+function makeResizer(el, side) {
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    const move = (ev) => {
+      if (side === 'sidebar') S.prefs.sidebar_width = Math.round(Math.min(420, Math.max(200, ev.clientX)));
+      else {
+        const max = Math.min(900, window.innerWidth - (S.prefs.sidebar_collapsed ? 0 : S.prefs.sidebar_width) - 420);
+        S.prefs.inspector_width = Math.round(Math.min(Math.max(300, max), Math.max(300, window.innerWidth - ev.clientX)));
+      }
+      applyLayout();
+    };
+    const up = () => {
+      el.releasePointerCapture(e.pointerId);
+      el.classList.remove('dragging');
+      document.body.style.cursor = '';
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      if (side === 'sidebar') setPref('sidebar_width', S.prefs.sidebar_width);
+      else setPref('inspector_width', S.prefs.inspector_width);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  });
+  el.addEventListener('dblclick', () => {
+    if (side === 'sidebar') setPref('sidebar_width', 260); else setPref('inspector_width', 420);
+    applyLayout();
+  });
+}
+
+// ---------------------------------------------------------------- render: sidebar
+
+function visibleTree() {
+  const q = S.filter.trim().toLowerCase();
+  return S.state.projects.map((p) => {
+    const sessions = p.sessions.filter((s) => (S.prefs.show_archived || !s.archived)
+      && (!q || s.title.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)));
+    return { project: p, sessions };
+  }).filter((g) => !q || g.sessions.length || g.project.name.toLowerCase().includes(q));
 }
 
 function renderSidebar() {
-  const list = $('#project-list');
-  list.replaceChildren();
-  if (!S.state) return;
-  for (const p of S.state.projects) {
-    const box = h('div', { class: 'project' },
-      h('div', { class: 'project-head' },
-        h('div', { class: 'project-name', title: p.root_path }, p.name),
-        h('button', { class: 'btn btn-small', title: '从列表移除项目', onclick: () => archiveProject(p) }, '⋯')),
-      // The LRM keeps the leading "/" in place while the CSS truncates from the left.
-      h('div', { class: 'project-path', title: p.root_path }, `\u200e${p.root_path}`),
-      h('div', { class: 'project-actions' },
-        h('button', { class: 'btn btn-small btn-claude', onclick: () => newSession(p.project_id, 'claude-code') }, '＋ Claude Code'),
-        h('button', { class: 'btn btn-small btn-codex', onclick: () => newSession(p.project_id, 'codex') }, '＋ Codex')));
-    for (const s of p.sessions) {
-      const from = s.handoff_from && findSession(s.handoff_from);
-      box.append(h('div', {
-        class: `session ${s.session_id === S.selected ? 'selected' : ''}`,
-        onclick: () => select(s.session_id),
-        title: s.title,
-      },
-      h('span', { class: `dot ${s.harness}` }),
-      h('span', { class: 'session-title' }, s.title),
-      statusChip(s),
-      from ? h('span', { class: 'session-sub' }, `↳ 交接自「${from.title}」`) : null));
-    }
-    list.append(box);
-  }
-}
-
-function renderMain() {
-  const s = S.selected && findSession(S.selected);
-  for (const [id, t] of S.terms) t.el.classList.toggle('visible', !!s && id === s.session_id);
-  renderSessionBar(s);
-  renderBanner(s);
-  const empty = $('#empty-state');
-  empty.replaceChildren();
-  if (!S.state) return;
-  if (!s) {
-    empty.append(emptyCard());
+  const tree = $('#tree');
+  const focusKey = document.activeElement && tree.contains(document.activeElement)
+    ? (document.activeElement.closest('[data-key]') || {}).dataset?.key : null;
+  const scroll = tree.scrollTop;
+  tree.replaceChildren();
+  if (!S.state.projects.length) {
+    tree.append(h('div', { class: 'tree-empty' }, '还没有项目。添加一个本地文件夹后，就可以在其中打开 Claude Code 或 Codex 会话。'));
     return;
   }
-  const t = termFor(s.session_id);
-  t.el.classList.add('visible');
-  t.term.options.disableStdin = !s.attached;
-  if (!t.loaded && t.runId === null) loadHistory(s.session_id);
-  requestAnimationFrame(syncSize);
-}
-
-function focusTerminal(sessionId) {
-  requestAnimationFrame(() => {
-    const t = S.terms.get(sessionId);
-    const s = findSession(sessionId);
-    if (t && s && s.attached && !document.querySelector('.modal')) t.term.focus();
-  });
-}
-
-function emptyCard() {
-  const projects = S.state.projects;
-  if (!projects.length) {
-    return h('div', { class: 'empty-card' },
-      h('h2', {}, '添加一个项目开始'),
-      h('p', {}, '项目是一个本地目录（通常是 Git 仓库顶层）。在项目里打开 Claude Code 或 Codex 的原生会话，用各自已有的登录与订阅。'),
-      h('div', { class: 'empty-actions' }, h('button', { class: 'btn btn-primary', onclick: openAddProject }, '＋ 添加项目')));
-  }
-  return h('div', { class: 'empty-card' },
-    h('h2', {}, '选择或新建一个会话'),
-    h('p', {}, '每个会话固定一种 harness。换 harness 时请用“交接”在同一项目中新建会话。'),
-    h('div', { class: 'empty-actions' },
-      projects.slice(0, 3).flatMap((p) => [
-        h('button', { class: 'btn btn-claude', onclick: () => newSession(p.project_id, 'claude-code') }, `${p.name} · ＋ Claude Code`),
-        h('button', { class: 'btn btn-codex', onclick: () => newSession(p.project_id, 'codex') }, `${p.name} · ＋ Codex`),
-      ])));
-}
-
-function renderSessionBar(s) {
-  const bar = $('#session-bar');
-  bar.replaceChildren();
-  if (!s) return;
-  const actions = h('div', { class: 'sb-actions' });
-  if (s.active) {
-    actions.append(h('button', { class: 'btn btn-danger', disabled: s.stopping && s.attached, onclick: () => stopSession(s.session_id) }, s.attached ? '停止' : '终止'));
-  } else {
-    if (s.can_resume) actions.append(h('button', { class: 'btn btn-primary', onclick: () => startRun(s.session_id, 'resume') }, '恢复'));
-    else if (s.can_start_fresh) actions.append(h('button', { class: 'btn btn-primary', onclick: () => startRun(s.session_id, 'new') }, s.status === 'new' ? '启动' : '重新启动'));
-  }
-  actions.append(h('button', { class: 'btn', onclick: () => openHandoff(s) }, '交接…'));
-  if (!s.active) actions.append(h('button', { class: 'btn btn-small', title: '从列表移除', onclick: () => archiveSession(s) }, '移除'));
-  bar.append(
-    h('span', { class: `dot ${s.harness}` }),
-    h('span', { class: 'sb-title', title: '点击重命名', onclick: () => renameSession(s) }, s.title),
-    statusChip(s),
-    h('span', { class: 'sb-meta', title: s.workdir }, `${s.harness_label} · ${s.workdir} · 原生 ID ${shortId(s.native_session_id)}`),
-    actions);
-}
-
-function renderBanner(s) {
-  const el = $('#banner');
-  el.replaceChildren();
-  const env = S.state && S.state.environment;
-  if (env && env.refusal) el.append(h('div', { class: 'bar bad' }, `当前环境不能启动原生会话：${env.refusal}`));
-  if (!s) return;
-  if (s.attention) {
-    el.append(h('div', { class: 'bar warn' }, `${s.harness_label} 正在等待权限确认：${s.attention.message || ''}。请在下方终端中回答。`));
-  }
-  if (s.active && !s.attached) {
-    el.append(h('div', { class: 'bar warn' }, '该会话由之前的 RepoBridge 进程启动，仍被记录为运行中；本窗口无法接管其终端。可点击“终止”结束它。'));
-  }
-  const run = s.run;
-  if (!s.active && run && (run.status === 'failed' || run.status === 'interrupted')) {
-    const hint = s.can_resume ? '可点击“恢复”以原生方式继续同一会话。' : (s.can_start_fresh ? '尚无原生对话，可重新启动。' : '');
-    el.append(h('div', { class: `bar ${run.status === 'failed' ? 'bad' : 'warn'}` },
-      `${STATUS[run.status]}：${run.failure || ''} ${hint}`));
-  }
-  if (s.status === 'new' && !s.active) {
-    el.append(h('div', { class: 'bar info' }, '会话尚未启动。点击“启动”在 App 终端中打开原生 CLI。'));
-  }
-}
-
-function renderPanel() {
-  const prev = $('#panel');
-  const keep = prev.scrollTop;
-  const atBottom = keep + prev.clientHeight >= prev.scrollHeight - 48;
-  for (const b of document.querySelectorAll('#tabs .tab')) b.classList.toggle('active', b.dataset.tab === S.tab);
-  const panel = $('#panel');
-  panel.replaceChildren();
-  const s = S.selected && findSession(S.selected);
-  if (!s) { panel.append(h('div', { class: 'panel-empty' }, '选择一个会话查看活动、文件变更和恢复状态。')); return; }
-  if (S.tab === 'activity') panel.append(...activityPanel(s));
-  else if (S.tab === 'changes') panel.append(...changesPanel(s));
-  else panel.append(...detailsPanel(s));
-  panel.scrollTop = S.tab === 'activity' && atBottom ? panel.scrollHeight : keep;
-}
-
-function eventView(ev, tools) {
-  const p = ev.payload || {};
-  let icon = '·', cls = 'sys', text = null;
-  if (ev.kind === 'activity') {
-    const src = p.source, name = p.event;
-    if (src === 'claude-hook') {
-      if (name === 'SessionStart') { icon = '◆'; text = `会话开始（${p.start_source || '—'}）· ID ${shortId(p.native_session_id)}`; }
-      else if (name === 'UserPromptSubmit') { icon = '›'; cls = 'user'; text = p.prompt || '(空)'; }
-      else if (name === 'PreToolUse') {
-        icon = '▸'; cls = '';
-        const el = h('div', { class: 'ev' }, h('div', { class: 'ev-icon' }, icon),
-          h('div', { class: 'ev-body' }, h('div', { class: 'ev-text' }, h('code', {}, p.tool_name || '工具'), p.summary ? ` ${p.summary}` : '')));
-        if (p.tool_use_id) tools.set(p.tool_use_id, el);
-        return el;
-      } else if (name === 'PostToolUse' || name === 'PostToolUseFailure') {
-        const prev = p.tool_use_id && tools.get(p.tool_use_id);
-        const ok = name === 'PostToolUse';
-        if (prev) { prev.querySelector('.ev-text').append(h('span', { class: ok ? 'done' : 'fail' }, ok ? '✓' : `✗ ${p.error || ''}`)); return null; }
-        if (ok) return null;
-        icon = '✗'; cls = 'bad'; text = `${p.tool_name || '工具'} 失败：${p.error || ''}`;
-      } else if (name === 'PermissionRequest') { icon = '!'; cls = 'perm'; text = `请求权限：${p.tool_name || ''} ${p.summary || ''}`; }
-      else if (name === 'Notification') {
-        const perm = p.notification_type === 'permission_prompt';
-        icon = perm ? '!' : '◦'; cls = perm ? 'perm' : 'sys'; text = p.message || p.notification_type || '通知';
-      } else if (name === 'Stop') { icon = '■'; text = '本轮结束'; }
-      else if (name === 'SessionEnd') { icon = '◇'; text = `会话结束（${p.reason || '—'}）`; }
-      else { text = name || '事件'; }
-    } else if (src === 'codex-notify') {
-      icon = '■'; cls = '';
-      text = `本轮完成${p.message ? `：${p.message}` : ''}`;
-      if (p.prompt) return [h('div', { class: 'ev user' }, h('div', { class: 'ev-icon' }, '›'), h('div', { class: 'ev-body' }, h('div', { class: 'ev-text' }, p.prompt))),
-        h('div', { class: 'ev' }, h('div', { class: 'ev-icon' }, icon), h('div', { class: 'ev-body' }, h('div', { class: 'ev-text' }, text)))];
-    } else if (src === 'terminal') {
-      const perm = /permission|approv|权限|批准/i.test(p.message || '');
-      icon = perm ? '!' : '◦'; cls = perm ? 'perm' : 'sys'; text = p.message || '终端通知';
+  const groups = visibleTree();
+  if (!groups.length) tree.append(h('div', { class: 'tree-empty' }, '没有匹配的会话。'));
+  for (const { project: p, sessions } of groups) {
+    const collapsed = S.prefs.collapsed_projects.includes(p.project_id) && !S.filter;
+    const attn = p.sessions.filter((s) => s.attention).length;
+    const projectSelected = S.sel && S.sel.type === 'project' && S.sel.id === p.project_id;
+    const head = h('div', {
+      class: `row project-row ${collapsed ? '' : 'open'} ${projectSelected ? 'selected' : ''}`,
+      tabindex: '0', role: 'treeitem', 'aria-expanded': String(!collapsed), dataset: { key: `p:${p.project_id}` },
+      title: homeify(p.root_path),
+      onclick: (e) => { if (e.target.closest('.trail, .disclosure')) return; select({ type: 'project', id: p.project_id }, { focus: false }); },
+      oncontextmenu: (e) => { e.preventDefault(); projectMenu(p, { x: e.clientX, y: e.clientY }); },
+      onkeydown: treeKey,
+    },
+    h('button', {
+      class: 'icon-btn small disclosure', type: 'button', tabindex: '-1', 'aria-label': collapsed ? '展开' : '折叠',
+      onclick: (e) => { e.stopPropagation(); toggleCollapsed(p.project_id); },
+    }, icon('chevron')),
+    h('span', { class: 'name' }, p.name),
+    h('span', { class: 'trail' },
+      collapsed && attn ? h('span', { class: 'badge-attn rest-only', title: '有会话需要你确认' }, String(attn)) : null,
+      h('button', { class: 'icon-btn small hover-only', type: 'button', title: `在 ${p.name} 中新建会话`, 'aria-label': '新建会话',
+        onclick: (e) => { e.stopPropagation(); newSessionMenu(p, e.currentTarget); } }, icon('plus')),
+      h('button', { class: 'icon-btn small hover-only', type: 'button', title: '项目操作', 'aria-label': '项目操作',
+        onclick: (e) => { e.stopPropagation(); projectMenu(p, e.currentTarget); } }, icon('more'))));
+    const group = h('div', { class: 'group', role: 'group' }, head);
+    if (!collapsed) {
+      if (!sessions.length) group.append(h('div', { class: 'row session-row', style: 'color:var(--text-3);font-size:12px' }, '还没有会话'));
+      for (const s of sessions) group.append(sessionRow(s));
     }
-  } else if (ev.kind === 'run_started') {
-    icon = '▶'; cls = 'ok';
-    text = `${p.kind === 'resume' ? '原生恢复' : '启动'} ${p.handoff_prompt ? '（发送交接说明）' : ''}`;
-    if (p.stripped_env && p.stripped_env.length) text += ` · 未传递：${p.stripped_env.join(', ')}`;
-  } else if (ev.kind === 'run_ended') {
-    const bad = p.status === 'failed';
-    icon = bad ? '✗' : '◼'; cls = bad ? 'bad' : 'sys';
-    text = `${STATUS[p.status] || p.status}${p.exit_code !== null && p.exit_code !== undefined ? ` · 退出码 ${p.exit_code}` : ''}${p.failure ? ` · ${p.failure}` : ''}`;
-  } else {
-    const labels = {
-      session_created: '会话已创建', stop_requested: '已请求停止', writer_refused: '启动被拒绝：工作目录已有写入会话',
-      native_session_observed: `观察到原生会话 ID ${shortId(p.to)}`,
-      native_session_changed: `原生会话 ID 已变化：${shortId(p.from)} → ${shortId(p.to)}（例如 /clear 或 /resume）`,
-      handoff_out: `已交接到新会话（${LABEL[p.target] || p.target}）`, handoff_in: `由交接创建${p.send_as_prompt ? '，启动时发送交接说明' : ''}`,
-      run_interrupted: 'App 退出时会话被中断', exit_unconfirmed: '退出不明：进程组仍有成员', orphan_stopped: '已结束之前 App 进程留下的会话',
-      run_failed: `启动失败：${p.failure || ''}`,
-    };
-    text = labels[ev.kind] || ev.kind;
-    if (ev.kind === 'run_failed' || ev.kind === 'writer_refused' || ev.kind === 'exit_unconfirmed') cls = 'bad';
+    tree.append(group);
   }
-  if (text === null) return null;
-  return h('div', { class: `ev ${cls}`, title: fmtTime(ev.created_at) },
-    h('div', { class: 'ev-icon' }, icon),
-    h('div', { class: 'ev-body' }, h('div', { class: 'ev-text' }, text), h('div', { class: 'ev-time' }, fmtTime(ev.created_at))));
+  tree.scrollTop = scroll;
+  if (focusKey) { const el = tree.querySelector(`[data-key="${CSS.escape(focusKey)}"]`); if (el) el.focus(); }
 }
 
-function activityPanel(s) {
-  const events = S.events.get(s.session_id);
-  if (!events) return [h('div', { class: 'panel-empty' }, '加载中…')];
-  const tools = new Map();
-  const nodes = events.flatMap((ev) => eventView(ev, tools) || []);
-  const note = s.harness === 'codex'
-    ? 'Codex 旁路只报告每轮完成与终端通知（含审批请求）；逐个工具的活动请看终端。'
-    : 'Claude Code 旁路来自只记录的 hooks：请求、工具、权限与停止。';
-  if (!nodes.length) return [h('div', { class: 'panel-tools' }, note), h('div', { class: 'panel-empty' }, '还没有活动。')];
-  const box = h('div', {}, nodes);
-  return [h('div', { class: 'panel-tools' }, note), box];
-}
-
-function changesPanel(s) {
-  const tools = h('div', { class: 'panel-tools' }, h('span', { class: 'mono' }, s.workdir.split('/').slice(-2).join('/')),
-    h('button', { class: 'btn btn-small', onclick: loadChanges }, '刷新'));
-  const c = S.changes;
-  if (!c) { if (!changesTimer) loadChanges(); return [tools, h('div', { class: 'panel-empty' }, '加载中…')]; }
-  if (!c.git) return [tools, h('div', { class: 'panel-empty' }, c.error || '该目录不是 Git 仓库，无法显示变更。')];
-  const head = h('div', { class: 'note' }, `${c.branch || '(detached)'} · ${c.head ? c.head.slice(0, 10) : '无提交'} · ${c.files.length} 个文件有变更`);
-  if (!c.files.length) return [tools, head, h('div', { class: 'panel-empty' }, '工作区没有未提交的变更。')];
-  const files = c.files.map((f) => h('div', {
-    class: `file ${f.path === S.diffPath ? 'selected' : ''}`, onclick: () => loadDiff(f.path),
+function sessionRow(s) {
+  const st = statusOf(s);
+  const selected = S.sel && S.sel.type === 'session' && S.sel.id === s.session_id;
+  const from = s.handoff_from && findSession(s.handoff_from);
+  const tip = `${s.title}\n${HARNESS[s.harness].label} · ${st.label}${from ? `\n交接自「${from.title}」` : ''}`;
+  const trail = h('span', { class: 'trail' }, h('span', { class: 'tag rest-only' }, HARNESS[s.harness].short));
+  if (s.archived) {
+    trail.append(h('button', { class: 'icon-btn small hover-only', type: 'button', title: '取消归档', 'aria-label': '取消归档',
+      onclick: (e) => { e.stopPropagation(); unarchiveSession(s); } }, icon('unarchive')));
+  } else if (!s.active) {
+    trail.append(h('button', { class: 'icon-btn small hover-only', type: 'button', title: '归档（不删除历史）', 'aria-label': '归档',
+      onclick: (e) => { e.stopPropagation(); archiveSession(s, e.currentTarget); } }, icon('archive')));
+  }
+  return h('div', {
+    class: `row session-row ${selected ? 'selected' : ''} ${s.archived ? 'archived' : ''}`,
+    tabindex: '0', role: 'treeitem', 'aria-selected': String(!!selected), title: tip, dataset: { key: `s:${s.session_id}` },
+    onclick: () => select({ type: 'session', id: s.session_id }),
+    oncontextmenu: (e) => { e.preventDefault(); sessionMenu(s, { x: e.clientX, y: e.clientY }); },
+    onkeydown: treeKey,
   },
-  h('span', { class: `file-kind ${f.kind}` }, kindLabel(f.kind)),
-  h('span', { class: 'file-path' }, f.from ? `${f.from} → ${f.path}` : f.path),
-  f.added !== undefined ? h('span', { class: 'file-stat' }, `+${f.added} −${f.removed}`) : null));
-  const out = [tools, head, h('div', {}, files)];
-  if (S.diffPath && S.diffText !== null) out.push(diffView(S.diffText));
-  return out;
+  stGlyph(st),
+  from ? h('span', { class: 'relation', title: `交接自「${from.title}」` }, '↳') : null,
+  h('span', { class: 'name' }, s.title),
+  trail);
+}
+
+function treeKey(e) {
+  if (e.target !== e.currentTarget) return;
+  const rows = [...$('#tree').querySelectorAll('.row[tabindex="0"]')];
+  const i = rows.indexOf(e.currentTarget);
+  if (e.key === 'ArrowDown') { e.preventDefault(); if (rows[i + 1]) rows[i + 1].focus(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); if (rows[i - 1]) rows[i - 1].focus(); }
+  else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); }
+  else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.currentTarget.classList.contains('project-row')) {
+    const id = e.currentTarget.dataset.key.slice(2);
+    const collapsed = S.prefs.collapsed_projects.includes(id);
+    if ((e.key === 'ArrowLeft') !== collapsed) { e.preventDefault(); toggleCollapsed(id); }
+  }
+}
+
+function toggleCollapsed(projectId) {
+  const list = S.prefs.collapsed_projects;
+  setPref('collapsed_projects', list.includes(projectId) ? list.filter((x) => x !== projectId) : [...list, projectId]);
+  renderSidebar();
+}
+
+// ---------------------------------------------------------------- render: toolbar
+
+function renderToolbar() {
+  const bar = $('#toolbar');
+  if (S.renaming) return;
+  bar.replaceChildren();
+  bar.append(h('button', { class: 'icon-btn', type: 'button', title: '显示/隐藏侧边栏（⌃⌘S）', 'aria-label': '显示或隐藏侧边栏', onclick: toggleSidebar }, icon('sidebar')));
+  const s = selectedSession();
+  const p = selectedProject();
+  if (!s) {
+    bar.append(h('div', { class: 'tb-title' },
+      h('div', { class: 'tb-title-line' }, h('span', { class: 'tb-name', style: 'cursor:default' }, p ? p.name : 'RepoBridge')),
+      h('div', { class: 'tb-sub' }, p ? `${shortPath(p.root_path, 64)}${p.branch ? ` · ${p.branch}` : ''}` : '项目与原生会话的工作台')));
+    if (p) {
+      bar.append(h('div', { class: 'tb-group' },
+        h('button', { class: 'icon-btn', type: 'button', title: '项目操作', 'aria-label': '项目操作', onclick: (e) => projectMenu(p, e.currentTarget) }, icon('more'))));
+    }
+    return;
+  }
+  const st = statusOf(s);
+  bar.append(h('div', { class: 'tb-title' },
+    h('div', { class: 'tb-title-line' },
+      h('span', { class: 'tb-name', title: '点击重命名', onclick: () => beginRename(s) }, s.title),
+      h('button', { class: 'icon-btn small', type: 'button', title: '会话操作', 'aria-label': '会话操作', onclick: (e) => sessionMenu(s, e.currentTarget) }, icon('caret'))),
+    h('div', { class: 'tb-sub' },
+      h('span', { class: `harness ${s.harness}` }, HARNESS[s.harness].label),
+      ` · ${p ? p.name : ''}${p && p.branch ? ` · ${p.branch}` : ''}`)));
+  const tone = st.tone === 'warn' ? 'warn' : st.tone === 'bad' ? 'bad' : '';
+  const right = h('div', { class: 'tb-group' }, h('span', { class: `status-label ${tone}`, title: st.label }, stGlyph(st), h('span', { class: 'tb-label' }, st.label)), h('span', { class: 'tb-sep' }));
+  const open = S.prefs.inspector_open;
+  const tab = S.prefs.inspector_tab;
+  const c = S.changes.get(s.session_id);
+  if (c && c.git && c.files.length) {
+    let add = 0;
+    let del = 0;
+    let known = false;
+    for (const f of c.files) if (f.added !== undefined && f.added !== '-') { add += Number(f.added); del += Number(f.removed); known = true; }
+    right.append(h('button', {
+      class: `diff-chip ${open && tab === 'changes' ? 'active' : ''}`, type: 'button',
+      title: `${c.files.length} 个文件有未提交的变更（⌘⇧D）`, onclick: () => toggleInspector('changes'),
+    }, icon('changes'), known ? [h('span', { class: 'add' }, `+${add}`), h('span', { class: 'del' }, `−${del}`)] : null,
+    h('span', { class: 'tb-label-2' }, `${c.files.length} 个文件`)));
+  } else {
+    right.append(h('button', { class: `icon-btn ${open && tab === 'changes' ? 'active' : ''}`, type: 'button', title: '变更（⌘⇧D）', 'aria-label': '变更', onclick: () => toggleInspector('changes') }, icon('changes')));
+  }
+  right.append(
+    h('button', { class: `icon-btn ${open && tab === 'activity' ? 'active' : ''}`, type: 'button', title: '活动（⌘⇧A）', 'aria-label': '活动', onclick: () => toggleInspector('activity') }, icon('activity')),
+    h('button', { class: `icon-btn ${open && tab === 'details' ? 'active' : ''}`, type: 'button', title: '详情（⌘⇧I）', 'aria-label': '详情', onclick: () => toggleInspector('details') }, icon('info')),
+    h('span', { class: 'tb-sep' }),
+    h('button', { class: 'btn', type: 'button', title: '交接：在同一项目中新建会话继续这项工作', onclick: () => openHandoff(s) }, icon('handoff'), h('span', { class: 'tb-label-2' }, '交接')));
+  const primary = primaryAction(s);
+  if (primary) right.append(primary);
+  bar.append(right);
+}
+
+function primaryAction(s) {
+  const label = HARNESS[s.harness].label;
+  if (s.active && s.attached) {
+    return h('button', { class: 'btn', type: 'button', disabled: s.stopping, title: `停止 ${label} 进程（原生会话会保存）`, onclick: (e) => stopSession(s, e.currentTarget) }, icon('stop', 'i-fill'), h('span', { class: 'tb-label' }, '停止'));
+  }
+  if (s.active) {
+    return h('button', { class: 'btn btn-danger', type: 'button', title: '结束上次运行遗留的进程', onclick: (e) => confirmPopover(e.currentTarget, {
+      title: '结束遗留进程？', text: '这个进程由上次运行的 RepoBridge 启动，当前窗口无法接入它的终端。结束后可以原生恢复会话。', confirm: '结束进程', danger: true,
+      onConfirm: () => guarded(`stop:${s.session_id}`, () => api('POST', `/api/sessions/${s.session_id}/stop`, {})),
+    }) }, icon('stop', 'i-fill'), h('span', { class: 'tb-label' }, '结束进程'));
+  }
+  if (s.archived) return h('button', { class: 'btn', type: 'button', onclick: () => unarchiveSession(s) }, icon('unarchive'), h('span', { class: 'tb-label' }, '取消归档'));
+  if (s.can_resume) return h('button', { class: 'btn btn-primary', type: 'button', title: `用 ${label} 原生恢复同一会话`, onclick: (e) => startRun(s, 'resume', e.currentTarget) }, icon('resume'), h('span', { class: 'tb-label' }, '恢复'));
+  if (s.can_start_fresh) return h('button', { class: 'btn btn-primary', type: 'button', onclick: (e) => startRun(s, 'new', e.currentTarget) }, icon('play', 'i-fill'), h('span', { class: 'tb-label' }, s.status === 'new' ? '启动' : '重新启动'));
+  return null;
+}
+
+function beginRename(s) {
+  const bar = $('#toolbar');
+  const name = bar.querySelector('.tb-name');
+  if (!name) return;
+  S.renaming = true;
+  const input = h('input', { class: 'tb-name-input', maxlength: '120', 'aria-label': '会话标题' });
+  input.value = s.title;
+  name.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    const title = input.value.trim();
+    if (save && title && title !== s.title) {
+      try { await api('POST', `/api/sessions/${s.session_id}/rename`, { title }); } catch (e) { fail(e); }
+    }
+    S.renaming = false;
+    renderToolbar();
+    focusTerminal(s.session_id);
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+}
+
+// ---------------------------------------------------------------- render: notices
+
+function renderNotice() {
+  const area = $('#notice');
+  if (!S.state) return;
+  area.replaceChildren();
+  const add = (tone, iconName, msg, ...actions) => area.append(h('div', { class: `notice ${tone}`, role: tone === 'info' ? 'status' : 'alert' },
+    icon(iconName), h('div', { class: 'msg' }, msg), ...actions));
+  if (!S.connected) add('bad', 'warning', '与 RepoBridge 本地服务的连接已断开，正在重连…');
+  if (S.state.environment.refusal) add('bad', 'warning', `当前环境不能启动原生会话：${S.state.environment.refusal}`);
+  const s = selectedSession();
+  const p = selectedProject();
+  if (p && !p.exists) add('bad', 'warning', `找不到项目文件夹 ${homeify(p.root_path)}。它可能被移动或删除了。`);
+  if (!s) return;
+  const label = HARNESS[s.harness].label;
+  if (s.attention) {
+    add('warn', 'warning', [h('b', {}, `${label} 需要你确认`), `：${s.attention.message || '权限请求'}。请在下方终端中回答。`],
+      h('button', { class: 'btn btn-small', type: 'button', onclick: () => focusTerminal(s.session_id) }, '转到终端'));
+  } else if (s.active && !s.attached) {
+    add('warn', 'warning', '这个会话由上次运行的 RepoBridge 启动，进程仍在，但当前窗口无法接入它的终端。');
+  } else if (!s.active && s.run && s.run.status === 'failed') {
+    const act = s.can_resume ? h('button', { class: 'btn btn-small', type: 'button', onclick: (e) => startRun(s, 'resume', e.currentTarget) }, '恢复')
+      : s.can_start_fresh ? h('button', { class: 'btn btn-small', type: 'button', onclick: (e) => startRun(s, 'new', e.currentTarget) }, '重新启动') : null;
+    add('bad', 'warning', [h('b', {}, '会话失败'), `：${s.run.failure || '原因未知'}`], act,
+      h('button', { class: 'btn btn-small', type: 'button', onclick: () => { setPref('inspector_open', true); setPref('inspector_tab', 'details'); loadDetails(s.session_id); render(); } }, '查看详情'));
+  } else if (!s.active && s.run && s.run.status === 'interrupted') {
+    add('warn', 'warning', [h('b', {}, '会话被中断'), '：RepoBridge 关闭时它仍在运行。原生会话已保存。'],
+      s.can_resume ? h('button', { class: 'btn btn-small', type: 'button', onclick: (e) => startRun(s, 'resume', e.currentTarget) }, '恢复') : null);
+  }
+  if (!s.active && !s.archived && !harnessOk(s.harness)) {
+    const info = harnessInfo(s.harness);
+    add('bad', 'warning', `找不到 ${label}${info && info.problem ? `：${info.problem}` : ''}`, h('button', { class: 'btn btn-small', type: 'button', onclick: openSettings }, '检查设置'));
+  }
+}
+
+// ---------------------------------------------------------------- render: stage
+
+function renderStage() {
+  const s = selectedSession();
+  for (const [id, t] of S.terms) t.el.classList.toggle('visible', !!s && id === s.session_id);
+  if (s) {
+    const t = termFor(s.session_id);
+    t.el.classList.add('visible');
+    t.el.classList.toggle('readonly', !s.attached);
+    t.term.options.disableStdin = !s.attached;
+    if (!t.loaded && t.runId === null && s.run) loadHistory(s.session_id);
+    scheduleFit();
+  }
+  renderOverlay();
+}
+
+function renderOverlay() {
+  const ov = $('#overlay');
+  ov.replaceChildren();
+  ov.className = 'overlay';
+  if (!S.state) return;
+  const s = selectedSession();
+  if (!s) {
+    const p = selectedProject();
+    ov.append(p ? projectCard(p) : welcomeCard());
+    return;
+  }
+  const t = S.terms.get(s.session_id);
+  const label = HARNESS[s.harness].label;
+  if (!s.active && s.status === 'new') { ov.append(startCard(s)); return; }
+  if (s.active && s.phase === 'starting' && (!t || t.end === 0)) {
+    ov.className = 'overlay floating';
+    ov.append(h('div', { class: 'pill' }, stGlyph({ tone: 'ok', glyph: 'spin' }), `正在启动 ${label}…`));
+    return;
+  }
+  if (!s.active && t && t.end > 0) {
+    ov.className = 'overlay floating';
+    ov.append(h('div', { class: 'pill' }, icon('terminal'), '上次运行的终端输出（只读）'));
+  }
+}
+
+function welcomeCard() {
+  return h('div', { class: 'card' },
+    h('h1', {}, '欢迎使用 RepoBridge'),
+    h('p', {}, '以项目为中心，使用你已有的 Claude Code 和 Codex。每个会话都是原生 CLI：对话、工具、权限、登录和计费都由它自己处理。'),
+    h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary', type: 'button', onclick: openAddProject }, icon('folder-plus'), '添加项目文件夹')),
+    cliList());
+}
+
+function cliList() {
+  return h('div', { class: 'cli-list' }, S.state.harnesses.map((x) => h('div', { class: 'cli-item' },
+    stGlyph(x.available ? { tone: 'ok', glyph: 'dot', label: '可用' } : { tone: 'bad', glyph: 'x', label: '不可用' }),
+    h('span', {}, x.label),
+    h('span', { class: 'v', title: x.binary || x.problem || '' }, x.available ? (x.version || '已找到') : '未找到'))));
+}
+
+function projectCard(p) {
+  const busy = busySessionIn(p);
+  const recent = p.sessions.filter((s) => !s.archived).slice(-5).reverse();
+  return h('div', { class: 'card' },
+    h('h1', {}, p.name),
+    h('p', {}, busy ? `「${busy.title}」正在这个项目中运行。同一文件夹同时只能有一个会话写入。` : '在这个项目中打开一个原生会话。换 harness 时，用“交接”新建会话继续，而不是在原会话里切换。'),
+    h('div', { class: 'actions' },
+      ['claude-code', 'codex'].map((k) => {
+        const info = harnessInfo(k);
+        return h('button', { class: `btn ${k === S.prefs.last_harness ? 'btn-primary' : ''}`, type: 'button', disabled: !info || !info.available,
+          title: info && !info.available ? info.problem : null, onclick: () => openNewSession(p.project_id, k) }, icon('plus'), `新建 ${HARNESS[k].label} 会话`);
+      })),
+    h('div', { class: 'facts' },
+      h('div', { class: 'fact' }, h('span', { class: 'k' }, '文件夹'), h('span', { class: 'v', title: p.root_path }, homeify(p.root_path))),
+      h('div', { class: 'fact' }, h('span', { class: 'k' }, '分支'), h('span', { class: 'v' }, p.branch || '不是 Git 仓库或无法读取'))),
+    recent.length ? h('div', { class: 'recent' }, h('div', { class: 'h' }, '最近的会话'),
+      recent.map((s) => h('button', { class: 'list-btn', type: 'button', onclick: () => select({ type: 'session', id: s.session_id }) },
+        stGlyph(statusOf(s)), h('span', { class: 'name' }, s.title), h('span', { class: 'meta' }, `${HARNESS[s.harness].short} · ${statusOf(s).label}`)))) : null);
+}
+
+function startCard(s) {
+  const label = HARNESS[s.harness].label;
+  const p = findProject(s.project_id);
+  const busy = p && p.sessions.find((x) => x.active && x.session_id !== s.session_id);
+  return h('div', { class: 'card' },
+    h('h1', {}, `启动 ${label}`),
+    h('p', {}, `将在「${p ? p.name : ''}」中打开原生 ${label} 交互会话。对话、工具和权限都在终端里由 ${label} 处理；RepoBridge 不读取登录信息，也不会替你发送消息。`),
+    busy ? h('div', { class: 'callout warn' }, icon('warning'), h('div', {}, `「${busy.title}」正在这个项目中运行。先停止它，才能启动这个会话。`)) : null,
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn btn-primary', type: 'button', disabled: !!busy || !harnessOk(s.harness), onclick: (e) => startRun(s, 'new', e.currentTarget) }, icon('play', 'i-fill'), `启动 ${label}`),
+      busy ? h('button', { class: 'btn', type: 'button', onclick: () => select({ type: 'session', id: busy.session_id }) }, `切换到「${busy.title}」`) : null));
+}
+
+// ---------------------------------------------------------------- render: inspector
+
+let activityTimer = null;
+function scheduleActivityRender() { clearTimeout(activityTimer); activityTimer = setTimeout(renderInspector, 150); }
+
+function renderInspector() {
+  const s = selectedSession();
+  for (const b of $('#inspector-tabs').querySelectorAll('button')) b.setAttribute('aria-selected', String(!!S.prefs && b.dataset.tab === S.prefs.inspector_tab));
+  if (!S.prefs || !S.prefs.inspector_open || !s) return;
+  const body = $('#inspector-body');
+  const prev = body.querySelector('.pane-scroll, .diff');
+  const keep = prev ? { cls: prev.className, top: prev.scrollTop, atBottom: prev.scrollTop + prev.clientHeight >= prev.scrollHeight - 40 } : null;
+  const same = body.dataset.tab === S.prefs.inspector_tab && body.dataset.sid === s.session_id;
+  body.replaceChildren();
+  body.dataset.tab = S.prefs.inspector_tab;
+  body.dataset.sid = s.session_id;
+  if (S.prefs.inspector_tab === 'changes') body.append(...changesPane(s));
+  else if (S.prefs.inspector_tab === 'activity') body.append(...activityPane(s));
+  else body.append(...detailsPane(s));
+  const scroller = body.querySelector('.pane-scroll, .diff');
+  if (!scroller) return;
+  if (S.prefs.inspector_tab === 'activity') {
+    if (!same || !keep || keep.atBottom) scroller.scrollTop = scroller.scrollHeight;
+    else {
+      scroller.scrollTop = keep.top;
+      const jump = h('button', { class: 'btn btn-small jump', type: 'button', onclick: () => { scroller.scrollTop = scroller.scrollHeight; jump.remove(); } }, '↓ 新活动');
+      body.append(jump);
+      scroller.addEventListener('scroll', () => { if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 40) jump.remove(); });
+    }
+  } else if (same && keep && keep.cls === scroller.className) scroller.scrollTop = keep.top;
+}
+
+function changesPane(s) {
+  const c = S.changes.get(s.session_id);
+  const bar = h('div', { class: 'pane-bar' },
+    h('span', { class: 'grow' }, c && c.git ? `${c.branch || '(detached)'} · ${c.files.length ? `${c.files.length} 个文件有未提交的变更` : '没有未提交的变更'}` : '工作区变更'),
+    h('button', { class: 'icon-btn small', type: 'button', title: '刷新', 'aria-label': '刷新变更', onclick: () => loadChanges(s.session_id) }, icon('refresh')));
+  if (!c) return [bar, h('div', { class: 'pane-scroll' }, h('div', { class: 'empty' }, '正在读取…'))];
+  if (!c.git) return [bar, h('div', { class: 'pane-scroll' }, h('div', { class: 'empty' }, c.error || '这个文件夹不是 Git 仓库，无法显示变更。'))];
+  if (!c.files.length) return [bar, h('div', { class: 'pane-scroll' }, h('div', { class: 'empty' }, '工作区是干净的。会话修改文件后，变更会出现在这里。'))];
+  const files = h('div', { class: 'files', role: 'list' }, c.files.map((f) => {
+    const code = { modified: 'M', added: 'A', deleted: 'D', renamed: 'R', copied: 'C', untracked: 'U', unmerged: '!', 'type changed': 'T' }[f.kind] || '?';
+    const slash = f.path.lastIndexOf('/');
+    const dir = slash >= 0 ? f.path.slice(0, slash + 1) : '';
+    const base = slash >= 0 ? f.path.slice(slash + 1) : f.path;
+    return h('div', { class: `file ${S.diff && S.diff.path === f.path ? 'selected' : ''}`, role: 'listitem', tabindex: '0', title: f.from ? `${f.from} → ${f.path}` : f.path,
+      onclick: () => loadDiff(s.session_id, f.path), onkeydown: (e) => { if (e.key === 'Enter') loadDiff(s.session_id, f.path); } },
+    h('span', { class: `code ${code}`, title: kindLabel(f.kind) }, code),
+    h('span', { class: 'path' }, h('bdi', {}, h('span', { class: 'dir' }, dir), base)),
+    f.added !== undefined ? h('span', { class: 'stat' }, `+${f.added} −${f.removed}`) : null);
+  }));
+  if (S.diff && S.diff.sid === s.session_id) {
+    const diff = h('div', { class: 'diff selectable' });
+    for (const line of S.diff.text.split('\n')) {
+      let cls = '';
+      if (/^(diff --git |index |\+\+\+ |--- )/.test(line)) continue; // the file is already selected above
+      if (/^(new file|deleted file|similarity|rename |old mode|new mode)/.test(line)) cls = 'meta';
+      else if (line.startsWith('+')) cls = 'add';
+      else if (line.startsWith('-')) cls = 'del';
+      else if (line.startsWith('@@')) cls = 'hunk';
+      diff.append(h('span', { class: `ln ${cls}` }, line || ' '));
+    }
+    if (S.diff.truncated) diff.append(h('span', { class: 'ln meta' }, '… 差异过长，已截断'));
+    return [bar, files, diff];
+  }
+  // Nothing picked yet: show the first file instead of an empty "pick a file" state.
+  if (!S.diff || S.diff.sid !== s.session_id) setTimeout(() => { if (!S.diff || S.diff.sid !== s.session_id) loadDiff(s.session_id, c.files[0].path); }, 0);
+  return [bar, files, h('div', { class: 'pane-scroll' }, h('div', { class: 'empty' }, '正在读取差异…'))];
 }
 
 function kindLabel(kind) {
-  return { modified: '修改', added: '新增', deleted: '删除', renamed: '重命名', copied: '复制', untracked: '未跟踪', unmerged: '冲突', 'type changed': '类型' }[kind] || kind;
+  return { modified: '已修改', added: '新增', deleted: '已删除', renamed: '重命名', copied: '复制', untracked: '未跟踪的新文件', unmerged: '有冲突', 'type changed': '类型变化' }[kind] || kind;
 }
 
-function diffView(text) {
-  const pre = h('div', { class: 'diff' });
-  for (const line of text.split('\n')) {
-    let cls = '';
-    if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff ') || line.startsWith('index ')) cls = 'meta';
-    else if (line.startsWith('+')) cls = 'add';
-    else if (line.startsWith('-')) cls = 'del';
-    else if (line.startsWith('@@')) cls = 'hunk';
-    pre.append(h('span', { class: cls }, line + '\n'));
-  }
-  return pre;
+function activityPane(s) {
+  const events = S.events.get(s.session_id);
+  const note = s.harness === 'codex'
+    ? 'Codex 只向 RepoBridge 报告每轮完成和审批请求；逐个工具的过程请看终端。'
+    : 'Claude Code 的请求、工具调用、权限请求和停止，来自只记录的 hooks。';
+  const head = h('div', { class: 'pane-bar' }, h('span', { class: 'grow', title: note }, note));
+  if (!events) return [head, h('div', { class: 'pane-scroll' }, h('div', { class: 'empty' }, '正在读取…'))];
+  const items = buildTimeline(events);
+  if (!items.length) return [head, h('div', { class: 'pane-scroll' }, h('div', { class: 'empty' }, '还没有活动。在终端里开始对话后，这里会按轮次记录。'))];
+  return [head, h('div', { class: 'pane-scroll selectable', style: 'padding:0' }, h('div', { class: 'timeline' }, items))];
 }
 
-function detailsPanel(s) {
-  const p = findProject(s.project_id);
-  const resumeHint = s.harness === 'claude-code'
-    ? `claude --resume ${s.native_session_id}`
-    : `codex resume ${s.native_session_id}`;
-  const out = [
-    h('div', { class: 'kv' },
-      h('div', { class: 'k' }, 'Harness'), h('div', { class: 'v' }, s.harness_label),
-      h('div', { class: 'k' }, '项目'), h('div', { class: 'v' }, p ? p.name : s.project_id),
-      h('div', { class: 'k' }, '工作目录'), h('div', { class: 'v mono' }, s.workdir),
-      h('div', { class: 'k' }, '原生会话 ID'), h('div', { class: 'v mono' }, s.native_session_id || '未知'),
-      h('div', { class: 'k' }, 'ID 绑定'), h('div', { class: 'v' }, BINDING[s.native_binding] || s.native_binding),
-      h('div', { class: 'k' }, '已观察轮次'), h('div', { class: 'v' }, String(s.turns_observed)),
-      h('div', { class: 'k' }, '恢复状态'), h('div', { class: 'v' }, recoveryText(s))),
-  ];
-  if (s.native_session_id && s.can_resume) {
-    out.push(h('div', { class: 'note' }, '也可以在普通终端中用原生命令继续：'), h('pre', { class: 'tail' }, resumeHint));
-  }
-  const chain = [];
-  if (s.handoff_from) {
-    const from = findSession(s.handoff_from);
-    chain.push(h('div', {}, '交接自：', h('button', { class: 'link', onclick: () => select(s.handoff_from) }, from ? from.title : s.handoff_from)));
-  }
-  const outs = p ? p.handoffs.filter((x) => x.from_session_id === s.session_id) : [];
-  for (const x of outs) {
-    const to = findSession(x.to_session_id);
-    chain.push(h('div', {}, '交接到：', h('button', { class: 'link', onclick: () => select(x.to_session_id) }, to ? to.title : x.to_session_id), ` · ${fmtTime(x.created_at)}`));
-  }
-  if (chain.length) out.push(h('div', { class: 'h3' }, '交接链'), ...chain,
-    h('div', { class: 'note' }, '交接会新建原生会话，不继承原会话的原生上下文。'));
-  out.push(h('div', { class: 'h3' }, '运行记录'));
-  const runsBox = h('div', { class: 'note' }, '加载中…');
-  out.push(runsBox);
-  api('GET', `/api/sessions/${s.session_id}`).then((d) => {
-    const table = h('table', { class: 'runs' }, h('tr', {}, h('th', {}, '#'), h('th', {}, '方式'), h('th', {}, '状态'), h('th', {}, '时间')));
-    for (const r of d.runs.slice().reverse()) {
-      table.append(h('tr', {},
-        h('td', {}, String(r.seq)),
-        h('td', {}, r.kind === 'resume' ? '恢复' : '新建'),
-        h('td', {}, `${STATUS[r.status] || r.status}${r.exit_code !== null ? ` (${r.exit_code})` : ''}${r.exit_signal !== null ? ` 信号 ${r.exit_signal}` : ''}`,
-          r.failure ? h('div', { class: 'note' }, r.failure) : null,
-          r.stripped_env && r.stripped_env.length ? h('div', { class: 'note' }, `未传递：${r.stripped_env.join(', ')}`) : null),
-        h('td', {}, fmtTime(r.started_at))));
+function buildTimeline(events) {
+  const out = [];
+  let turn = null;
+  const tools = new Map();
+  const step = (cls, g, content) => h('div', { class: `step ${cls}` }, h('span', { class: 'glyph' }, g), h('span', { class: 'txt' }, content));
+  const ensureTurn = (time) => {
+    if (!turn) {
+      turn = h('div', { class: 'turn' }, h('div', { class: 'turn-head' }, h('div', { class: 'turn-prompt', style: 'color:var(--text-3)' }, '（终端中的操作）'), h('span', { class: 'time' }, clock(time))));
+      out.push(turn);
     }
-    runsBox.replaceWith(d.runs.length ? table : h('div', { class: 'note' }, '尚未运行。'));
-    const last = d.runs[d.runs.length - 1];
-    if (last && last.output_tail && last.status === 'failed') {
-      $('#panel').append(h('div', { class: 'h3' }, '最后输出'), h('pre', { class: 'tail' }, last.output_tail));
+    return turn;
+  };
+  const newTurn = (prompt, time) => {
+    const p = h('div', { class: 'turn-prompt', title: '点击展开或收起' }, prompt);
+    p.addEventListener('click', () => p.classList.toggle('expanded'));
+    turn = h('div', { class: 'turn' }, h('div', { class: 'turn-head' }, p, h('span', { class: 'time' }, clock(time))));
+    out.push(turn);
+  };
+  const sys = (text, time, bad = false) => { turn = null; out.push(h('div', { class: `sys ${bad ? 'bad' : ''}` }, h('span', { class: 'txt' }, text), h('span', { class: 'time' }, clock(time)))); };
+  for (const ev of events) {
+    const p = ev.payload || {};
+    if (ev.kind === 'activity') {
+      if (p.source === 'claude-hook') {
+        const name = p.event;
+        if (name === 'UserPromptSubmit') newTurn(p.prompt || '（空）', ev.created_at);
+        else if (name === 'PreToolUse') {
+          const el = step('', '›', [h('code', {}, p.tool_name || '工具'), p.summary ? ` ${p.summary}` : '']);
+          ensureTurn(ev.created_at).append(el);
+          if (p.tool_use_id) tools.set(p.tool_use_id, el);
+        } else if (name === 'PostToolUse' || name === 'PostToolUseFailure') {
+          const el = p.tool_use_id && tools.get(p.tool_use_id);
+          if (el) {
+            if (name === 'PostToolUse') el.querySelector('.txt').append(h('span', { class: 'ok', title: '完成' }, '✓'));
+            else { el.classList.add('fail'); el.querySelector('.txt').append(` — 失败${p.error ? `：${p.error}` : ''}`); }
+          } else if (name === 'PostToolUseFailure') ensureTurn(ev.created_at).append(step('fail', '×', `${p.tool_name || '工具'} 失败${p.error ? `：${p.error}` : ''}`));
+        } else if (name === 'PermissionRequest' || (name === 'Notification' && p.notification_type === 'permission_prompt')) {
+          ensureTurn(ev.created_at).append(step('perm', '!', `请求权限：${p.tool_name ? `${p.tool_name} ` : ''}${p.summary || p.message || ''}`));
+        } else if (name === 'Notification') {
+          if (p.message) ensureTurn(ev.created_at).append(step('', '·', p.message));
+        } else if (name === 'Stop') {
+          if (turn) turn.append(step('', '■', '本轮结束'));
+        } else if (name === 'SessionStart') {
+          sys(p.start_source === 'resume' ? '原生会话已恢复' : p.start_source === 'clear' ? '已开始新的原生对话（/clear）' : '原生会话已就绪', ev.created_at);
+        } else if (name === 'SessionEnd') sys('原生会话已结束', ev.created_at);
+      } else if (p.source === 'codex-notify') {
+        newTurn(p.prompt || '（终端中的输入）', ev.created_at);
+        if (p.message) turn.append(step('', '■', `本轮完成：${p.message}`));
+        turn = null;
+      } else if (p.source === 'terminal') {
+        const perm = /permission|approv|权限|批准/i.test(p.message || '');
+        ensureTurn(ev.created_at).append(step(perm ? 'perm' : '', perm ? '!' : '·', p.message || '终端通知'));
+      }
+    } else {
+      const label = {
+        session_created: null,
+        run_started: p.kind === 'resume' ? '已用原生方式恢复' : `已启动${p.handoff_prompt ? '，并发送交接说明' : ''}`,
+        run_ended: `会话${{ exited: '已退出', stopped: '已停止', failed: '失败', interrupted: '被中断' }[p.status] || p.status}${p.exit_code !== null && p.exit_code !== undefined && p.status !== 'stopped' ? `（退出码 ${p.exit_code}）` : ''}${p.failure ? `：${p.failure}` : ''}`,
+        stop_requested: '已请求停止',
+        writer_refused: '启动被拒绝：这个文件夹已有运行中的会话',
+        native_session_observed: '已识别原生会话',
+        native_session_changed: '原生会话已切换（例如 /clear 或 /resume）',
+        handoff_out: `已交接到新的 ${HARNESS[p.target] ? HARNESS[p.target].label : ''} 会话`,
+        handoff_in: '由交接创建',
+        run_interrupted: 'RepoBridge 关闭时会话被中断',
+        exit_unconfirmed: '无法确认进程已全部退出',
+        orphan_stopped: '已结束上次运行遗留的进程',
+        run_failed: `启动失败：${p.failure || ''}`,
+      }[ev.kind];
+      if (label) sys(label, ev.created_at, ['run_failed', 'writer_refused', 'exit_unconfirmed'].includes(ev.kind) || (ev.kind === 'run_ended' && p.status === 'failed'));
     }
-  }).catch(fail);
+  }
   return out;
 }
 
-function recoveryText(s) {
-  if (s.active) return s.attached ? '运行中（本窗口终端）' : '记录为运行中（之前的 App 进程）';
-  if (s.can_resume) return '可原生恢复同一会话';
-  if (s.can_start_fresh) return s.status === 'new' ? '未启动' : '尚无原生对话；可重新启动';
-  if (!s.native_session_id) return '未观察到原生会话 ID，不能恢复';
-  return '不可恢复';
+function detailsPane(s) {
+  const p = findProject(s.project_id);
+  const d = S.details.get(s.session_id);
+  if (!d) loadDetails(s.session_id);
+  const label = HARNESS[s.harness].label;
+  const from = s.handoff_from && findSession(s.handoff_from);
+  const outs = p ? p.handoffs.filter((x) => x.from_session_id === s.session_id) : [];
+  const recovery = s.active ? (s.attached ? '正在运行。' : '记录为运行中，但不在当前窗口的终端里。')
+    : s.can_resume ? `可以恢复：会用 ${label} 的原生恢复回到同一会话。`
+      : s.can_start_fresh ? (s.status === 'new' ? '还没有启动。' : '还没有原生对话，可以重新启动。')
+        : s.native_session_id ? '原生会话存在，但当前无法恢复。' : `还没有识别到原生会话（${label} 在第一轮结束后才报告）。`;
+  const sections = [
+    h('div', { class: 'sect' }, h('h3', {}, '会话'), h('div', { class: 'kv' },
+      h('div', { class: 'k' }, 'Harness'), h('div', { class: 'v' }, label),
+      h('div', { class: 'k' }, '项目'), h('div', { class: 'v' }, p ? p.name : '—'),
+      h('div', { class: 'k' }, '文件夹'), h('div', { class: 'v selectable' }, homeify(s.workdir)),
+      h('div', { class: 'k' }, '分支'), h('div', { class: 'v' }, (p && p.branch) || '—'),
+      h('div', { class: 'k' }, '创建于'), h('div', { class: 'v' }, clock(s.created_at)))),
+    h('div', { class: 'sect' }, h('h3', {}, '恢复'), h('div', { style: 'font-size:12.5px' }, recovery),
+      s.native_session_id && s.can_resume ? [
+        h('div', { class: 'code-line selectable' }, h('span', { title: HARNESS[s.harness].resume(s.native_session_id) }, HARNESS[s.harness].resume(s.native_session_id)),
+          h('button', { class: 'icon-btn small', type: 'button', title: '复制命令', 'aria-label': '复制恢复命令', onclick: () => copyText(resumeCommand(s), '已复制恢复命令') }, icon('copy'))),
+        h('div', { class: 'hint', style: 'margin-top:6px' }, '也可以在普通终端里，于项目文件夹中运行这条原生命令。')] : null),
+  ];
+  if (from || outs.length) {
+    sections.push(h('div', { class: 'sect' }, h('h3', {}, '交接'),
+      from ? h('button', { class: 'list-btn', type: 'button', onclick: () => select({ type: 'session', id: from.session_id }) }, icon('handoff'), h('span', { class: 'name' }, `来自「${from.title}」`), h('span', { class: 'meta' }, HARNESS[from.harness].short)) : null,
+      outs.map((x) => {
+        const to = findSession(x.to_session_id);
+        return h('button', { class: 'list-btn', type: 'button', onclick: () => select({ type: 'session', id: x.to_session_id }) }, icon('handoff'), h('span', { class: 'name' }, `交接到「${to ? to.title : x.to_session_id}」`), h('span', { class: 'meta' }, clock(x.created_at)));
+      }),
+      h('div', { class: 'hint', style: 'margin-top:6px' }, '交接会新建原生会话，新会话不继承原会话的原生上下文。')));
+  }
+  const runs = d ? d.runs.slice().reverse() : [];
+  sections.push(h('div', { class: 'sect' }, h('h3', {}, '运行记录'),
+    !d ? h('div', { class: 'hint' }, '正在读取…') : !runs.length ? h('div', { class: 'hint' }, '还没有运行。') :
+      h('div', { class: 'runs' }, runs.map((r) => h('div', { class: 'run' },
+        h('span', { class: 'n' }, `#${r.seq}`),
+        h('span', { class: 'what' }, `${r.kind === 'resume' ? '恢复' : '启动'} · ${statusOf({ ...s, active: false, archived: false, status: r.status }).label}${r.exit_code !== null && r.status === 'failed' ? `（退出码 ${r.exit_code}）` : ''}`,
+          r.failure ? h('span', { class: 'why' }, r.failure) : null),
+        h('span', { class: 'time' }, clock(r.started_at))))),
+    d && runs[0] && runs[0].output_tail && runs[0].status === 'failed' ? [h('div', { class: 'hint', style: 'margin-top:10px' }, '最后的输出'), h('pre', { class: 'tail selectable' }, runs[0].output_tail)] : null));
+  sections.push(h('div', { class: 'sect' }, h('details', { class: 'tech' }, h('summary', {}, icon('chevron'), '技术详情'),
+    h('div', { class: 'kv selectable', style: 'margin-top:8px' },
+      h('div', { class: 'k' }, '会话 ID'), h('div', { class: 'v mono' }, s.session_id),
+      h('div', { class: 'k' }, '原生会话 ID'), h('div', { class: 'v mono' }, s.native_session_id || '未知'),
+      h('div', { class: 'k' }, 'ID 来源'), h('div', { class: 'v' }, { pending: '等待 CLI 报告', preassigned: '启动时指定，等待确认', confirmed: '启动时指定，CLI 已确认', observed: 'CLI 报告' }[s.native_binding] || s.native_binding),
+      h('div', { class: 'k' }, '观察到的轮次'), h('div', { class: 'v' }, String(s.turns_observed)),
+      runs[0] ? [
+        h('div', { class: 'k' }, '最近的命令'), h('div', { class: 'v mono' }, (runs[0].argv || []).map((a) => (a.length > 120 ? `${a.slice(0, 117)}…` : a)).join(' ')),
+        h('div', { class: 'k' }, '未传递变量'), h('div', { class: 'v' }, runs[0].stripped_env && runs[0].stripped_env.length ? runs[0].stripped_env.join(', ') : '无'),
+        h('div', { class: 'k' }, '运行 ID'), h('div', { class: 'v mono' }, runs[0].run_id)] : null))));
+  return [h('div', { class: 'pane-scroll' }, sections)];
 }
 
-// ---------- modals ----------
+function shellQuote(s) { return /^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`; }
 
-function modal(content, small = false) {
-  const root = $('#modal-root');
-  const box = h('div', { class: `modal ${small ? 'small' : ''}` }, content);
-  const back = h('div', { class: 'modal-backdrop', onmousedown: (e) => { if (e.target === back) close(); } }, box);
-  function close() { root.replaceChildren(); document.removeEventListener('keydown', onKey); }
-  function onKey(e) { if (e.key === 'Escape') close(); }
-  document.addEventListener('keydown', onKey);
-  root.replaceChildren(back);
+// ---------------------------------------------------------------- menus, popovers, dialogs
+
+const layers = [];
+function layerOpen() { return layers.length > 0; }
+function pushLayer(el, onClose) {
+  const entry = { el, onClose, prevFocus: document.activeElement };
+  layers.push(entry);
+  $('#layer').append(el);
+  return () => closeLayer(entry);
+}
+function closeLayer(entry) {
+  const i = layers.indexOf(entry);
+  if (i < 0) return;
+  layers.splice(i, 1);
+  entry.el.remove();
+  if (entry.onClose) entry.onClose();
+  if (entry.prevFocus && document.body.contains(entry.prevFocus) && entry.prevFocus !== document.body) entry.prevFocus.focus();
+  else { const s = selectedSession(); if (s) focusTerminal(s.session_id); }
+}
+function closeTop() { if (layers.length) closeLayer(layers[layers.length - 1]); }
+document.addEventListener('mousedown', (e) => {
+  const top = layers[layers.length - 1];
+  if (top && (top.el.classList.contains('menu') || top.el.classList.contains('popover')) && !top.el.contains(e.target)) closeLayer(top);
+}, true);
+
+function place(el, anchor) {
+  const isEl = anchor instanceof Element;
+  const r = isEl ? anchor.getBoundingClientRect() : null;
+  let x = isEl ? r.left : anchor.x;
+  let y = isEl ? r.bottom + 4 : anchor.y;
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  requestAnimationFrame(() => {
+    const w = el.offsetWidth;
+    const hgt = el.offsetHeight;
+    if (isEl && r.left + w > window.innerWidth - 8) x = r.right - w;
+    if (y + hgt > window.innerHeight - 8) y = isEl ? r.top - hgt - 4 : y - hgt;
+    el.style.left = `${Math.max(8, Math.min(x, window.innerWidth - w - 8))}px`;
+    el.style.top = `${Math.max(8, Math.min(y, window.innerHeight - hgt - 8))}px`;
+  });
+}
+
+function menu(anchor, items) {
+  const el = h('div', { class: 'menu', role: 'menu' });
+  let close = () => {};
+  const clean = items.filter(Boolean).filter((x, i, arr) => !(x === '-' && (i === 0 || arr[i - 1] === '-' || i === arr.length - 1)));
+  for (const it of clean) {
+    if (it === '-') { el.append(h('div', { class: 'menu-sep' })); continue; }
+    if (it.head) { el.append(h('div', { class: 'menu-head' }, it.head)); continue; }
+    el.append(h('button', {
+      class: `menu-item ${it.danger ? 'danger' : ''}`, role: 'menuitem', type: 'button', disabled: it.disabled,
+      title: it.title || null, onclick: () => { close(); it.action(); },
+    }, it.icon ? icon(it.icon) : h('span', { style: 'width:16px' }), h('span', { class: 'grow' }, it.label), it.note ? h('span', { class: 'note' }, it.note) : null));
+  }
+  el.addEventListener('keydown', (e) => {
+    const btns = [...el.querySelectorAll('.menu-item:not(:disabled)')];
+    const i = btns.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (btns[i + 1] || btns[0]).focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); (btns[i - 1] || btns[btns.length - 1]).focus(); }
+  });
+  close = pushLayer(el);
+  place(el, anchor);
+  const first = el.querySelector('.menu-item:not(:disabled)');
+  if (first) first.focus();
+}
+
+function confirmPopover(anchor, { title, text, confirm, danger, onConfirm }) {
+  let close = () => {};
+  const ok = h('button', { class: `btn ${danger ? 'btn-danger' : 'btn-primary'}`, type: 'button', onclick: () => { close(); onConfirm(); } }, confirm);
+  const el = h('div', { class: 'popover', role: 'alertdialog', 'aria-label': title },
+    h('h4', {}, title), h('p', {}, text),
+    h('div', { class: 'actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close() }, '取消'), ok));
+  close = pushLayer(el);
+  place(el, anchor instanceof Element ? anchor : $('#toolbar'));
+  ok.focus();
+}
+
+const FOCUSABLE = 'input:not([type="hidden"]):not(:disabled), textarea:not(:disabled), select:not(:disabled), button:not(:disabled):not([hidden]), [tabindex="0"]';
+
+function dialog(content, { wide = false, onClose } = {}) {
+  const box = h('div', { class: `dialog ${wide ? 'wide' : ''}`, role: 'dialog', 'aria-modal': 'true', tabindex: '-1' }, content);
+  const wrap = h('div', { class: 'dialog-wrap' }, box);
+  let close = () => {};
+  wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
+  // Keep keyboard focus inside the dialog: nothing typed here may reach the terminal behind it.
+  wrap.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const items = [...box.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null);
+    if (!items.length) { e.preventDefault(); box.focus(); return; }
+    const i = items.indexOf(document.activeElement);
+    const next = e.shiftKey ? (i <= 0 ? items.length - 1 : i - 1) : (i === items.length - 1 ? 0 : i + 1);
+    e.preventDefault();
+    items[next].focus();
+  });
+  close = pushLayer(wrap, onClose);
+  const s = selectedSession();
+  if (s && S.terms.get(s.session_id)) S.terms.get(s.session_id).term.blur();
+  box.focus();
+  setTimeout(() => { if (box.contains(document.activeElement) && document.activeElement !== box) return; const f = box.querySelector('input, textarea, select') || box.querySelector('.btn-primary') || box.querySelector(FOCUSABLE); if (f) f.focus(); }, 0);
   return close;
 }
 
-function openAddProject() {
-  const path = h('input', { placeholder: '/Users/you/code/my-project', spellcheck: 'false' });
-  const name = h('input', { placeholder: '默认使用目录名' });
-  const picker = window.pywebview && window.pywebview.api && window.pywebview.api.pick_folder;
-  const pick = picker ? h('button', { class: 'btn', onclick: async () => {
-    try { const p = await window.pywebview.api.pick_folder(); if (p) path.value = p; } catch (e) { fail(e); }
-  } }, '选择…') : null;
-  const submit = async () => {
-    try {
-      const p = await api('POST', '/api/projects', { path: path.value, name: name.value || null });
-      close();
-      toast(p.created ? `已添加项目 ${p.name}` : `项目 ${p.name} 已存在`, 'info');
-    } catch (e) { fail(e); }
+function sessionMenu(s, anchor) {
+  const label = HARNESS[s.harness].label;
+  const p = findProject(s.project_id);
+  const anchorEl = anchor instanceof Element ? anchor : $('#toolbar');
+  menu(anchor, [
+    { icon: 'pencil', label: '重命名…', action: () => { select({ type: 'session', id: s.session_id }, { focus: false }); setTimeout(() => beginRename(findSession(s.session_id)), 50); } },
+    { icon: 'handoff', label: '交接到新会话…', action: () => openHandoff(s) },
+    '-',
+    s.native_session_id && s.can_resume ? { icon: 'copy', label: '复制原生恢复命令', action: () => copyText(resumeCommand(s), '已复制恢复命令') } : null,
+    p ? { icon: 'folder', label: '在 Finder 中显示项目', action: () => revealProject(p) } : null,
+    { icon: 'info', label: '会话详情', action: () => { select({ type: 'session', id: s.session_id }, { focus: false }); setPref('inspector_open', true); setPref('inspector_tab', 'details'); loadDetails(s.session_id); render(); } },
+    '-',
+    s.active && s.attached ? { icon: 'stop', label: `停止 ${label}`, action: () => stopSession(s, anchorEl) } : null,
+    s.archived ? { icon: 'unarchive', label: '取消归档', action: () => unarchiveSession(s) }
+      : { icon: 'archive', label: '归档…', disabled: s.active, note: s.active ? '先停止' : null, action: () => archiveSession(s, anchorEl) },
+  ]);
+}
+
+function projectMenu(p, anchor) {
+  const anchorEl = anchor instanceof Element ? anchor : $('#tree');
+  menu(anchor, [
+    { icon: 'plus', label: '新建 Claude Code 会话', disabled: !harnessOk('claude-code'), action: () => openNewSession(p.project_id, 'claude-code') },
+    { icon: 'plus', label: '新建 Codex 会话', disabled: !harnessOk('codex'), action: () => openNewSession(p.project_id, 'codex') },
+    '-',
+    { icon: 'folder', label: '在 Finder 中显示', action: () => revealProject(p) },
+    { icon: 'copy', label: '复制路径', action: () => copyText(p.root_path, '已复制路径') },
+    '-',
+    { icon: 'close', label: '从 RepoBridge 移除…', danger: true, action: () => removeProject(p, anchorEl) },
+  ]);
+}
+
+function newSessionMenu(p, anchor) {
+  menu(anchor, [
+    { head: p.name },
+    ...['claude-code', 'codex'].map((k) => ({ icon: 'plus', label: `新建 ${HARNESS[k].label} 会话`, disabled: !harnessOk(k), note: harnessOk(k) ? null : '未找到', action: () => openNewSession(p.project_id, k) })),
+  ]);
+}
+
+function openNewSession(projectId, harness) {
+  const projects = S.state.projects;
+  if (!projects.length) { openAddProject(); return; }
+  let pid = projectId || (selectedProject() || projects[0]).project_id;
+  let kind = harness || S.prefs.last_harness;
+  if (!harnessOk(kind) && harnessOk(kind === 'codex' ? 'claude-code' : 'codex')) kind = kind === 'codex' ? 'claude-code' : 'codex';
+  const projectSelect = h('select', { class: 'select' }, projects.map((p) => h('option', { value: p.project_id }, p.name)));
+  projectSelect.value = pid;
+  const title = h('input', { class: 'input', placeholder: '可选，例如“修复登录跳转”', maxlength: '120' });
+  const choice = h('div', { class: 'choice', role: 'radiogroup' });
+  const busyBox = h('div');
+  const create = h('button', { class: 'btn btn-primary', type: 'button' }, '创建并启动');
+  const alt = h('button', { class: 'btn', type: 'button' });
+  let close = () => {};
+  const draw = () => {
+    choice.replaceChildren(...['claude-code', 'codex'].map((k) => {
+      const info = harnessInfo(k);
+      return h('button', { type: 'button', role: 'radio', 'aria-pressed': String(k === kind), 'aria-checked': String(k === kind), disabled: !info || !info.available, onclick: () => { kind = k; draw(); } },
+        h('span', { class: 't' }, h('span', { class: `dot ${k}` }), HARNESS[k].label),
+        h('span', { class: 'd' }, info && info.available ? (info.version || '已找到') : '未找到'));
+    }));
+    const busy = busySessionIn(findProject(pid));
+    busyBox.replaceChildren();
+    if (busy) {
+      busyBox.append(h('div', { class: 'callout warn' }, icon('warning'), h('div', {}, `「${busy.title}」正在这个项目中运行。同一文件夹同时只能有一个会话写入，新会话会先创建，等你停止它之后再启动。`)));
+      create.textContent = '创建（稍后启动）';
+      alt.hidden = false;
+      alt.textContent = '切换到运行中的会话';
+      alt.onclick = () => { close(); select({ type: 'session', id: busy.session_id }); };
+    } else {
+      create.textContent = '创建并启动';
+      alt.hidden = true;
+    }
+    create.disabled = !harnessOk(kind);
   };
-  path.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
-  const close = modal([
+  projectSelect.addEventListener('change', () => { pid = projectSelect.value; draw(); });
+  create.addEventListener('click', () => guarded('new-session', async () => {
+    const start = !busySessionIn(findProject(pid));
+    const s = await api('POST', '/api/sessions', { project_id: pid, harness: kind, title: title.value.trim() || null, start });
+    setPref('last_harness', kind);
+    close();
+    select({ type: 'session', id: s.session_id });
+  }, create));
+  title.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) create.click(); });
+  close = dialog([
+    h('h2', {}, '新建会话'),
+    h('p', { class: 'sub' }, '每个会话固定使用一种 harness，在项目文件夹中打开它的原生交互界面。'),
+    h('div', { class: 'field' }, h('label', {}, '项目'), projectSelect),
+    h('div', { class: 'field' }, h('div', { class: 'label' }, 'Harness'), choice),
+    h('div', { class: 'field' }, h('label', {}, '标题'), title),
+    busyBox,
+    h('div', { class: 'actions' }, h('span', { class: 'left' }, alt), h('button', { class: 'btn', type: 'button', onclick: () => close() }, '取消'), create),
+  ]);
+  draw();
+  setTimeout(() => title.focus(), 30);
+}
+
+function openAddProject() {
+  const path = h('input', { class: 'input', placeholder: '/Users/you/code/my-project', spellcheck: 'false', autocomplete: 'off' });
+  const name = h('input', { class: 'input', placeholder: '默认使用文件夹名' });
+  const err = h('div', { class: 'err', hidden: true });
+  const add = h('button', { class: 'btn btn-primary', type: 'button' }, '添加');
+  let close = () => {};
+  const pick = hasNative('pick_folder') ? h('button', { class: 'btn', type: 'button', onclick: (e) => guarded('pick-folder', async () => {
+    const p = await api('POST', '/api/native/pick-folder', {});
+    if (p) { path.value = p; err.hidden = true; }
+  }, e.currentTarget) }, '选择…') : null;
+  const submit = () => guarded('add-project', async () => {
+    err.hidden = true;
+    try {
+      const p = await api('POST', '/api/projects', { path: path.value, name: name.value.trim() || null });
+      close();
+      toast(p.created ? `已添加「${p.name}」` : `「${p.name}」已在列表中`);
+      select({ type: 'project', id: p.project_id }, { focus: false });
+    } catch (e) { err.textContent = e.message; err.hidden = false; path.focus(); }
+  }, add);
+  add.addEventListener('click', submit);
+  path.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) submit(); });
+  close = dialog([
     h('h2', {}, '添加项目'),
-    h('div', { class: 'sub' }, '选择本地目录；如果是 Git 仓库，请选择仓库顶层。RepoBridge 不会修改目录内容。'),
-    h('div', { class: 'field' }, h('label', {}, '目录（绝对路径）'), h('div', { class: 'row' }, path, pick)),
+    h('p', { class: 'sub' }, '选择一个本地文件夹；Git 仓库请选择仓库的顶层文件夹。RepoBridge 不会修改其中的文件。'),
+    h('div', { class: 'field' }, h('label', {}, '文件夹'), h('div', { class: 'row-input' }, path, pick)),
+    err,
     h('div', { class: 'field' }, h('label', {}, '名称（可选）'), name),
-    h('div', { class: 'modal-actions' }, h('button', { class: 'btn', onclick: () => close() }, '取消'),
-      h('button', { class: 'btn btn-primary', onclick: submit }, '添加')),
-  ], true);
-  setTimeout(() => path.focus(), 0);
+    h('div', { class: 'actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close() }, '取消'), add),
+  ]);
+  setTimeout(() => path.focus(), 30);
 }
 
 function openHandoff(source) {
-  const other = source.harness === 'claude-code' ? 'codex' : 'claude-code';
-  let target = other;
-  const progress = h('textarea', { rows: 3, placeholder: '例如：登录接口已完成，单元测试有 2 个失败（test_auth.py），下一步修复令牌过期判断。' });
-  const note = h('textarea', { rows: 16, spellcheck: 'false' });
-  const send = h('input', { type: 'checkbox', checked: true });
-  const status = h('div');
-  const radios = h('div', { class: 'radio-row' });
-  const submitBtn = h('button', { class: 'btn btn-primary' }, '创建交接会话');
-
-  function drawRadios() {
-    radios.replaceChildren(...['claude-code', 'codex'].map((k) => {
+  let target = source.harness === 'claude-code' ? 'codex' : 'claude-code';
+  const progress = h('textarea', { class: 'textarea', rows: '3', placeholder: '例如：登录接口已完成；test_auth.py 还有 2 个失败；下一步修复令牌过期判断。', style: 'font-family:var(--font);font-size:13px' });
+  const note = h('textarea', { class: 'textarea', rows: '12', spellcheck: 'false', 'aria-label': '交接说明' });
+  const send = h('input', { type: 'checkbox' });
+  send.checked = true;
+  const choice = h('div', { class: 'choice' });
+  const warnBox = h('div');
+  const create = h('button', { class: 'btn btn-primary', type: 'button' }, '创建新会话');
+  let close = () => {};
+  const noteWrap = h('div', { hidden: true }, note);
+  const noteToggle = h('button', { class: 'disclose', type: 'button' }, icon('chevron'), '查看和编辑交接说明');
+  noteToggle.addEventListener('click', () => { noteWrap.hidden = !noteWrap.hidden; noteToggle.classList.toggle('open', !noteWrap.hidden); });
+  const draw = () => {
+    choice.replaceChildren(...['claude-code', 'codex'].map((k) => {
       const info = harnessInfo(k);
-      return h('label', { class: `radio ${k === target ? 'checked' : ''}`, onclick: () => { target = k; drawRadios(); draft(); } },
-        h('span', { class: `dot ${k}` }), LABEL[k],
-        info && !info.available ? h('span', { class: 'note' }, '（未找到）') : null,
-        k === source.harness ? h('span', { class: 'note' }, '（同一 harness）') : null);
+      return h('button', { type: 'button', role: 'radio', 'aria-pressed': String(k === target), 'aria-checked': String(k === target), disabled: !info || !info.available, onclick: () => { target = k; draw(); draft(); } },
+        h('span', { class: 't' }, h('span', { class: `dot ${k}` }), HARNESS[k].label),
+        h('span', { class: 'd' }, k === source.harness ? '同一 harness，全新的上下文' : '换一个 harness 继续'));
     }));
-  }
-
-  function drawStatus() {
-    const s = findSession(source.session_id);
-    status.replaceChildren();
-    if (s && s.active) {
-      status.append(h('div', { class: 'callout warn' },
-        '原会话仍在运行。同一工作目录只允许一个写入会话，请先停止原会话。 ',
-        h('button', { class: 'btn btn-small', onclick: async () => { await stopSession(source.session_id); setTimeout(drawStatus, 600); } }, '停止原会话')));
-      submitBtn.disabled = true;
-      setTimeout(() => { if (document.body.contains(status)) drawStatus(); }, 800);
-    } else {
-      submitBtn.disabled = false;
-    }
-  }
-
-  async function draft() {
+    const live = findSession(source.session_id);
+    warnBox.replaceChildren();
+    if (live && live.active) {
+      warnBox.append(h('div', { class: 'callout warn' }, icon('warning'), h('div', {}, `「${live.title}」正在运行。同一文件夹同时只能有一个会话写入，继续时会先停止它（原生会话会保存）。`)));
+      create.textContent = '停止原会话并创建';
+    } else create.textContent = '创建新会话';
+    create.disabled = !harnessOk(target);
+  };
+  let draftSeq = 0;
+  const draft = async () => {
+    const seq = ++draftSeq;
     try {
       const d = await api('POST', `/api/sessions/${source.session_id}/handoff/draft`, { target, progress: progress.value });
-      note.value = d.note;
+      if (seq === draftSeq) note.value = d.note;
     } catch (e) { fail(e); }
-  }
-
-  submitBtn.addEventListener('click', async () => {
-    submitBtn.disabled = true;
-    try {
-      const r = await api('POST', `/api/sessions/${source.session_id}/handoff`, { target, note: note.value, send_as_prompt: send.checked });
-      close();
-      select(r.session.session_id);
-      toast(`已在同一项目中创建 ${LABEL[target]} 会话`, 'info');
-    } catch (e) { submitBtn.disabled = false; fail(e); }
-  });
-
-  const close = modal([
+  };
+  let progressTimer = null;
+  progress.addEventListener('input', () => { clearTimeout(progressTimer); progressTimer = setTimeout(draft, 500); });
+  create.addEventListener('click', () => guarded('handoff', async () => {
+    const live = findSession(source.session_id);
+    if (live && live.active) {
+      await api('POST', `/api/sessions/${source.session_id}/stop`, {});
+      const t0 = Date.now();
+      while (Date.now() - t0 < 15000) {
+        await new Promise((r) => setTimeout(r, 300));
+        const now = findSession(source.session_id);
+        if (now && !now.active) break;
+      }
+      if (findSession(source.session_id).active) throw new ApiError({ message: '原会话还没有停止，请稍后再试' });
+      if (noteWrap.hidden) await draft();
+    }
+    const r = await api('POST', `/api/sessions/${source.session_id}/handoff`, { target, note: note.value, send_as_prompt: send.checked });
+    close();
+    select({ type: 'session', id: r.session.session_id });
+    toast(`已在同一项目中创建 ${HARNESS[target].label} 会话`);
+  }, create));
+  close = dialog([
     h('h2', {}, '交接到新会话'),
-    h('div', { class: 'sub' }, `从「${source.title}」（${LABEL[source.harness]}）交接。新会话在同一项目中启动，不继承原会话的原生上下文；它会阅读代码和这份说明后继续。原会话保留，可以之后恢复查看。`),
-    status,
-    h('div', { class: 'field' }, h('label', {}, '目标 harness'), radios),
-    h('div', { class: 'field' }, h('label', {}, '进度与下一步（会写进说明）'), progress,
-      h('div', {}, h('button', { class: 'btn btn-small', onclick: draft }, '重新生成说明'))),
-    h('div', { class: 'field' }, h('label', {}, '交接说明（可编辑；保存在 RepoBridge 状态目录，不写入仓库）'), note),
-    h('label', { class: 'check' }, send, h('span', {}, '启动后把说明作为第一条消息发送给新会话（会产生一次模型调用）。不勾选则只启动，你可以自己粘贴。')),
-    h('div', { class: 'modal-actions' }, h('button', { class: 'btn', onclick: () => close() }, '取消'), submitBtn),
-  ]);
-  drawRadios();
-  drawStatus();
+    h('p', { class: 'sub' }, `从「${source.title}」继续这项工作。会在同一项目中新建一个会话；它读不到原会话的原生上下文，会先阅读代码和这份交接说明。原会话保留，之后仍可恢复查看。`),
+    warnBox,
+    h('div', { class: 'field' }, h('div', { class: 'label' }, '新会话使用'), choice),
+    h('div', { class: 'field' }, h('label', {}, '进度与下一步（写进交接说明）'), progress),
+    h('div', { class: 'field' }, noteToggle, noteWrap),
+    h('label', { class: 'check' }, send, h('span', {}, '启动后把交接说明作为第一条消息发给新会话（会产生一次模型调用）。不勾选则只启动，你可以自己粘贴。')),
+    h('div', { class: 'actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close() }, '取消'), create),
+  ], { wide: true });
+  const ticker = setInterval(() => { if (!document.body.contains(create)) clearInterval(ticker); else draw(); }, 1000);
+  draw();
   draft();
+  setTimeout(() => progress.focus(), 30);
 }
 
-// ---------- boot ----------
+function openSettings() {
+  const body = h('div');
+  let close = () => {};
+  const draw = () => {
+    const seg = (key, options) => h('div', { class: 'seg-inline', role: 'radiogroup' }, options.map(([v, l]) => h('button', {
+      type: 'button', 'aria-pressed': String(S.prefs[key] === v), onclick: () => { setPref(key, v); applyTheme(); render(); draw(); },
+    }, l)));
+    body.replaceChildren(
+      h('div', { class: 'settings-row' }, h('span', {}, '外观'), seg('appearance', [['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']])),
+      h('div', { class: 'settings-row' }, h('span', {}, '终端配色'), seg('terminal_theme', [['auto', '跟随外观'], ['dark', '始终深色']])),
+      h('div', { class: 'settings-row' }, h('span', {}, '终端字号'), seg('terminal_font_size', [[12, '12'], [13, '13'], [14, '14'], [15, '15'], [16, '16']])),
+      h('div', { class: 'settings-row' }, h('span', {}, '显示已归档的会话'), seg('show_archived', [[false, '隐藏'], [true, '显示']])),
+      h('div', { class: 'settings-row', style: 'align-items:flex-start' }, h('span', {}, '命令行工具'),
+        h('div', { style: 'flex:1;max-width:340px' }, cliList(),
+          h('div', { style: 'margin-top:8px;display:flex;gap:8px;align-items:center' },
+            h('button', { class: 'btn btn-small', type: 'button', onclick: (e) => guarded('refresh-cli', async () => { await api('POST', '/api/harnesses/refresh', {}); setTimeout(draw, 300); }, e.currentTarget) }, '重新检测'),
+            h('span', { class: 'hint' }, '只运行 --version，不启动会话。')))),
+      h('div', { class: 'settings-row' }, h('span', {}, '键盘快捷键'), h('button', { class: 'btn btn-small', type: 'button', onclick: () => { close(); openShortcuts(); } }, icon('keyboard'), '查看')),
+      h('p', { class: 'hint', style: 'margin:12px 0 0' }, 'RepoBridge 不读取或保存任何登录令牌。启动会话时不会传递可能把订阅切换为 API 计费的环境变量。'));
+  };
+  draw();
+  close = dialog([h('h2', {}, '设置'), h('div', { style: 'margin-top:10px' }, body),
+    h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary', type: 'button', onclick: () => close() }, '完成'))]);
+}
 
-document.querySelectorAll('#tabs .tab').forEach((b) => b.addEventListener('click', () => {
-  S.tab = b.dataset.tab;
-  if (S.tab === 'changes') { S.changes = null; loadChanges(); }
-  renderPanel();
-}));
+function openShortcuts() {
+  let close = () => {};
+  close = dialog([h('h2', {}, '键盘快捷键'),
+    h('div', { class: 'shortcuts', style: 'margin-top:12px' }, KEY_LABELS.flatMap(([a, k]) => [h('span', {}, a), h('span', { class: 'k' }, h('kbd', {}, k))])),
+    h('p', { class: 'hint', style: 'margin:14px 0 0' }, '终端获得焦点时，其他按键（包括 Esc 和 ⌃C）都直接交给原生 CLI。'),
+    h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary', type: 'button', onclick: () => close() }, '好'))]);
+}
+
+// ---------------------------------------------------------------- toasts & errors
+
+function toast(message, kind = 'info', actions = []) {
+  const el = h('div', { class: `toast ${kind}`, role: kind === 'error' ? 'alert' : 'status' },
+    kind === 'error' ? icon('warning') : icon('check'),
+    h('div', { class: 'msg' }, message),
+    actions.map(([label, fn]) => h('button', { class: 'btn btn-small', type: 'button', onclick: () => { el.remove(); fn(); } }, label)));
+  $('#toasts').append(el);
+  setTimeout(() => el.remove(), actions.length ? 9000 : kind === 'error' ? 7000 : 2600);
+}
+
+function fail(err) {
+  const actions = [];
+  if (err && err.details && err.details.busy_session_id) actions.push(['切换到该会话', () => select({ type: 'session', id: err.details.busy_session_id })]);
+  toast((err && err.message) || String(err), 'error', actions);
+}
+
+// ---------------------------------------------------------------- keyboard
+
+window.addEventListener('keydown', (e) => {
+  if (e.isComposing || e.keyCode === 229) return;
+  if (layerOpen()) {
+    const top = layers[layers.length - 1].el;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeTop(); }
+    else if (!top.contains(e.target)) { e.preventDefault(); e.stopPropagation(); }
+    return;
+  }
+  if (!S.state || S.renaming) return;
+  const k = e.key.toLowerCase();
+  const cmd = e.metaKey && !e.ctrlKey && !e.altKey;
+  let handled = true;
+  if (cmd && !e.shiftKey && k === 'n') openNewSession();
+  else if (cmd && !e.shiftKey && k === ',') openSettings();
+  else if (cmd && (k === '/' || e.key === '?')) openShortcuts();
+  else if (cmd && e.shiftKey && k === 'd') toggleInspector('changes');
+  else if (cmd && e.shiftKey && k === 'a') toggleInspector('activity');
+  else if (cmd && e.shiftKey && k === 'i') toggleInspector('details');
+  else if (cmd && !e.shiftKey && e.key === '\\') { if (S.prefs.inspector_open) { setPref('inspector_open', false); render(); } }
+  else if (e.metaKey && e.ctrlKey && k === 's') toggleSidebar();
+  else if (e.ctrlKey && !e.metaKey && e.key === 'Tab') cycleSession(e.shiftKey ? -1 : 1);
+  else handled = false;
+  if (handled) { e.preventDefault(); e.stopPropagation(); }
+}, true);
+
+// ---------------------------------------------------------------- development hooks
+// Only active when the App runs with --dev-snapshot-dir (state.dev): lets a tester open a dialog in
+// the native window (which has no automation driver) before capturing its pixels.
+function runDevHash() {
+  if (!S.state || !S.state.dev || !location.hash.startsWith('#dev=')) return;
+  const [action, arg] = location.hash.slice(5).split(':');
+  history.replaceState(null, '', '/');
+  const s = selectedSession();
+  setTimeout(() => {
+    if (action === 'settings') openSettings();
+    else if (action === 'new') openNewSession();
+    else if (action === 'add') openAddProject();
+    else if (action === 'keys') openShortcuts();
+    else if (action === 'handoff' && s) openHandoff(s);
+    else if (action === 'stop' && s) stopSession(s, $('#toolbar .tb-group .btn:last-child'));
+    else if (action === 'menu' && s) sessionMenu(s, $('#toolbar .tb-title .icon-btn'));
+    else if (action === 'filter') { $('#filter').value = arg || ''; S.filter = arg || ''; renderSidebar(); }
+    else if (action === 'diff' && s) {
+      const pick = (tries) => {
+        const c = S.changes.get(s.session_id);
+        const f = c && c.files[Number(arg) || 0];
+        if (f) loadDiff(s.session_id, f.path); else if (tries > 0) setTimeout(() => pick(tries - 1), 250);
+      };
+      pick(20);
+    }
+  }, 600);
+}
+
+// ---------------------------------------------------------------- boot
+
+for (const b of document.querySelectorAll('#inspector-tabs button')) {
+  b.addEventListener('click', () => {
+    setPref('inspector_tab', b.dataset.tab);
+    const s = selectedSession();
+    if (s && b.dataset.tab === 'details') loadDetails(s.session_id);
+    if (s && b.dataset.tab === 'changes') loadChanges(s.session_id);
+    render();
+  });
+}
+$('#close-inspector').addEventListener('click', () => { setPref('inspector_open', false); render(); });
+$('#new-session').addEventListener('click', () => openNewSession());
 $('#add-project').addEventListener('click', openAddProject);
-new ResizeObserver(() => requestAnimationFrame(syncSize)).observe($('#terminals'));
-setConn(false);
+$('#open-settings').addEventListener('click', openSettings);
+$('#filter').addEventListener('input', (e) => { S.filter = e.target.value; renderSidebar(); });
+$('#filter').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.value = ''; S.filter = ''; renderSidebar(); } });
+makeResizer($('#sidebar-resizer'), 'sidebar');
+makeResizer($('#inspector-resizer'), 'inspector');
+new ResizeObserver(() => scheduleFit()).observe($('#stage'));
 connect();

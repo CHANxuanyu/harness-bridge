@@ -12,6 +12,7 @@ import contextlib
 import signal
 import sys
 import threading
+import time
 import webbrowser
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,9 @@ def add_arguments(parser: argparse.ArgumentParser, *, state_dir: bool = True) ->
     mode.add_argument("--no-open", action="store_true", help="only print the launch URL")
     parser.add_argument("--claude-binary", default=None, help="absolute path to `claude`")
     parser.add_argument("--codex-binary", default=None, help="absolute path to `codex`")
+    # Development only: lets a tester join the window's server from a browser and capture the
+    # window's own pixels. Not shown in --help.
+    parser.add_argument("--dev-snapshot-dir", default=None, help=argparse.SUPPRESS)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -49,10 +53,19 @@ def run(args: argparse.Namespace) -> int:
 
     raw_state = getattr(args, "state_dir", None)
     state_dir = Path(raw_state).expanduser() if raw_state else default_state_dir()
+    lock = _single_instance(state_dir)
+    if lock is None:
+        print(
+            f"RepoBridge is already running for {state_dir}; use its window "
+            "(or quit it first). Two Apps on one state would fight over the same sessions.",
+            file=sys.stderr,
+        )
+        return 1
     binaries = {k: v for k, v in ((CLAUDE, args.claude_binary), (CODEX, args.codex_binary)) if v}
     workbench = Workbench(state_dir, config=WorkbenchConfig(binaries=binaries))
     server = WorkbenchServer(workbench, port=args.port)
     server.start()
+    dev_dir = Path(args.dev_snapshot_dir).expanduser() if args.dev_snapshot_dir else None
     try:
         if args.no_open:
             print(server.auth_url, flush=True)
@@ -68,11 +81,27 @@ def run(args: argparse.Namespace) -> int:
             print(f"RepoBridge is running at {server.base_url} (Ctrl+C to quit)", flush=True)
             _wait_for_signal()
         else:
-            _run_window(server.auth_url)
+            _run_window(server.auth_url, server.base_url, workbench, dev_dir)
     finally:
         workbench.close()
         server.close()
+        lock.close()
     return 0
+
+
+def _single_instance(state_dir: Path) -> Any:
+    """Hold an exclusive lock on the state dir for the App's lifetime (released on exit/crash)."""
+    import fcntl
+
+    path = state_dir / "workbench" / "app.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(path, "a+")  # noqa: SIM115 - kept open to hold the lock
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
+    return handle
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -100,36 +129,59 @@ def _wait_for_signal() -> None:
         pass
 
 
-class _JsApi:
-    """Methods callable from the page as ``window.pywebview.api.*``."""
-
-    def __init__(self) -> None:
-        self._window: Any = None
-
-    def pick_folder(self) -> str | None:
-        import webview
-
-        folder = getattr(getattr(webview, "FileDialog", None), "FOLDER", None)
-        if folder is None:
-            folder = webview.FOLDER_DIALOG
-        result = self._window.create_file_dialog(folder)
-        return str(result[0]) if result else None
-
-
-def _run_window(url: str) -> None:
+def _pick_folder(window: Any) -> str | None:
     import webview
 
-    api = _JsApi()
+    folder = getattr(getattr(webview, "FileDialog", None), "FOLDER", None)
+    if folder is None:
+        folder = webview.FOLDER_DIALOG
+    result = window.create_file_dialog(folder)
+    return str(result[0]) if result else None
+
+
+def _run_window(url: str, base_url: str, workbench: Any, dev_dir: Path | None) -> None:
+    from harness_bridge.workbench import native_mac
+
+    native_mac.set_app_name()  # before pywebview reads the bundle name
+    import webview
+
+    appearance = workbench.prefs.get()["appearance"]
+    # No js_api: pywebview builds its JS bridge with `new Function`, which the page's CSP
+    # (script-src 'self', no eval) forbids. Native calls go through the authenticated loopback
+    # API instead and reach the window from Python.
     window = webview.create_window(
         "RepoBridge",
         url,
-        js_api=api,
-        width=1440,
-        height=900,
-        min_size=(960, 600),
+        width=1360,
+        height=860,
+        min_size=(880, 560),
         confirm_close=True,
-        background_color="#0f1115",
+        background_color=native_mac.background_for(appearance),
         text_select=True,
+        focus=dev_dir is None,
     )
-    api._window = window
+    if window is None:
+        raise RuntimeError("pywebview did not create a window")
+    workbench.native = {
+        "title": lambda title: window.set_title(title or "RepoBridge"),
+        "appearance": lambda mode: native_mac.set_appearance(window, mode),
+        "pick_folder": lambda: _pick_folder(window),
+    }
+    if dev_dir is not None and native_mac.available():
+        dev_dir.mkdir(parents=True, exist_ok=True)
+        url_file = dev_dir / "launch-url.txt"
+        url_file.touch(mode=0o600)
+        url_file.write_text(url + "\n", encoding="utf-8")
+        workbench.dev_snapshot = lambda name: native_mac.snapshot(window, dev_dir, name)
+        # A new query forces a real navigation (a changed fragment alone is same-document).
+        workbench.dev_reload = lambda fragment: window.load_url(
+            f"{base_url}/?reload={time.monotonic_ns()}" + (f"#{fragment}" if fragment else "")
+        )
+        workbench.dev_resize = lambda width, height: window.resize(width, height)
+
+    def on_loaded() -> None:
+        with contextlib.suppress(Exception):
+            native_mac.set_appearance(window, workbench.prefs.get()["appearance"])
+
+    window.events.loaded += on_loaded
     webview.start(localization={"global.quitConfirmation": CLOSE_CONFIRMATION})

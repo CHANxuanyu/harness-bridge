@@ -10,6 +10,16 @@ SQLite/loopback HTTP with **stub** harness executables) · UI-offline (browser/w
 harnesses) · T3-W real single native harness session on the user's machine · T4-W real Claude Code +
 Codex sessions with handoff.
 
+## W5 workbench redesign — 2026-10-08
+
+| Check | Level | Result |
+|---|---|---|
+| Native pywebview window real pixels (own-window capture incl. title bar): dark/light main, changes+diff, handoff dialog, failure+details, first run, 900×640 overlay | Native-W (stub CLIs) | pass |
+| Browser-driven operations on the same server: add project error/success, ⌘N busy explanation, Esc, rename, stop confirm/cancel, restart, resume, focus, dialog focus trap, input routing between sessions, ⌃Tab, filter, inspector shortcuts, sidebar overlay, archive/unarchive, remove project, failure notice, 20 000-line output, stop-and-handoff | UI-offline | pass |
+| Reopen: running sessions become interrupted + resumable; selection, panel, widths and appearance restored from prefs | UI-offline + T2-W | pass |
+| Prefs whitelist/persistence, phases, native/dev routes absent by default, unstarted create, archive/unarchive, quick branch, single-instance lock | T1/T2-W | pass |
+| Real Claude Code / Codex in the new UI; IME composition; system clipboard; pointer-drag resize; VoiceOver | — | **not run** |
+
 ## W1–W3 workbench — 2026-10-07
 
 | ID | Check | Level | Result |

@@ -147,6 +147,28 @@ def test_claude_session_lifecycle_binding_activity_changes_stop_resume(wbx: WB) 
     assert wb.store.get_session(sid)["native_session_id"] == preassigned
 
 
+def test_session_phase_follows_native_signals(wbx: WB) -> None:
+    wb = wbx.open()
+    project = wb.add_project(str(wbx.repo))
+    claude = wb.create_session(project["project_id"], CLAUDE)["session_id"]
+    wait_for(lambda: wbx.view(wb, claude)["phase"] == "waiting")  # SessionStart hook
+    wbx.send(wb, claude, "hello", "assistant: hello")
+    wait_for(lambda: wbx.view(wb, claude)["phase"] == "waiting")  # Stop hook after the turn
+    kinds = [e["payload"].get("event") for e in wb.activity(claude) if e["kind"] == "activity"]
+    assert kinds[-1] == "Stop"
+    wbx.send(wb, claude, "exit", "exit")
+    wait_for(lambda: wbx.view(wb, claude)["phase"] is None)
+    other = wbx.base / "other"
+    other.mkdir()
+    codex_project = wb.add_project(str(other))
+    codex = wb.create_session(codex_project["project_id"], CODEX)["session_id"]
+    wait_for(lambda: wbx.view(wb, codex)["phase"] == "running")  # output seen, no turn yet
+    wbx.send(wb, codex, "hi", "codex: hi")
+    wait_for(lambda: wbx.view(wb, codex)["phase"] == "waiting")  # notify after the turn
+    wb.write_input(codex, b"again\r")
+    assert wbx.view(wb, codex)["phase"] == "running"
+
+
 def test_resize_reaches_native_process_through_controlling_tty(wbx: WB) -> None:
     wb = wbx.open()
     project = wb.add_project(str(wbx.repo))

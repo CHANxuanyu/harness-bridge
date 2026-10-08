@@ -227,13 +227,14 @@ class WorkbenchStore:
     def get_session(self, session_id: str) -> dict[str, Any] | None:
         return self._row("SELECT * FROM sessions WHERE session_id=?", (session_id,))
 
-    def list_sessions(self, project_id: str | None = None) -> list[dict[str, Any]]:
-        if project_id is None:
-            return self._rows("SELECT * FROM sessions WHERE archived=0 ORDER BY created_at")
-        return self._rows(
-            "SELECT * FROM sessions WHERE archived=0 AND project_id=? ORDER BY created_at",
-            (project_id,),
+    def list_sessions(
+        self, project_id: str | None = None, *, include_archived: bool = False
+    ) -> list[dict[str, Any]]:
+        rows = self._rows(
+            "SELECT * FROM sessions WHERE (? IS NULL OR project_id=?) ORDER BY created_at",
+            (project_id, project_id),
         )
+        return rows if include_archived else [r for r in rows if not r["archived"]]
 
     def set_native(self, session_id: str, native_session_id: str | None, binding: str) -> None:
         with self.tx() as db:
@@ -268,6 +269,13 @@ class WorkbenchStore:
                 raise ValueError("an active session cannot be archived; stop it first")
             db.execute(
                 "UPDATE sessions SET archived=1, updated_at=? WHERE session_id=?",
+                (now(), session_id),
+            )
+
+    def unarchive_session(self, session_id: str) -> None:
+        with self.tx() as db:
+            db.execute(
+                "UPDATE sessions SET archived=0, updated_at=? WHERE session_id=?",
                 (now(), session_id),
             )
 

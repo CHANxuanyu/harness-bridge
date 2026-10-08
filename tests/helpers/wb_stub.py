@@ -10,8 +10,8 @@ Emulates only what the workbench relies on, never a model:
   OSC 9 approval notifications;
 * a line-oriented "TUI" on the controlling tty. Commands: ``edit <file>`` writes a file,
   ``perm`` asks for approval, ``/clear`` (Claude) starts a new session id, ``exit``, ``crash``,
-  ``size`` prints the tty size (proves SIGWINCH/TIOCSWINSZ reach the process). Anything else
-  is echoed as an assistant reply.
+  ``size`` prints the tty size (proves SIGWINCH/TIOCSWINSZ reach the process), ``spam N``
+  prints N numbered lines (long output). Anything else is echoed as an assistant reply.
 
 ``WB_STUB_HOME`` holds the fake native history so resume can succeed or fail realistically.
 """
@@ -215,12 +215,23 @@ class Codex:
         return None
 
 
+def spam(line: str) -> bool:
+    if not line.startswith("spam "):
+        return False
+    count = int(line.split()[1])
+    for i in range(1, count + 1):
+        out(f"line {i:05d} " + "lorem ipsum dolor sit amet " * 3 + "\r\n")
+    return True
+
+
 def loop(cli: Claude | Codex) -> int:
     while True:
         out("> ")
         line = sys.stdin.readline()
         if not line:
             return 0
+        if spam(line.strip()):
+            continue
         result = cli.turn(line.strip())
         if result is not None:
             return result

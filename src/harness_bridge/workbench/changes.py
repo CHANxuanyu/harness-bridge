@@ -6,6 +6,8 @@ Uses the bridge's safe git invocation (hooks/fsmonitor off, no external diff or 
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Any
 
 from harness_bridge.errors import BridgeError
@@ -27,6 +29,29 @@ _XY = {
 
 def _text(data: bytes) -> str:
     return data.decode("utf-8", "replace")
+
+
+def quick_branch(root: str) -> str | None:
+    """Current branch from ``.git/HEAD`` without spawning git (cheap enough for every snapshot)."""
+    dot_git = Path(root) / ".git"
+    try:
+        if dot_git.is_file():
+            pointer = dot_git.read_text(encoding="utf-8").strip()
+            if not pointer.startswith("gitdir:"):
+                return None
+            git_dir = Path(root, pointer[len("gitdir:") :].strip())
+        elif dot_git.is_dir():
+            git_dir = dot_git
+        else:
+            return None
+        head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return None
+    if head.startswith("ref: refs/heads/"):
+        return head[len("ref: refs/heads/") :] or None
+    if re.fullmatch(r"[0-9a-f]{40,64}", head):
+        return f"detached {head[:7]}"
+    return None
 
 
 def repo_info(workdir: str) -> dict[str, Any] | None:

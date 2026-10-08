@@ -1,5 +1,23 @@
 # Handoff
 
+## W5 redesign done; W4 real acceptance next — 2026-10-08
+
+Code: branch `claude/repobridge-product-direction-8e26f9` (pushed; see STATUS for the PR), local
+worktree `/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9`.
+Read [WORKBENCH.md](docs/WORKBENCH.md) and DECISIONS 124–131 before changing the UI.
+
+Frontend lives in `src/harness_bridge/workbench/static/` (no build step). Native window glue:
+`workbench/app.py` (single-instance lock, pywebview window, native hooks) and `workbench/native_mac.py`.
+Layout/appearance prefs: `workbench/prefs.py` (whitelist). Do not re-enable pywebview js_api or add
+`unsafe-eval`; extend `/api/native/*` instead.
+
+Visual check loop (no real CLI, no model): start
+`hbridge app --state-dir <test-state> --claude-binary <stub> --codex-binary <stub> --dev-snapshot-dir <dir>`
+outside an agent env (`env -u CLAUDECODE`), open `<dir>/launch-url.txt` in a browser to drive the
+same server, then `POST /api/dev/reload` (optional `{"hash": "dev=handoff|settings|new|diff:N"}`),
+`/api/dev/resize`, `/api/dev/snapshot {"name": ...}` and read `<dir>/<name>-window.png`. Stub wrappers
+exec `tests/helpers/wb_stub.py` (supports `edit`, `perm`, `crash`, `/clear`, `size`, `spam N`).
+
 ## W1–W3 workbench implemented; W4 real acceptance next — 2026-10-07
 
 State: workbench code in `src/harness_bridge/workbench/`, tests in

@@ -15,9 +15,11 @@ import os
 import queue
 import shutil
 import signal
+import subprocess
+import sys
 import threading
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -37,6 +39,7 @@ from harness_bridge.workbench.harness import (
     probe,
     stripped_billing_env,
 )
+from harness_bridge.workbench.prefs import Prefs
 from harness_bridge.workbench.pty_host import (
     ExitInfo,
     JsonlTail,
@@ -67,6 +70,8 @@ class LiveRun:
     process: PtyProcess | None = None
     stop_requested: bool = False
     attention: dict[str, Any] | None = None
+    # starting → running (output seen) → working (Claude turn) / waiting (ready for input)
+    phase: str = "starting"
 
 
 class Subscriber:
@@ -89,6 +94,14 @@ class Workbench:
         (self.root / "runs").mkdir(parents=True, exist_ok=True)
         (self.root / "handoffs").mkdir(parents=True, exist_ok=True)
         self.store = WorkbenchStore(state_dir / "workbench.sqlite3")
+        self.prefs = Prefs(self.root / "prefs.json")
+        # Native window hooks (title, appearance, folder picker), set by ``hbridge app`` when a
+        # pywebview window exists. Called from request threads; never from page JavaScript eval.
+        self.native: dict[str, Callable[..., Any]] = {}
+        # Development-only window snapshot/reload (``hbridge app --dev-snapshot-dir``).
+        self.dev_snapshot: Callable[[str], dict[str, Any]] | None = None
+        self.dev_reload: Callable[[str], None] | None = None
+        self.dev_resize: Callable[[int, int], None] | None = None
         self.config = config or WorkbenchConfig()
         self.base_env = dict(os.environ if base_env is None else base_env)
         self.stop_grace = stop_grace
@@ -152,22 +165,30 @@ class Workbench:
     def snapshot(self) -> dict[str, Any]:
         latest = self.store.latest_runs()
         with self._lock:
-            live = {sid: (lr.attention, lr.stop_requested) for sid, lr in self._live.items()}
+            live = {
+                sid: (lr.attention, lr.stop_requested, lr.phase) for sid, lr in self._live.items()
+            }
         projects = []
         for project in self.store.list_projects():
             sessions = [
                 self._session_view(s, latest.get(s["session_id"]), live.get(s["session_id"]))
-                for s in self.store.list_sessions(project["project_id"])
+                for s in self.store.list_sessions(project["project_id"], include_archived=True)
             ]
             projects.append(
                 {
                     **project,
+                    "branch": changes.quick_branch(project["root_path"]),
+                    "exists": os.path.isdir(project["root_path"]),
                     "sessions": sessions,
                     "handoffs": self.store.list_handoffs(project["project_id"]),
                 }
             )
         return {
             "projects": projects,
+            "prefs": self.prefs.get(),
+            "home": self.base_env.get("HOME") or os.path.expanduser("~"),
+            "native": sorted(self.native),
+            "dev": self.dev_snapshot is not None,
             "harnesses": [h.to_dict() for h in self.harnesses().values()],
             "environment": {
                 "refusal": environment_refusal(self.base_env),
@@ -179,10 +200,10 @@ class Workbench:
         self,
         session: dict[str, Any],
         run: dict[str, Any] | None,
-        live: tuple[dict[str, Any] | None, bool] | None,
+        live: tuple[dict[str, Any] | None, bool, str] | None,
     ) -> dict[str, Any]:
         status = "new" if run is None else run["status"]
-        attention, stopping = live if live else (None, False)
+        attention, stopping, phase = live if live else (None, False, None)
         active = status in ("starting", "running")
         can_resume = bool(session["native_session_id"]) and (
             session["harness"] == CODEX or session["turns_observed"] > 0
@@ -195,6 +216,7 @@ class Workbench:
             "attached": live is not None,
             "stopping": stopping,
             "attention": attention,
+            "phase": phase,
             "can_resume": (not active) and can_resume,
             "can_start_fresh": (not active) and session["turns_observed"] == 0,
             "run": None,
@@ -321,6 +343,33 @@ class Workbench:
         except ValueError as exc:
             raise BridgeError("STATE_CONFLICT", "会话仍在运行；请先停止") from exc
         self._changed()
+
+    def unarchive_session(self, session_id: str) -> None:
+        self._session(session_id)
+        self.store.unarchive_session(session_id)
+        self._changed()
+
+    def set_prefs(self, changes: Mapping[str, Any]) -> dict[str, Any]:
+        values = self.prefs.update(changes)
+        self._changed()
+        return values
+
+    def native_call(self, name: str, *args: Any) -> Any:
+        hook = self.native.get(name)
+        if hook is None:
+            raise BridgeError("NOT_FOUND", "no native window is attached")
+        return hook(*args)
+
+    def reveal_project(self, project_id: str) -> None:
+        """Open the project folder in Finder (or the desktop's file manager) on user request."""
+        root = self._project(project_id)["root_path"]
+        if not os.path.isdir(root):
+            raise BridgeError("NOT_FOUND", f"目录不存在：{root}")
+        opener = ["open", "--", root] if sys.platform == "darwin" else ["xdg-open", root]
+        try:
+            subprocess.run(opener, check=False, timeout=10, capture_output=True)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise BridgeError("EXECUTOR_ERROR", f"无法打开文件夹：{type(exc).__name__}") from None
 
     def start_run(self, session_id: str, kind: str) -> dict[str, Any]:
         session = self._session(session_id)
@@ -486,6 +535,9 @@ class Workbench:
             raise BridgeError("STATE_CONFLICT", "会话没有在本窗口中运行")
         if live.attention is not None:
             live.attention = None
+            self._changed()
+        if live.harness == CODEX and live.phase == "waiting" and b"\r" in data:
+            live.phase = "running"
             self._changed()
         try:
             live.process.write(data)
@@ -662,6 +714,9 @@ class Workbench:
     # --- PTY callbacks --------------------------------------------------------------------------
 
     def _on_output(self, live: LiveRun, data: bytes) -> None:
+        if live.phase == "starting":
+            live.phase = "running"
+            self._changed()
         offset = live.buffer.append(data)
         self._publish(
             "output",
@@ -717,6 +772,15 @@ class Workbench:
             live.attention = attention
         elif event in _CLEARS_ATTENTION or source == "codex-notify":
             live.attention = None
+        if source == "claude-hook":
+            if event in ("UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure"):
+                live.phase = "working"
+            elif event in ("SessionStart", "Stop") or (
+                event == "Notification" and record.get("notification_type") == "idle_prompt"
+            ):
+                live.phase = "waiting"
+        elif source == "codex-notify":
+            live.phase = "waiting"
         stored = self.store.add_event(sid, live.run_id, "activity", record)
         self._publish("activity", stored)
         self._changed()

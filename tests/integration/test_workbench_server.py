@@ -213,3 +213,60 @@ def test_session_flow_over_http_and_sse(served: tuple[WB, Client]) -> None:
 def test_cli_exposes_app_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
     assert cli_main(["app", "--help"]) == 0
     assert "--no-open" in capsys.readouterr().out
+
+
+def test_prefs_native_and_dev_routes(served: tuple[WB, Client]) -> None:
+    _, client = served
+    client.login()
+    state = client.api("GET", "/api/state")
+    assert state["prefs"]["appearance"] == "system" and state["prefs"]["inspector_open"] is False
+    assert state["native"] == [] and state["dev"] is False
+    client.api("POST", "/api/prefs", {"appearance": "dark", "inspector_width": 480})
+    status, _, body = client.request("POST", "/api/prefs", {"appearance": "neon"})
+    assert status == 400 and "appearance" in json.loads(body)["error"]["message"]
+    status, _, _ = client.request("POST", "/api/prefs", {"unknown_key": 1})
+    assert status == 400
+    assert client.api("GET", "/api/state")["prefs"]["appearance"] == "dark"
+    # Without a native window, native calls are refused and dev routes do not exist.
+    status, _, _ = client.request("POST", "/api/native/title", {"title": "x"})
+    assert status == 404
+    for route in ("/api/dev/snapshot", "/api/dev/reload", "/api/dev/resize"):
+        status, _, _ = client.request("POST", route, {"name": "x"})
+        assert status == 404
+    # With hooks attached (as the pywebview window does), calls reach them; input is validated.
+    calls: list[tuple[str, object]] = []
+    wb = client.server.workbench
+    wb.native = {
+        "title": lambda t: calls.append(("title", t)),
+        "appearance": lambda m: calls.append(("appearance", m)),
+        "pick_folder": lambda: "/picked",
+    }
+    client.api("POST", "/api/native/title", {"title": "修复 — demo"})
+    client.api("POST", "/api/native/appearance", {"mode": "light"})
+    assert client.api("POST", "/api/native/pick-folder", {}) == "/picked"
+    status, _, _ = client.request("POST", "/api/native/appearance", {"mode": "sepia"})
+    assert status == 400
+    assert calls == [("title", "修复 — demo"), ("appearance", "light")]
+    assert client.api("GET", "/api/state")["native"] == ["appearance", "pick_folder", "title"]
+
+
+def test_create_unstarted_archive_and_project_branch(served: tuple[WB, Client]) -> None:
+    fx, client = served
+    client.login()
+    project = client.api("POST", "/api/projects", {"path": str(fx.repo)})
+    session = client.api(
+        "POST",
+        "/api/sessions",
+        {"project_id": project["project_id"], "harness": CLAUDE, "title": "later", "start": False},
+    )
+    sid = session["session_id"]
+    state = client.api("GET", "/api/state")
+    proj = state["projects"][0]
+    assert proj["branch"] == "main" and proj["exists"] is True
+    view = proj["sessions"][0]
+    assert view["status"] == "new" and view["phase"] is None and view["archived"] == 0
+    client.api("POST", f"/api/sessions/{sid}/archive", {})
+    view = client.api("GET", "/api/state")["projects"][0]["sessions"][0]
+    assert view["archived"] == 1, "archived sessions stay in the snapshot, flagged"
+    client.api("POST", f"/api/sessions/{sid}/unarchive", {})
+    assert client.api("GET", "/api/state")["projects"][0]["sessions"][0]["archived"] == 0

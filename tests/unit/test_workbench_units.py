@@ -313,3 +313,58 @@ def test_handoff_note_is_explicit_about_new_context() -> None:
     assert "Codex" in note and "Claude Code" in note
     assert "接口已完成" in note and "做登录" in note and "Edit: src/a.py" in note
     assert "modified: src/a.py" in note and "src/a.py | 2 +-" in note
+
+
+def test_prefs_validate_and_persist(tmp_path: Path) -> None:
+    from harness_bridge.errors import BridgeError
+    from harness_bridge.workbench.prefs import DEFAULTS, Prefs
+
+    path = tmp_path / "prefs.json"
+    prefs = Prefs(path)
+    assert prefs.get() == DEFAULTS
+    prefs.update({"appearance": "light", "collapsed_projects": ["prj_0123456789ab"]})
+    for bad in (
+        {"appearance": "neon"},
+        {"sidebar_width": 9999},
+        {"collapsed_projects": ["../x"]},
+        {"selected_session": "prj_0123456789ab"},
+        {"inspector_open": "yes"},
+        {"nope": 1},
+    ):
+        with pytest.raises(BridgeError):
+            prefs.update(bad)
+    again = Prefs(path)
+    assert again.get()["appearance"] == "light"
+    assert again.get()["collapsed_projects"] == ["prj_0123456789ab"]
+    path.write_text('{"appearance": "neon", "terminal_font_size": 14}')
+    assert Prefs(path).get()["appearance"] == "system", "invalid stored values fall back"
+    assert Prefs(path).get()["terminal_font_size"] == 14
+
+
+def test_quick_branch_reads_head_without_git(tmp_path: Path) -> None:
+    from harness_bridge.workbench.changes import quick_branch
+
+    repo = tmp_path / "r"
+    (repo / ".git").mkdir(parents=True)
+    (repo / ".git" / "HEAD").write_text("ref: refs/heads/feature/login\n")
+    assert quick_branch(str(repo)) == "feature/login"
+    (repo / ".git" / "HEAD").write_text("a" * 40 + "\n")
+    assert quick_branch(str(repo)) == "detached aaaaaaa"
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    (tmp_path / "gitdir").mkdir()
+    (tmp_path / "gitdir" / "HEAD").write_text("ref: refs/heads/wt-branch\n")
+    (wt / ".git").write_text(f"gitdir: {tmp_path / 'gitdir'}\n")
+    assert quick_branch(str(wt)) == "wt-branch"
+    assert quick_branch(str(tmp_path / "plain")) is None
+
+
+def test_single_instance_lock_per_state_dir(tmp_path: Path) -> None:
+    from harness_bridge.workbench.app import _single_instance
+
+    first = _single_instance(tmp_path)
+    assert first is not None
+    assert _single_instance(tmp_path) is None
+    assert _single_instance(tmp_path / "other") is not None
+    first.close()
+    assert _single_instance(tmp_path) is not None

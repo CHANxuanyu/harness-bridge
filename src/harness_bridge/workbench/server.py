@@ -251,20 +251,42 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
             except BridgeError as err:
                 self._json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": err.to_dict()})
                 return
-            if path == "/api/harnesses/refresh":
+            if path == "/api/prefs":
+                self._run(lambda: wb.set_prefs(body))
+            elif path == "/api/native/title":
+                self._run(lambda: wb.native_call("title", _str(body, "title")[:200]))
+            elif path == "/api/native/appearance":
+                self._run(lambda: wb.native_call("appearance", _appearance(body)))
+            elif path == "/api/native/pick-folder":
+                self._run(lambda: wb.native_call("pick_folder"))
+            elif path == "/api/dev/snapshot" and wb.dev_snapshot is not None:
+                snap = wb.dev_snapshot
+                self._run(lambda: snap(_snapshot_name(body)))
+            elif path == "/api/dev/reload" and wb.dev_reload is not None:
+                reload = wb.dev_reload
+                self._run(lambda: reload(_dev_hash(body)))
+            elif path == "/api/dev/resize" and wb.dev_resize is not None:
+                resize = wb.dev_resize
+                self._run(lambda: resize(_int(body, "width"), _int(body, "height")))
+            elif path == "/api/harnesses/refresh":
                 self._run(lambda: [h.to_dict() for h in wb.harnesses(refresh=True).values()])
             elif path == "/api/projects":
                 self._run(lambda: wb.add_project(_str(body, "path"), body.get("name")))
             elif path == "/api/sessions":
                 self._run(
                     lambda: wb.create_session(
-                        _str(body, "project_id"), _str(body, "harness"), title=body.get("title")
+                        _str(body, "project_id"),
+                        _str(body, "harness"),
+                        title=body.get("title"),
+                        start=body.get("start", True) is not False,
                     )
                 )
             elif m := _PROJECT_PATH.match(path):
                 pid, action = m.group(1), m.group(2)
                 if action == "archive":
                     self._run(lambda: wb.archive_project(pid))
+                elif action == "reveal":
+                    self._run(lambda: wb.reveal_project(pid))
                 else:
                     self._error(HTTPStatus.NOT_FOUND, "NOT_FOUND", "unknown route")
             elif m := _SESSION_PATH.match(path):
@@ -285,6 +307,8 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                 self._run(lambda: wb.rename_session(sid, _str(body, "title")))
             elif action == "archive":
                 self._run(lambda: wb.archive_session(sid))
+            elif action == "unarchive":
+                self._run(lambda: wb.unarchive_session(sid))
             elif action == "handoff/draft":
                 self._run(
                     lambda: wb.handoff_draft(
@@ -372,6 +396,27 @@ def _str(body: dict[str, Any], key: str) -> str:
     if not isinstance(value, str):
         raise BridgeError("INVALID_INPUT", f"{key} must be a string")
     return value
+
+
+def _appearance(body: dict[str, Any]) -> str:
+    mode = _str(body, "mode")
+    if mode not in ("system", "light", "dark"):
+        raise BridgeError("INVALID_INPUT", "mode must be system, light or dark")
+    return mode
+
+
+def _dev_hash(body: dict[str, Any]) -> str:
+    value = body.get("hash") or ""
+    if not isinstance(value, str) or not re.fullmatch(r"[a-z0-9=:_-]{0,80}", value):
+        raise BridgeError("INVALID_INPUT", "hash: lowercase letters, digits, = : _ -")
+    return value
+
+
+def _snapshot_name(body: dict[str, Any]) -> str:
+    name = _str(body, "name")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,47}", name):
+        raise BridgeError("INVALID_INPUT", "snapshot name: lowercase letters, digits, dashes")
+    return name
 
 
 def _input_bytes(body: dict[str, Any]) -> bytes:

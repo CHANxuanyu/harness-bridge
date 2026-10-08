@@ -1,5 +1,37 @@
 # Status
 
+## W5 workbench experience and interface redesign — 2026-10-08
+
+The workbench was used end to end in its own test instance (synthetic projects, stub CLIs) and
+redesigned: Claude Desktop Code-style organisation (project/session sidebar, main terminal, on-demand
+resizable Changes/Activity/Details pane) with macOS HIG visual and interaction rules, independent
+light and dark appearances, plain-language states with shape + text, one primary action, anchored
+confirmations, shortcuts (⌘N, ⌘⇧D/A/I, ⌘\, ⌃⌘S, ⌃Tab, ⌘,, ⌘/). Details and the defect list:
+[WORKBENCH.md](docs/WORKBENCH.md) (interface, design principles, "W5 体验改进").
+
+Defects found by using it and fixed: hidden inspector still reserved a 420 px column; pywebview's JS
+bridge was blocked by our CSP in the native window (no folder picker, no title/appearance sync) —
+replaced by authenticated `/api/native/*` routes, CSP kept strict; dialogs left keyboard focus in the
+terminal (keys could leak to the CLI); new/resumed sessions did not get focus; state pushes stole
+focus and re-fetched details; activity forced scroll-to-bottom; narrow windows squeezed the terminal
+to 50×11; repeated buttons/badges and technical fields; App-written markers in native output; two App
+instances could manage one state dir (now a per-state lock).
+
+Native verification is real pixels: a dev-only `--dev-snapshot-dir` mode captures the App's own
+pywebview window (title bar included) while a browser drives the same local server. Light/dark main,
+changes/diff, handoff dialog, failure/details, first run and 900×640 overlay were captured and
+checked; representative synthetic screenshots are in `docs/screenshots/`.
+
+Checks: full offline `scripts/check.sh` **897 passed / 17m11s** (ruff, format, strict mypy 54 files),
+including 36 workbench tests (4 new). JS syntax checked with `node --check`. No case removed or skipped.
+
+Not verified: real Claude Code / Codex sessions in the new UI (T3-W/T4-W; this development session
+runs inside Claude Code), real IME composition, system clipboard paste, pointer-drag resizing,
+VoiceOver. No model call, credential read, release, tag or visibility change.
+
+Next: the user runs W4 real acceptance from WORKBENCH.md; then fix what real TUIs reveal inside
+xterm.js (keys, IME, alt-screen, Codex resume) and decide on `.app` packaging/launch from Finder.
+
 ## W1–W3 RepoBridge workbench — 2026-10-07
 
 **A desktop window that runs native Claude Code / Codex sessions is implemented**

@@ -17,8 +17,11 @@ uv run --frozen --extra desktop hbridge app       # add --browser to use the def
 Run these in a checkout that contains commit `aa9a404` or later; older branches have neither the
 `app` command nor the `desktop` extra.
 
-Start it from a normal terminal (not from inside another agent session). Usage, implementation and
-evidence levels: [docs/WORKBENCH.md](docs/WORKBENCH.md). Real Claude Code / Codex sessions in the App
+Start it from a normal terminal (not from inside another agent session). Usage, interface, implementation
+and evidence levels: [docs/WORKBENCH.md](docs/WORKBENCH.md).
+
+![RepoBridge workbench, dark appearance](docs/screenshots/after-dark-main.jpg)
+ Real Claude Code / Codex sessions in the App
 have not yet been accepted on this machine; offline checks use stub CLIs.
 
 > **Experimental local candidate:** runtime 0.1.0.dev2, Advisor plugin alpha.6, Apache-2.0.
