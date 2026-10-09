@@ -39,6 +39,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 import tomllib
 import uuid
 from pathlib import Path
@@ -1069,7 +1070,10 @@ class CodexAppServer:
         if method == "thread/list":
             assert params.get("cwd") and params.get("useStateDbOnly") is True
             if os.environ.get("WB_STUB_DISCOVERY_UNSUPPORTED"):
-                self.error(rid, "unsupported scoped list")
+                emit({"id": rid, "error": {"code": -32601, "message": "unsupported scoped list"}})
+                return None
+            if os.environ.get("WB_STUB_DISCOVERY_FAILED"):
+                self.error(rid, "temporary disk error")
                 return None
             path = HOME / "external-index.json"
             rows = json.loads(path.read_text()) if path.exists() else []
@@ -1118,6 +1122,9 @@ class CodexAppServer:
             )
             self.note("thread/started", {"thread": self.thread_obj(self.thread)})
         elif method == "thread/resume":
+            time.sleep(float(os.environ.get("WB_STUB_RESUME_DELAY", "0")))
+            if os.environ.get("WB_STUB_RESUME_EXIT"):
+                sys.exit(3)
             tid = params.get("threadId")
             if self.thread == tid:
                 # Already loaded: report the live settings.
@@ -1195,6 +1202,14 @@ class CodexAppServer:
                 self.request(msg)
 
     def turn(self, rid: Any, params: dict[str, Any]) -> int | None:
+        fault = os.environ.get("WB_STUB_TURN_DELIVERY")
+        if fault == "exit":
+            sys.exit(3)
+        if fault == "reject":
+            self.error(rid, "turn rejected by native policy")
+            return None
+        if fault == "delay":
+            time.sleep(0.5)
         text = "".join(i.get("text", "") for i in params.get("input") or [] if isinstance(i, dict))
         images = [i.get("path") for i in params.get("input") or [] if i.get("type") == "localImage"]
         if params.get("model"):

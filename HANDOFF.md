@@ -1,5 +1,27 @@
 # Handoff
 
+## Frontend delivered; integrate receipt/error corrections — 2026-10-09
+
+Inputs: backend `ad585c59fc932280f49833414e8ea5b90ca3ff75`; frontend
+`202630f659d0411ef81a611ccc98bf09bfc4b4aa`, explicitly confirmed in PR #3 (contains the original
+`b866e093db3200923ed181f8c98513fcbee3ec87`). Worktrees were clean when checked; front/old main
+checkout are untouched. Separate integration checkout `/Users/chan/Downloads/repobridge-integration`
+on `codex/existing-session-integration` initially combines these at
+`0a16d235ce700e92603461958bce3feca0e37dcf`. No default merge or installed version replacement.
+
+Backend corrections and exact additive contract are in EXISTING_SESSIONS_API's integration section.
+Opus review items: distinguish unknown delivery from definitely-unsent (current `checkInflight`
+does not); consult durable `/delivery?client_id=` after missing events/restart/ended run; preserve
+uncertain text/attachments without automatic resend; handle late sent confirmation; optionally
+classify explicit capability errors using `capability_unsupported`. The backend blocks new sends
+while delivery is unknown. External-held removal still needs user confirmation, now with the
+correct `details.external`. Native-link `/desktop/return` is explicitly supported and sends nothing.
+
+Codex owns the backend and independent integration checks. Previous per-branch test totals are
+historical only; final full-suite evidence must name the fixed integration commit. Live outside
+history/official-desktop continuation remains unverified and unbudgeted. No unrelated private
+history, credentials or real state database are part of this run.
+
 ## Backend ready for frontend integration — 2026-10-09
 
 Use backend branch `codex/existing-session-backend` in `/Users/chan/Downloads/repobridge-backend`;
@@ -11,7 +33,7 @@ Pushed implementation: `d638e9aec41ee193db3283efccc3fc029ca13b3f`.
 Draft [backend PR #4](https://github.com/CHANxuanyu/harness-bridge/pull/4) targets the frontend
 handoff branch (stacked on open PR #3), not the default branch. No merge or release performed.
 
-For Opus: implement the scoped discovery/preview/link UI against
+Delivered by Opus in `202630f`: the scoped discovery/preview/link UI against
 [EXISTING_SESSIONS_API.md](docs/EXISTING_SESSIONS_API.md). Keep current /api/state + SSE, session
 detail, conversation, start and desktop routes; new fields/route examples are exact in that document.
 In particular, link's local ID is `result.session.session.session_id`, association history is not
@@ -24,7 +46,7 @@ Schema 3→4 is one additive association table. Test with a **fresh isolated sta
 port 0**; do not point this branch at the user's live database. Runtime tools were reused read-only
 from the frontend `.venv`, with `PYTHONPATH=src` selecting this backend worktree.
 
-Next integration owner remains Codex: combine Opus's frontend commits in an integration checkout,
+Next integration owner remains Codex: verify Opus's frontend commits in the integration checkout,
 run its UI-specific checks against these endpoints, then check user-designated outside-created
 native samples. Do not use prior App-created acceptance threads, scan other project histories, or
 start model turns under the exhausted W6–W8 allowance. Full real continuation needs a new explicit
@@ -39,7 +61,7 @@ Backend branch `codex/existing-session-backend`, independent worktree
 `/Users/chan/Downloads/repobridge-backend`, exact base `ef75a625577c1848e1079dd6d487a5cdc3afa166`.
 Minimal frontend contract is [docs/EXISTING_SESSIONS_API.md](docs/EXISTING_SESSIONS_API.md).
 app.py/native_mac.py remain frontend-owned; shared status docs are integrator-owned.
-Contract first; implementation and scoped synthetic checks follow immediately. No real state opened,
+Historical contract milestone: implementation and scoped checks are delivered above. No real state opened,
 no personal history scanned, no new model allowance. Current W6–W8 evidence is retained.
 
 ## Role split from here: Codex owns backend and integration, Opus owns frontend — 2026-10-09

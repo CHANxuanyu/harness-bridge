@@ -1028,6 +1028,7 @@ def codex_item(item: Mapping[str, Any], *, client_ids: Mapping[str, str] | None 
             "text": text,
             "attachments": attachments,
             "status": "sent",
+            **({"client_id": str(client)} if client else {}),
         }
     if kind == "agentMessage":
         return {"id": iid, "type": "assistant", "text": str(item.get("text") or "")}

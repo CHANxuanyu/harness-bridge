@@ -38,6 +38,42 @@ if TYPE_CHECKING:
     from harness_bridge.workbench.service import Workbench
 
 
+HISTORY_ERRORS = {
+    "native_capability_unsupported": "当前 Codex 不支持所需的原生历史接口。",
+    "native_protocol_unsupported": "当前原生历史响应格式尚不受支持。",
+    "storage_layout_unsupported": "不支持通过符号链接读取项目历史目录。",
+    "harness_unavailable": "找不到可用的 Codex，无法读取原生历史。",
+    "native_timeout": "原生历史读取超时，请稍后刷新。",
+    "native_process_exited": "读取历史的原生进程提前退出，请重试。",
+    "native_transport_error": "原生历史连接中断，请重试。",
+    "native_exit_unconfirmed": "历史读取进程的退出尚未确认。",
+    "native_writer_busy": "原生会话仍被其他客户端占用。",
+    "native_history_missing": "这个会话的本地原生历史文件已不存在。",
+    "native_history_invalid": "原生历史元数据无法校验，请核对会话记录。",
+    "native_identity_changed": "原生会话 ID 或工作目录与关联记录不一致。",
+    "native_read_failed": "读取原生历史失败，请稍后刷新或在原生客户端核对。",
+}
+UNSUPPORTED = {
+    "native_capability_unsupported",
+    "native_protocol_unsupported",
+    "storage_layout_unsupported",
+    "unsupported_source",
+}
+
+
+def history_failure(reason: str) -> BridgeError:
+    reason = reason if reason in HISTORY_ERRORS else "native_read_failed"
+    return BridgeError(
+        "PREFLIGHT_FAILED",
+        HISTORY_ERRORS[reason],
+        details={"reason": reason, "capability_unsupported": reason in UNSUPPORTED},
+    )
+
+
+class NativeIdentityError(ValueError):
+    pass
+
+
 def digest(value: Any) -> str:
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, ensure_ascii=False).encode()
@@ -57,14 +93,16 @@ def page_limit(value: Any, default: int = 50) -> int:
     except (ValueError, TypeError):
         number = 0
     if isinstance(value, bool) or not 1 <= number <= 100:
-        raise BridgeError("INVALID_INPUT", "limit must be between 1 and 100")
+        raise BridgeError(
+            "INVALID_INPUT", "每页数量必须是 1 到 100 的整数。", details={"reason": "invalid_limit"}
+        )
     return number
 
 
 def expired() -> BridgeError:
     return BridgeError(
         "STATE_CONFLICT",
-        "History cursor expired; reload the first page",
+        "历史分页已过期，请从第一页重新加载。",
         details={"reason": "cursor_expired"},
     )
 
@@ -85,7 +123,11 @@ class Pages:
         token = uuid.uuid4().hex
         size = len(json.dumps(value, ensure_ascii=False).encode())
         if size > 16 << 20:
-            raise BridgeError("PREFLIGHT_FAILED", "History snapshot exceeds the local paging limit")
+            raise BridgeError(
+                "PREFLIGHT_FAILED",
+                "历史快照超过分页大小上限。",
+                details={"reason": "history_snapshot_limit"},
+            )
         with self.lock:
             self.sizes[token] = size
             self.entries[token] = (time.monotonic(), scope, copy.deepcopy(value))
@@ -105,7 +147,11 @@ class Pages:
         self, scope: str, result: dict[str, Any], limit: int, before: str | None, since: str | None
     ) -> dict[str, Any]:
         if before and since:
-            raise BridgeError("INVALID_INPUT", "before and since are mutually exclusive")
+            raise BridgeError(
+                "INVALID_INPUT",
+                "不能同时请求更早历史和增量刷新。",
+                details={"reason": "invalid_cursor_combination"},
+            )
         reset = False
         if before:
             result, end = self.get(before, scope + ":before")
@@ -185,7 +231,9 @@ class NativeHistory:
     def scope(self, project_id: str) -> tuple[dict[str, Any], list[str]]:
         project = self.wb._project(project_id)
         if project["archived"]:
-            raise BridgeError("STATE_CONFLICT", "Project is archived")
+            raise BridgeError(
+                "STATE_CONFLICT", "项目已归档。", details={"reason": "project_archived"}
+            )
         paths = [project["root_path"]]
         paths.extend(
             s["workdir"] for s in self.wb.store.list_sessions(project_id, include_archived=True)
@@ -249,7 +297,11 @@ class NativeHistory:
         with self.lock:
             meta = copy.deepcopy(self.candidates.get(cid))
         if not meta:
-            raise BridgeError("NOT_FOUND", "Discover this candidate before using it")
+            raise BridgeError(
+                "NOT_FOUND",
+                "候选会话已失效，请刷新列表后重新选择。",
+                details={"reason": "candidate_expired"},
+            )
         _, paths = self.scope(meta["_project_id"])
         if meta["workdir"] not in paths or meta["environment"] != self.environment(meta["harness"]):
             raise expired()
@@ -265,7 +317,9 @@ class NativeHistory:
         cursor: str | None = None,
     ) -> dict[str, Any]:
         if harness not in (CLAUDE, CODEX) or len(q) > 200:
-            raise BridgeError("INVALID_INPUT", "Invalid harness or search")
+            raise BridgeError(
+                "INVALID_INPUT", "会话类型或搜索条件无效。", details={"reason": "invalid_filter"}
+            )
         size = page_limit(limit, 20)
         project, paths = self.scope(project_id)
         scope = digest([project_id, paths, harness, self.environment(harness), q, size])
@@ -294,9 +348,7 @@ class NativeHistory:
             result = self.codex(paths[0], "", lambda call: call("thread/list", params, timeout=15))
             rows, reasons = [], ["local_only", "native_index_only"]
             if not isinstance(result.get("data"), list):
-                raise BridgeError(
-                    "PREFLIGHT_FAILED", "Native discovery returned an unsupported shape"
-                )
+                raise history_failure("native_protocol_unsupported")
             for t in result["data"]:
                 if (
                     not isinstance(t, dict)
@@ -323,7 +375,7 @@ class NativeHistory:
         records, reasons = [], ["local_only"]
         projects = claude_config_dir(self.wb._history_env()).resolve() / "projects"
         if projects.is_symlink():
-            raise BridgeError("PREFLIGHT_FAILED", "Symlinked native project storage is unsupported")
+            raise history_failure("storage_layout_unsupported")
         count = 0
         for workdir in paths:
             directory = projects / re.sub(r"[^a-zA-Z0-9]", "-", workdir)
@@ -372,10 +424,10 @@ class NativeHistory:
                 if not isinstance(record, dict):
                     continue
                 if record.get("sessionId") and record.get("sessionId") != path.stem:
-                    raise ValueError("Native ID mismatch")
+                    raise NativeIdentityError("Native ID mismatch")
                 if record.get("cwd"):
                     if str(Path(record["cwd"]).resolve()) != cwd:
-                        raise ValueError("Native cwd mismatch")
+                        raise NativeIdentityError("Native cwd mismatch")
                     observed = record.get("sessionId") == path.stem or observed
                 if record.get("customTitle"):
                     title = str(record["customTitle"])[:120]
@@ -422,7 +474,7 @@ class NativeHistory:
     ) -> dict[str, Any]:
         info = self.wb.harnesses()[CODEX]
         if not info.available or not info.binary:
-            raise BridgeError("PREFLIGHT_FAILED", "Codex is unavailable for native history")
+            raise history_failure("harness_unavailable")
         scratch = self.wb.root / "history" / uuid.uuid4().hex
         scratch.mkdir()
         try:
@@ -435,19 +487,23 @@ class NativeHistory:
                 scratch,
                 operation,
             )
-        except (StructuredError, OSError):
-            raise BridgeError(
-                "PREFLIGHT_FAILED",
-                "Native history query failed or is unsupported; no unscoped fallback",
-            ) from None
+        except StructuredError as exc:
+            raise history_failure(exc.reason) from None
+        except OSError:
+            raise history_failure("native_read_failed") from None
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
 
     def history(self, meta: dict[str, Any]) -> dict[str, Any]:
         if meta["environment"] != self.environment(meta["harness"]):
-            raise BridgeError("STATE_CONFLICT", "Native storage environment changed")
+            raise BridgeError(
+                "STATE_CONFLICT",
+                "原生存储位置已变化，请切回关联时的存储环境。",
+                details={"reason": "environment_changed"},
+            )
         reasons: list[str] = []
         error = None
+        reason: str | None = None
         items: list[dict[str, Any]] = []
         source = "claude-transcript" if meta["harness"] == CLAUDE else "codex"
         try:
@@ -455,7 +511,7 @@ class NativeHistory:
                 path = Path(meta["_path"])
                 fresh = self._claude_meta(path, meta["workdir"], meta["workdir"])
                 if fresh["native_session_id"] != meta["native_session_id"]:
-                    raise ValueError("Native ID mismatch")
+                    raise NativeIdentityError("Native ID mismatch")
                 items = claude_transcript_items(path, diagnostics=reasons)
                 if path.stat().st_size > HISTORY_FILE_CAP:
                     reasons.append("native_file_limit")
@@ -470,7 +526,9 @@ class NativeHistory:
                         or thread.get("id") != meta["native_session_id"]
                         or thread.get("cwd") != meta["workdir"]
                     ):
-                        raise StructuredError("Native identity or cwd mismatch")
+                        raise StructuredError(
+                            "Native identity or cwd mismatch", reason="native_identity_changed"
+                        )
                     turns: list[dict[str, Any]] = []
                     cursor, deadline = None, time.monotonic() + 15
                     for _ in range(20):
@@ -484,7 +542,10 @@ class NativeHistory:
                             params["cursor"] = cursor
                         page = call("thread/turns/list", params, timeout=15)
                         if not isinstance(page.get("data"), list):
-                            raise StructuredError("Unsupported native history shape")
+                            raise StructuredError(
+                                "Unsupported native history shape",
+                                reason="native_protocol_unsupported",
+                            )
                         turns.extend(t for t in page["data"] if isinstance(t, dict))
                         cursor = page.get("nextCursor")
                         if not cursor or time.monotonic() > deadline:
@@ -495,8 +556,18 @@ class NativeHistory:
                 items = result["items"]
                 if result["partial"]:
                     reasons.append("native_page_limit")
-        except (OSError, ValueError, TypeError, BridgeError):
-            error = "Native history is unavailable or its identity changed"
+        except BridgeError as exc:
+            reason = exc.details.get("reason", "native_read_failed")
+        except FileNotFoundError:
+            reason = "native_history_missing"
+        except NativeIdentityError:
+            reason = "native_identity_changed"
+        except (ValueError, TypeError):
+            reason = "native_history_invalid"
+        except OSError:
+            reason = "native_read_failed"
+        if reason:
+            error = HISTORY_ERRORS.get(reason, HISTORY_ERRORS["native_read_failed"])
         retained: list[dict[str, Any]] = []
         size = 0
         for item in reversed(items):
@@ -508,7 +579,12 @@ class NativeHistory:
         items = list(reversed(retained))
         return {
             "items": [{**i, "history": True} for i in items],
-            "history": {"source": source, "error": error},
+            "history": {
+                "source": source,
+                "error": error,
+                "reason": reason,
+                "capability_unsupported": reason in UNSUPPORTED,
+            },
             "partial_reasons": reasons,
         }
 

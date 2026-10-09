@@ -63,7 +63,7 @@ from harness_bridge.workbench.pty_host import (
     read_log_tail,
     strip_ansi_tail,
 )
-from harness_bridge.workbench.store import WorkbenchStore, WorkdirBusy
+from harness_bridge.workbench.store import ExternalHeld, WorkbenchStore, WorkdirBusy
 from harness_bridge.workbench.store import now as _now
 from harness_bridge.workbench.structured import (
     ClaudeStreamSession,
@@ -491,7 +491,16 @@ class Workbench:
         meta = self.native_history.candidate(candidate_id)
         result = self.native_history.history(meta)
         if result["history"]["error"]:
-            raise BridgeError("PREFLIGHT_FAILED", result["history"]["error"])
+            raise BridgeError(
+                "PREFLIGHT_FAILED",
+                result["history"]["error"],
+                details={
+                    "reason": result["history"].get("reason", "native_read_failed"),
+                    "capability_unsupported": result["history"].get(
+                        "capability_unsupported", False
+                    ),
+                },
+            )
         try:
             sid, created, relinked = self.store.link_native(meta["_project_id"], meta, view_mode)
         except ValueError as exc:
@@ -514,6 +523,15 @@ class Workbench:
                     self.store.unlink_native(session_id)
                 except WorkdirBusy as busy:
                     raise self._busy_error(busy) from None
+                except ExternalHeld as held:
+                    raise BridgeError(
+                        "STATE_CONFLICT",
+                        "请先确认外部使用已结束，再移除这个关联。",
+                        details={
+                            "reason": "external_confirmation_required",
+                            "external": held.external,
+                        },
+                    ) from None
                 self.store.add_event(session_id, None, "native_unlinked", {})
                 self._changed()
         return {"session_id": session_id, "unlinked": True, "native_history_preserved": True}
@@ -523,15 +541,27 @@ class Workbench:
         if not link:
             return
         if not link["linked"]:
-            raise BridgeError("STATE_CONFLICT", "Relink this native session before using it")
+            raise BridgeError(
+                "STATE_CONFLICT", "关联已移除，请重新添加后再使用。", details={"reason": "unlinked"}
+            )
         meta = json.loads(link["metadata_json"])
         if meta["environment"] != self.native_history.environment(session["harness"]):
-            raise BridgeError("STATE_CONFLICT", "Native storage environment changed")
+            raise BridgeError(
+                "STATE_CONFLICT",
+                "原生存储位置已变化，请切回原来的存储环境。",
+                details={"reason": "environment_changed"},
+            )
         if session["native_session_id"] != link["native_session_id"]:
-            raise BridgeError("STATE_CONFLICT", "Native session binding changed")
+            raise BridgeError(
+                "STATE_CONFLICT",
+                "原生会话 ID 与关联记录不一致。",
+                details={"reason": "native_identity_changed"},
+            )
         if resume and not meta["resumable"]:
             raise BridgeError(
-                "PREFLIGHT_FAILED", "This native source does not support local resume"
+                "PREFLIGHT_FAILED",
+                "这个来源只支持查看，不能在本机恢复。",
+                details={"reason": "unsupported_source", "capability_unsupported": True},
             )
 
     def rename_session(self, session_id: str, title: str) -> None:
@@ -589,7 +619,11 @@ class Workbench:
         session = self._session(session_id)
         self._check_link(session, resume=True)
         if kind == "new" and self.store.native_link(session_id):
-            raise BridgeError("STATE_CONFLICT", "Linked native sessions only support resume")
+            raise BridgeError(
+                "STATE_CONFLICT",
+                "已关联会话只能恢复原会话，不能重新创建。",
+                details={"reason": "resume_required"},
+            )
         self._check_external(session, confirm_external)
         harness = session["harness"]
         info = self._preflight(harness)
@@ -615,7 +649,11 @@ class Workbench:
             raise BridgeError("INVALID_INPUT", f"unknown run kind {kind!r}")
         workdir = session["workdir"]
         if not os.path.isdir(workdir):
-            raise BridgeError("PREFLIGHT_FAILED", f"工作目录不存在：{workdir}")
+            raise BridgeError(
+                "PREFLIGHT_FAILED",
+                f"工作目录不存在：{workdir}",
+                details={"reason": "directory_missing", "capability_unsupported": False},
+            )
         run_id = "run_" + uuid.uuid4().hex[:12]
         run_dir = self.root / "runs" / run_id
         run_dir.mkdir(parents=True, mode=0o700)
@@ -782,6 +820,7 @@ class Workbench:
             on_fatal=lambda message: self._structured_fatal(live, message),
             on_settings=lambda report: self._on_settings(live, report),
             on_catalog=lambda payload: self._store_catalog(harness, payload),
+            on_delivery=lambda record: self._record_delivery(live, record),
         )
         chosen = dict(self._settings_of(session)["chosen"])
         structured: StructuredSession
@@ -912,6 +951,76 @@ class Workbench:
             os.replace(tmp, path)
         except OSError:
             pass
+
+    def _record_delivery(self, live: LiveRun, record: dict[str, Any]) -> dict[str, Any]:
+        event = self.store.record_delivery(live.session_id, live.run_id, record)
+        self._publish("activity", event)
+        return dict(event["payload"])
+
+    def _deliveries(self, session_id: str) -> dict[str, dict[str, Any]]:
+        records = self.store.message_deliveries(session_id)
+        for cid, record in records.items():
+            state = record["delivery"]["state"]
+            run = self.store.get_run(record["run_id"]) or {}
+            if state in ("queued", "sending") and run.get("status") not in ("starting", "running"):
+                state = "not_sent" if state == "queued" else "unknown"
+                record.update(
+                    status="failed" if state == "not_sent" else "unknown",
+                    delivery={
+                        "state": state,
+                        "reason": "connection_ended",
+                        "message": "连接已结束；文字和附件已保留。"
+                        if state == "not_sent"
+                        else "连接已结束，是否送达无法确认；请核对原生历史，不要重复发送。",
+                    },
+                )
+                event = self.store.record_delivery(
+                    session_id, record["run_id"], record, ended_only=True
+                )
+                records[cid] = {**event["payload"], "run_id": record["run_id"]}
+        return records
+
+    def message_delivery(self, session_id: str, client_id: str) -> dict[str, Any]:
+        self._session(session_id)
+        record = self._deliveries(session_id).get(client_id)
+        if record is None:
+            raise BridgeError(
+                "NOT_FOUND", "没有找到这条消息的接收记录。", details={"reason": "message_not_found"}
+            )
+        return record
+
+    def _merge_deliveries(self, session_id: str, result: dict[str, Any]) -> dict[str, Any]:
+        records = self._deliveries(session_id)
+        merged = {item["id"]: item for item in result["items"]}
+        for key, item in list(merged.items()):
+            cid = item.get("client_id")
+            if cid in records and item.get("status") == "sent":
+                record = records[cid]
+                if record["delivery"]["state"] != "sent":
+                    record = {
+                        **record,
+                        "status": "sent",
+                        "delivery": {
+                            "state": "sent",
+                            "reason": None,
+                            "message": "原生历史已确认这条消息。",
+                        },
+                    }
+                    self.store.record_delivery(session_id, record["run_id"], record)
+                    records[cid] = record
+                # Preserve one item with the API client identity, not a duplicate native echo.
+                del merged[key]
+                merged[record["id"]] = {**item, **record}
+        for record in records.values():
+            if record["delivery"]["state"] != "sent":
+                merged[record["id"]] = record
+        ordered = []
+        for item in result["items"]:
+            cid = item.get("client_id")
+            key = records[cid]["id"] if cid in records else item["id"]
+            if key in merged:
+                ordered.append(merged.pop(key))
+        return {**result, "items": ordered + list(merged.values())}
 
     # --- model catalogs -------------------------------------------------------------------------
 
@@ -1463,6 +1572,36 @@ class Workbench:
             raise BridgeError("INVALID_INPUT", "client_id 无效")
         with self._session_lock(session_id):
             session = self._session(session_id)
+            if session["harness"] == CODEX:
+                records = self._deliveries(session_id)
+                previous = records.get(client_id)
+                if previous:
+                    if previous["text"] != text or [
+                        a["id"] for a in previous.get("attachments", [])
+                    ] != list(attachments or []):
+                        raise BridgeError(
+                            "STATE_CONFLICT",
+                            "这个消息编号已用于其他内容。",
+                            details={"reason": "client_id_conflict", "client_id": client_id},
+                        )
+                    return {
+                        "client_id": client_id,
+                        "delivery": previous["delivery"],
+                        "reused": True,
+                    }
+                unknown = next(
+                    (r for r in records.values() if r["delivery"]["state"] == "unknown"), None
+                )
+                if unknown:
+                    raise BridgeError(
+                        "STATE_CONFLICT",
+                        "上一条消息是否送达不明；请先刷新并核对原生历史，不要重复发送。",
+                        details={
+                            "reason": "delivery_unknown",
+                            "client_id": unknown["client_id"],
+                            "delivery": unknown["delivery"],
+                        },
+                    )
             if session["view_mode"] != "conversation":
                 raise BridgeError(
                     "STATE_CONFLICT", "这个会话使用终端视图；请在终端中输入，或先切换到对话视图"
@@ -1517,6 +1656,16 @@ class Workbench:
                     codex = live.structured
                     codex.send(body, client_id, inputs, chips, chosen, display=text)
             except (StructuredError, OSError) as exc:
+                if isinstance(live.structured, CodexAppServerSession):
+                    raise BridgeError(
+                        "STATE_CONFLICT",
+                        str(exc) or "消息未被接收，内容仍需保留。",
+                        details={
+                            "reason": getattr(exc, "reason", "native_transport_error"),
+                            "client_id": client_id,
+                            "delivery": {"state": "not_sent"},
+                        },
+                    ) from None
                 if live.structured.process is not None and live.structured.process.exited:
                     # The connection ended before the message went out: say why, keep the draft.
                     reason = self._ended_reason(live)
@@ -1526,7 +1675,8 @@ class Workbench:
                         f"{label} 的连接已结束：{reason}。消息没有发送，草稿已保留。",
                     ) from None
                 raise BridgeError("STATE_CONFLICT", str(exc) or "消息没有发送成功") from None
-        return {"client_id": client_id}
+        record = self._deliveries(session_id).get(client_id)
+        return {"client_id": client_id, **({"delivery": record["delivery"]} if record else {})}
 
     def _ended_reason(self, live: LiveRun) -> str:
         deadline = time.monotonic() + 5
@@ -1596,7 +1746,8 @@ class Workbench:
             snap = live.conv.snapshot()
             info = live.structured.info if live.structured else {}
             return {**snap, "live": True, "run_id": live.run_id, "info": dict(info)}
-        return {**self._history(session, refresh), "live": False, "run_id": None, "turn": None}
+        result = {**self._history(session, refresh), "live": False, "run_id": None, "turn": None}
+        return self._merge_deliveries(session_id, result) if session["harness"] == CODEX else result
 
     def _history(self, session: dict[str, Any], refresh: bool) -> dict[str, Any]:
         sid = session["session_id"]
@@ -1814,10 +1965,16 @@ class Workbench:
             return {**result, "app": cap["app"], "external": external}
 
     def desktop_return(self, session_id: str) -> dict[str, Any]:
-        session = self._session(session_id)
-        if session.get("external_json"):
-            self.store.set_external(session_id, None)
-            self.store.add_event(session_id, None, "desktop_returned", {})
+        with self._session_lock(session_id):
+            session = self._session(session_id)
+            if session.get("external_json"):
+                self.store.set_external(session_id, None)
+                self.store.add_event(
+                    session_id,
+                    None,
+                    "desktop_returned",
+                    {"source": "user_confirmation", "process_exit_observed": False},
+                )
             self._history_cache.pop(f"{session_id}:{session['native_session_id']}", None)
             self._changed()
         return {"external": None}
@@ -1837,7 +1994,7 @@ class Workbench:
                 "STATE_CONFLICT",
                 location + "RepoBridge 看不到那边是否还在执行；"
                 "请先在那边结束当前这一轮，再回到这里继续",
-                details={"external": external},
+                details={"reason": "external_confirmation_required", "external": external},
             )
         self.store.set_external(str(session["session_id"]), None)
         self.store.add_event(str(session["session_id"]), None, "desktop_returned", {})
@@ -2303,7 +2460,7 @@ class Workbench:
         return BridgeError(
             "STATE_CONFLICT",
             f"工作目录 {busy.workdir} 已有活动写入会话「{busy.title}」；请先停止它，或切换到该会话",
-            details={"busy_session_id": busy.session_id},
+            details={"reason": "local_writer_busy", "busy_session_id": busy.session_id},
         )
 
     @staticmethod
