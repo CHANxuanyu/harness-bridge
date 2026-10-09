@@ -501,6 +501,67 @@ function popKey(e, sid) {
   return false;
 }
 
+// ---------------------------------------------------------------- messages not yet delivered
+// A sent message is tracked by its client_id (the ID the backend and the CLI echo report) until
+// the CLI says it was delivered. If the connection fails first, its text and attachments are kept:
+// back in the input box when that box is empty, otherwise in a visible "not sent" list above it.
+// Never over a new draft, never resent by itself, never restored twice; a late delivery report
+// takes the kept copy back out. The functions below hold no DOM state (tested in Node).
+
+function unsentStore() {
+  // inflight: cid -> entry; held: sid -> [entry]; placed: cid -> entry put back into the box.
+  return { inflight: new Map(), held: new Map(), placed: new Map(), settled: new Set() };
+}
+
+function unsentTrack(st, entry) {
+  st.inflight.set(entry.clientId, entry);
+}
+
+// `box` describes that session's input box right now: { visible, draft, attIds }.
+function unsentFail(st, cid, box) {
+  const e = st.inflight.get(cid);
+  if (!e || st.settled.has(cid)) return null;
+  st.inflight.delete(cid);
+  st.settled.add(cid);
+  if (box.visible && !box.draft.trim() && !box.attIds.length) {
+    st.placed.set(cid, e);
+    return { to: 'box', entry: e };
+  }
+  st.held.set(e.sid, [...(st.held.get(e.sid) || []), e]);
+  return { to: 'held', entry: e, visible: box.visible };
+}
+
+function unsentDelivered(st, cid, box) {
+  if (st.inflight.delete(cid)) { st.settled.add(cid); return { to: 'delivered' }; }
+  for (const [sid, list] of st.held) {
+    const e = list.find((x) => x.clientId === cid);
+    if (e) { st.held.set(sid, list.filter((x) => x !== e)); return { to: 'unheld', entry: e }; }
+  }
+  const p = st.placed.get(cid);
+  if (!p) return null;
+  st.placed.delete(cid);
+  // Only an untouched copy is taken out of the box; an edited one is the user's text now.
+  return box.draft === p.text ? { to: 'cleared', entry: p } : { to: 'edited', entry: p };
+}
+
+function unsentTake(st, sid, cid) {
+  const list = st.held.get(sid) || [];
+  const e = list.find((x) => x.clientId === cid) || null;
+  if (e) st.held.set(sid, list.filter((x) => x !== e));
+  return e;
+}
+
+// The user sent from the box again: copies put back there are theirs from now on.
+function unsentReleaseBox(st, sid) {
+  for (const [cid, e] of st.placed) if (e.sid === sid) st.placed.delete(cid);
+}
+
+function mergeAttachments(list, atts) {
+  const added = atts.filter((a) => !(a.id && list.some((x) => x.id === a.id)));
+  list.push(...added);
+  return added;
+}
+
 // ---------------------------------------------------------------- composer
 
 function buildComposer(s) {
@@ -517,9 +578,10 @@ function buildComposer(s) {
   const left = h('div', { class: 'cb-left' });
   const right = h('div', { class: 'cb-right' });
   const box = h('div', { class: 'composer' }, pop, attRow, ta, h('div', { class: 'composer-bar' }, left, hint, right));
-  const wrap = h('div', { class: 'composer-wrap' }, status, box);
+  const unsent = h('div', { class: 'unsent-list', hidden: true, role: 'region', 'aria-label': '没有发出的消息' });
+  const wrap = h('div', { class: 'composer-wrap' }, status, unsent, box);
   const root = convRoot();
-  Object.assign(root, { _ta: ta, _send: send, _hint: hint, _status: status, _box: box, _pop: pop, _attRow: attRow, _attachBtn: attachBtn, _left: left, _right: right, _popState: null });
+  Object.assign(root, { _ta: ta, _send: send, _hint: hint, _status: status, _box: box, _pop: pop, _attRow: attRow, _attachBtn: attachBtn, _left: left, _right: right, _unsent: unsent, _popState: null });
   ta.addEventListener('input', () => { S.drafts.set(sid, ta.value); autosize(ta); updateMention(sid); updateConvChrome(findSession(sid), convFor(sid)); });
   ta.addEventListener('click', () => updateMention(sid));
   ta.addEventListener('blur', () => setTimeout(hidePop, 120));
@@ -543,8 +605,48 @@ function buildComposer(s) {
   box.addEventListener('dragleave', (e) => { if (!box.contains(e.relatedTarget)) box.classList.remove('dropping'); });
   box.addEventListener('drop', (e) => { box.classList.remove('dropping'); if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); addFiles(sid, [...e.dataTransfer.files]); } });
   send.addEventListener('click', () => { const now = findSession(sid); if (now && now.turn) interruptTurn(sid); else sendFromComposer(sid); });
-  setTimeout(() => { autosize(ta); renderAttachRow(sid); }, 0);
+  setTimeout(() => { autosize(ta); renderAttachRow(sid); renderUnsent(sid); }, 0);
   return wrap;
+}
+
+// The kept copies for one session, above its input box. Every button is the user's own action.
+function renderUnsent(sid) {
+  const root = convEl;
+  if (!root || !root._unsent || root.dataset.sid !== sid) return;
+  const list = S.unsent.held.get(sid) || [];
+  root._unsent.hidden = !list.length;
+  root._unsent.replaceChildren(...list.map((e) => {
+    const text = e.text.trim();
+    return h('div', { class: 'unsent-item', dataset: { cid: e.clientId } },
+      icon('warning'),
+      h('div', { class: 'unsent-body' },
+        h('div', { class: 'unsent-head' }, '没有发出的消息', e.atts.length ? h('span', { class: 'hint' }, ` · ${e.atts.length} 个附件`) : null),
+        h('div', { class: 'unsent-text selectable', title: text }, text || '（只有附件）')),
+      h('div', { class: 'unsent-actions' },
+        h('button', { class: 'btn btn-small', type: 'button', title: '放到输入框里；输入框已有文字时接在后面，不覆盖', onclick: () => putBackUnsent(sid, e.clientId) }, '放回输入框'),
+        h('button', { class: 'icon-btn small', type: 'button', title: '复制文字', 'aria-label': '复制没有发出的文字', onclick: () => copyText(e.text, '已复制') }, icon('copy')),
+        h('button', { class: 'icon-btn small', type: 'button', title: '丢弃这条没有发出的消息', 'aria-label': '丢弃这条没有发出的消息', onclick: (ev) => confirmPopover(ev.currentTarget, {
+          title: '丢弃这条消息？', text: '它没有发给 CLI。丢弃后无法从 RepoBridge 找回（可以先复制文字）。', confirm: '丢弃', danger: true,
+          onConfirm: () => { unsentTake(S.unsent, sid, e.clientId); renderUnsent(sid); },
+        }) }, icon('close'))));
+  }));
+}
+
+function putBackUnsent(sid, cid) {
+  const root = convEl;
+  if (!root || root.dataset.sid !== sid || !root._ta) return;
+  const e = unsentTake(S.unsent, sid, cid);
+  if (!e) return;
+  S.unsent.placed.set(cid, e); // a late delivery report can still take an untouched copy back out
+  const ta = root._ta;
+  ta.value = ta.value.trim() ? `${ta.value.replace(/\s+$/, '')}\n\n${e.text}` : e.text;
+  S.drafts.set(sid, ta.value);
+  mergeAttachments(attachments(sid), e.atts);
+  autosize(ta);
+  renderAttachRow(sid);
+  renderUnsent(sid);
+  updateConvChrome(findSession(sid), convFor(sid));
+  ta.focus();
 }
 
 // ---------------------------------------------------------------- native questions and forms

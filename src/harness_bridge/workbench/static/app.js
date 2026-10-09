@@ -54,6 +54,7 @@ const S = {
   drafts: new Map(),      // session_id -> unsent composer text
   openItems: new Set(),   // expanded tool / reasoning items
   switching: new Set(),   // sessions changing view
+  unsent: unsentStore(),  // sent messages until delivered; kept copies of undelivered ones (composer.js)
 };
 
 // ---------------------------------------------------------------- helpers
@@ -222,7 +223,10 @@ function statusOf(s) {
     if (s.phase === 'waiting') return { key: 'waiting', label: '等待输入', tone: 'ok', glyph: 'dot' };
     return { key: 'running', label: '运行中', tone: 'ok', glyph: 'dot' };
   }
+  if (linkHold(s)) return { key: 'external', label: '外部可能在使用', tone: 'idle', glyph: 'half' };
   if (s.external) return { key: 'external', label: `已在 ${s.external.app} 中打开`, tone: 'idle', glyph: 'half' };
+  if (wasUnlinked(s)) return { key: 'unlinked', label: '已移除关联', tone: 'idle', glyph: 'ring' };
+  if (isLinked(s) && s.status === 'new') return { key: 'linked', label: '已添加，未连接', tone: 'idle', glyph: 'dashed' };
   return {
     new: { key: 'new', label: '未启动', tone: 'idle', glyph: 'dashed' },
     exited: { key: 'exited', label: '已退出', tone: 'idle', glyph: 'ring' },
@@ -322,6 +326,10 @@ function onState(state) {
     if (want) S.sel = { type: 'session', id: want.session_id };
     else if (state.projects.length) S.sel = { type: 'project', id: state.projects[0].project_id };
   }
+  if (S.pendingSelect) {
+    const want = S.pendingSelect;
+    if (findSession(want.id)) { S.pendingSelect = null; queueMicrotask(() => select({ type: 'session', id: want.id })); } else if (Date.now() > want.until) S.pendingSelect = null;
+  }
   if (S.sel && S.sel.type === 'session' && !findSession(S.sel.id)) S.sel = null;
   if (S.sel && S.sel.type === 'project' && !findProject(S.sel.id)) S.sel = null;
   for (const s of allSessions()) {
@@ -329,6 +337,7 @@ function onState(state) {
     if (t) { t.term.options.disableStdin = !s.attached; t.el.classList.toggle('readonly', !s.attached); }
   }
   render();
+  checkInflight();
   if (first && selectedSession()) { loadForSession(selectedSession()); focusTerminal(S.sel.id); }
   if (S.pendingFocus) setTimeout(tryPendingFocus, 0);
   if (first) runDevHash();
@@ -432,6 +441,67 @@ function onOutput(msg) {
   }
 }
 
+// Undelivered messages: the store (composer.js) decides, this applies it to the input box.
+function boxOf(sid) {
+  const root = convEl;
+  const visible = !!(root && !root.hidden && root.dataset.sid === sid && root._ta);
+  return { visible, draft: visible ? root._ta.value : (S.drafts.get(sid) || ''), attIds: attachments(sid).map((a) => a.id || a.name) };
+}
+
+function settleInflight(sid, item) {
+  if (!item || typeof item.id !== 'string' || !item.id.startsWith('user:')) return;
+  const cid = item.id.slice(5);
+  if (item.status === 'sent') applyUnsent(sid, unsentDelivered(S.unsent, cid, boxOf(sid)));
+  else if (item.status === 'failed') applyUnsent(sid, unsentFail(S.unsent, cid, boxOf(sid)), '这条消息没有发送成功');
+}
+
+function checkInflight() {
+  for (const e of [...S.unsent.inflight.values()]) {
+    const c = S.convs.get(e.sid);
+    const it = c && c.items.get(`user:${e.clientId}`);
+    if (it && (it.status === 'sent' || it.status === 'failed')) { settleInflight(e.sid, it); continue; }
+    const s = findSession(e.sid);
+    if (!s) { S.unsent.inflight.delete(e.clientId); continue; }
+    if (!s.active && Date.now() - e.at > 200) {
+      applyUnsent(e.sid, unsentFail(S.unsent, e.clientId, boxOf(e.sid)), s.run && s.run.failure ? '连接失败，这条消息没有发出' : '连接已结束，这条消息没有发出');
+    }
+  }
+}
+
+// Every toast says what actually happened to the text.
+function applyUnsent(sid, r, why = '这条消息没有发出', { quiet = false } = {}) {
+  if (!r || r.to === 'delivered') return;
+  const root = convEl;
+  const s = findSession(sid);
+  const here = boxOf(sid).visible;
+  if (r.to === 'box') {
+    root._ta.value = r.entry.text;
+    S.drafts.set(sid, r.entry.text);
+    autosize(root._ta);
+    mergeAttachments(attachments(sid), r.entry.atts);
+    renderAttachRow(sid);
+    updateConvChrome(s, convFor(sid));
+    if (!quiet) toast(`${why}，已放回输入框。`);
+  } else if (r.to === 'held') {
+    renderUnsent(sid);
+    toast(r.visible ? `${why}。输入框里有新的草稿，没有覆盖它；原消息保留在输入框上方。`
+      : `${s ? `「${s.title}」` : '另一个会话'}中有一条消息没有发出，已保留；回到那个会话后可以放回输入框。`);
+  } else if (r.to === 'unheld') {
+    renderUnsent(sid);
+    toast('一条标为“没有发出”的消息后来由 CLI 确认已送达，已从未发送列表中移除。');
+  } else if (r.to === 'cleared') {
+    if (here) { root._ta.value = ''; autosize(root._ta); }
+    S.drafts.delete(sid);
+    const ids = new Set(r.entry.atts.map((a) => a.id).filter(Boolean));
+    S.attach.set(sid, attachments(sid).filter((a) => !ids.has(a.id)));
+    renderAttachRow(sid);
+    if (here) updateConvChrome(s, convFor(sid));
+    toast('那条消息其实已经送达（CLI 已确认），已从输入框移除，避免重复发送。');
+  } else if (r.to === 'edited') {
+    toast('那条消息其实已经送达（CLI 已确认）。输入框里的文字已改动，没有自动清除；发送前请确认是否还需要。');
+  }
+}
+
 function onEnded(msg) {
   scheduleChanges(msg.session_id, 300);
   S.details.delete(msg.session_id);
@@ -494,10 +564,19 @@ function tryPendingFocus() {
 // Built only from the harness's structured messages (stream-json / app-server) and its native
 // history. Items arrive as upserts/deltas over SSE; the DOM is patched per item.
 
+// History is paged (docs/EXISTING_SESSIONS_API.md): the newest page first, older pages on request,
+// and a refresh that returns only changed/new items by stable ID. A backend without paging answers
+// with the whole list (no `page`), which is then shown through the old display window.
+const PAGE_SIZE = 80;
+
 function convFor(sid) {
   let c = S.convs.get(sid);
   if (!c) {
-    c = { items: new Map(), order: [], turn: null, live: false, runId: null, history: null, info: {}, loaded: false, loading: false, limit: 200, error: null };
+    c = {
+      items: new Map(), order: [], turn: null, live: false, runId: null, history: null, info: {}, loaded: false, loading: false, limit: 200, error: null,
+      paged: false, page: null, partial: [], nextBefore: null, nextSince: null, hasMore: false,
+      olderLoading: false, olderError: null, refreshing: false, refreshNote: null,
+    };
     S.convs.set(sid, c);
   }
   return c;
@@ -506,27 +585,97 @@ function convFor(sid) {
 async function loadConversation(sid, { refresh = false } = {}) {
   const c = convFor(sid);
   if (c.loading) { c.reloadAfter = true; return; }
+  if (wasUnlinked(findSession(sid))) {
+    // A removed association is not read at all; re-adding it brings the native history back.
+    pagerReplace(c, { items: [] });
+    Object.assign(c, { loaded: true, unlinked: true, error: null, live: false, turn: null, stale: false });
+    if (S.sel && S.sel.id === sid) renderConversation(findSession(sid), { full: true });
+    return;
+  }
+  c.unlinked = false;
   c.loading = true;
   c.error = null;
   if (S.sel && S.sel.id === sid) updateConvChrome(findSession(sid), c);
   try {
-    const data = await api('GET', `/api/sessions/${sid}/conversation${refresh ? '?refresh=1' : ''}`);
-    c.items = new Map();
-    c.order = [];
-    for (const it of data.items) { if (!c.items.has(it.id)) c.order.push(it.id); c.items.set(it.id, it); }
+    const data = await api('GET', `/api/sessions/${sid}/conversation?limit=${PAGE_SIZE}${refresh ? '&refresh=1' : ''}`);
+    pagerReplace(c, data);
     c.turn = data.turn;
     c.live = data.live;
     c.runId = data.run_id;
-    c.history = data.history;
     c.info = data.info || {};
     c.loaded = true;
     c.stale = false;
+    c.olderError = null;
+    c.refreshNote = null;
   } catch (e) {
+    // The last view stays; the failure is shown next to it.
     c.error = e.message;
     c.loaded = true;
   } finally { c.loading = false; }
   if (c.reloadAfter) { c.reloadAfter = false; loadConversation(sid); return; }
   if (S.sel && S.sel.id === sid) renderConversation(findSession(sid), { full: true });
+  checkInflight();
+}
+
+// User-initiated (or after "outside has ended"): fetch what changed since the last page and patch
+// it in by ID — no rebuild, no scroll jump, the composer and its draft untouched.
+async function refreshConversation(sid, { quiet = false } = {}) {
+  const c = convFor(sid);
+  if (!c.loaded || c.error || !c.paged || !c.nextSince) { loadConversation(sid, { refresh: true }); return; }
+  if (c.loading || c.refreshing) return;
+  c.refreshing = true;
+  c.refreshNote = null;
+  updateHistoryHead(sid);
+  let result = null;
+  try {
+    const data = await api('GET', `/api/sessions/${sid}/conversation?limit=${PAGE_SIZE}&since=${encodeURIComponent(c.nextSince)}`);
+    if (data.live && c.runId && data.run_id !== c.runId) { c.refreshing = false; loadConversation(sid); return; }
+    result = pagerMerge(c, data);
+    if (result.reset) c.olderError = null;
+    c.turn = data.turn;
+    c.live = data.live;
+    c.runId = data.run_id;
+    if (data.info) c.info = data.info;
+    // An automatic refresh (selecting the session) only speaks up when something changed.
+    c.refreshNote = result.reset ? '已重新读取最近的部分（原生历史被改写，或读取位置已过期）'
+      : (result.added.length || result.changed.length) ? `新增 ${result.added.length} 条，更新 ${result.changed.length} 条` : quiet ? null : '没有新内容';
+  } catch (e) {
+    // The loaded history stays; the failure is shown next to it.
+    c.refreshNote = `刷新失败：${e.message}`;
+  } finally { c.refreshing = false; }
+  if (!S.sel || S.sel.id !== sid) return;
+  const s = findSession(sid);
+  if (result && result.reset) { renderConversation(s, { full: true }); return; }
+  if (result) for (const id of [...result.changed, ...result.added]) queuePatch(sid, id);
+  updateHistoryHead(sid);
+}
+
+async function loadOlder(sid) {
+  const c = convFor(sid);
+  if (!c.paged || !c.hasMore || c.olderLoading) return;
+  c.olderLoading = true;
+  c.olderError = null;
+  updateHistoryHead(sid);
+  let fresh = [];
+  try {
+    const data = await api('GET', `/api/sessions/${sid}/conversation?limit=${PAGE_SIZE}&before=${encodeURIComponent(c.nextBefore)}`);
+    fresh = pagerPrepend(c, data);
+  } catch (e) {
+    c.olderError = historyFailure(e);
+  } finally { c.olderLoading = false; }
+  const root = convEl;
+  const s = findSession(sid);
+  if (!s || !root || root.dataset.sid !== sid || !root._head) return;
+  keepAnchor(root._scroll, () => {
+    const frag = document.createDocumentFragment();
+    for (const id of fresh) {
+      const node = itemNode(s, c.items.get(id));
+      if (node) { frag.append(node); root._nodes.set(id, node); }
+    }
+    root._head.after(frag);
+    updateHistoryHead(sid);
+  });
+  updateEmpty(root, s, c);
 }
 
 function onConv(msg) {
@@ -539,6 +688,7 @@ function onConv(msg) {
     c.turn = msg.turn;
     if (S.sel && S.sel.id === msg.session_id) updateConvChrome(findSession(msg.session_id), c);
   } else if (msg.op === 'upsert') {
+    settleInflight(msg.session_id, msg.item);
     const prev = c.items.get(msg.item.id);
     c.items.set(msg.item.id, prev ? { ...prev, ...msg.item } : msg.item);
     if (!prev) c.order.push(msg.item.id);
@@ -618,7 +768,7 @@ function renderConversation(s, { full = false } = {}) {
   if (!s) { root.hidden = true; return; }
   root.hidden = false;
   const c = convFor(s.session_id);
-  if ((!c.loaded || c.stale) && !c.loading) loadConversation(s.session_id);
+  if ((!c.loaded || c.stale || (c.unlinked && !wasUnlinked(s))) && !c.loading) loadConversation(s.session_id);
   if (root.dataset.sid !== s.session_id || full || !root._inner) buildConversation(root, s, c);
   else updateConvChrome(s, c);
 }
@@ -635,18 +785,25 @@ function buildConversation(root, s, c) {
   const inner = h('div', { class: 'conv-inner' });
   const scroll = h('div', { class: 'conv-scroll' }, inner);
   const jump = h('button', { class: 'btn btn-small jump', type: 'button', hidden: true, onclick: () => { scroll.scrollTop = scroll.scrollHeight; jump.hidden = true; } }, '↓ 新消息');
-  scroll.addEventListener('scroll', () => { if (scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 60) jump.hidden = true; });
+  let lastTop = 0;
+  scroll.addEventListener('scroll', () => {
+    if (scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 60) jump.hidden = true;
+    // Reading upwards near the top fetches the next older page (the button does the same).
+    if (scroll.scrollTop < 120 && scroll.scrollTop < lastTop && c.paged && c.hasMore && !c.olderLoading && !c.olderError) loadOlder(s.session_id);
+    lastTop = scroll.scrollTop;
+  });
   const scrollWrap = h('div', { style: 'position:relative;flex:1;min-height:0;display:flex;flex-direction:column' }, scroll, jump);
   root._inner = inner;
   root._scroll = scroll;
   root._jump = jump;
   root._nodes = new Map();
-  const head = sourceLine(s, c);
-  if (head) inner.append(head);
+  root._head = h('div', { class: 'conv-head' });
+  inner.append(root._head);
+  fillHistoryHead(root._head, s, c);
   const ids = c.order;
-  const from = Math.max(0, ids.length - c.limit);
+  const from = c.paged ? 0 : Math.max(0, ids.length - c.limit);
   if (from > 0) {
-    inner.append(h('button', { class: 'btn btn-small conv-more', type: 'button', onclick: () => { c.limit += 200; buildConversation(root, s, c); } }, `显示更早的 ${from} 条`));
+    root._head.append(h('button', { class: 'btn btn-small conv-more', type: 'button', onclick: () => { c.limit += 200; buildConversation(root, s, c); } }, `显示更早的 ${from} 条`));
   }
   for (const id of ids.slice(from)) {
     const node = itemNode(s, c.items.get(id));
@@ -668,6 +825,35 @@ function buildConversation(root, s, c) {
   updateConvChrome(s, c);
 }
 
+// The top of the list: where the history came from, whether it is complete, refresh, and the
+// control for older pages. Updated in place so a refresh never rebuilds the list.
+function fillHistoryHead(head, s, c) {
+  head.replaceChildren();
+  if (!c.paged) { const line = sourceLine(s, c); if (line) head.append(line); return; }
+  const banner = historyBanner(c, {
+    label: HARNESS[s.harness].label,
+    loading: c.loading,
+    refreshing: c.refreshing,
+    error: c.error ? `无法读取会话内容：${c.error}` : null,
+    refreshNote: c.refreshNote,
+    onRefresh: c.live ? null : () => refreshConversation(s.session_id),
+    onRetry: () => loadConversation(s.session_id, { refresh: true }),
+  });
+  if (banner) head.append(banner);
+  const older = olderControl(c, { loading: c.olderLoading, error: c.olderError, onLoad: () => loadOlder(s.session_id), onReload: () => loadConversation(s.session_id) });
+  if (older) head.append(older);
+}
+
+function updateHistoryHead(sid) {
+  const root = convEl;
+  const s = findSession(sid);
+  if (!s || !root || root.dataset.sid !== sid || !root._head) return;
+  const c = convFor(sid);
+  if (!c.paged) return;
+  fillHistoryHead(root._head, s, c);
+  updateEmpty(root, s, c);
+}
+
 function sourceLine(s, c) {
   if (c.loading && !c.order.length) return h('div', { class: 'conv-source' }, stGlyph({ tone: 'idle', glyph: 'spin' }), '正在读取原生历史…');
   if (c.error) return h('div', { class: 'conv-source warn' }, `无法读取会话内容：${c.error}`);
@@ -686,9 +872,23 @@ function sourceLine(s, c) {
 function updateEmpty(root, s, c) {
   if (!root._empty) return;
   const visible = c.order.some((id) => { const it = c.items.get(id); return it && it.type !== 'turn_end'; });
-  root._empty.hidden = visible || c.loading || !!c.error;
+  const hs = historyState(c);
+  // A failed or partial read is never covered by the welcome text.
+  root._empty.hidden = visible || c.loading || !!c.error || hs.state === 'unavailable' || (c.paged && hs.state === 'partial');
   if (root._empty.hidden) return;
   const label = HARNESS[s.harness].label;
+  if (wasUnlinked(s)) {
+    root._empty.replaceChildren(
+      h('h2', {}, '已移除关联'),
+      h('div', {}, `原生历史保留在 ${label} 中，RepoBridge 不再读取它。用“重新添加…”关联回来后，可以在这里查看和继续同一个会话。`));
+    return;
+  }
+  if (s.native_link || (c.paged && hs.state === 'empty' && s.native_session_id)) {
+    root._empty.replaceChildren(
+      h('h2', {}, '原生历史里没有可显示的消息'),
+      h('div', {}, `已从 ${label} 的原生记录读取，这个会话没有可以显示的用户或助手消息。${isLinked(s) && s.can_resume ? '继续时会用原生恢复接着这个会话，不会新建会话。' : ''}`));
+    return;
+  }
   root._empty.replaceChildren(
     h('h2', {}, s.active ? `${label} 已连接` : `与 ${label} 对话`),
     h('div', {}, `消息、工具调用和权限请求会以对话形式显示。这里使用 ${label} 自己的登录和设置；RepoBridge 不会替你发送消息或批准操作。`));
@@ -754,7 +954,7 @@ function toolNode(s, it) {
   if (it.exit_code !== undefined && it.exit_code !== null && it.exit_code !== 0) meta.push(`退出码 ${it.exit_code}`);
   if (it.subagent_steps) meta.push(`子任务 ${it.subagent_steps} 步`);
   const box = h('div', { class: `tool ${open ? 'open' : ''}`, dataset: { id: it.id } });
-  const toggle = () => { if (S.openItems.has(it.id)) S.openItems.delete(it.id); else S.openItems.add(it.id); queuePatch(s.session_id, it.id); };
+  const toggle = () => { if (S.openItems.has(it.id)) S.openItems.delete(it.id); else S.openItems.add(it.id); if (s.repaint) s.repaint(it.id); else queuePatch(s.session_id, it.id); };
   box.append(h('div', { class: 'tool-row', role: 'button', tabindex: '0', 'aria-expanded': String(open), title: `${it.name}${it.title ? ` · ${it.title}` : ''} · ${st.label}`,
     onclick: toggle, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } } },
   icon('chevron', 'chev'), stGlyph(st), h('span', { class: 'name' }, it.name || '工具'), h('span', { class: 'title' }, relText(s, it.title)),
@@ -841,7 +1041,9 @@ function autosize(ta) {
 function composerBlock(s) {
   // Why the composer cannot be used right now, or null.
   if (S.state.environment.refusal) return '当前环境不能启动原生会话';
+  if (wasUnlinked(s)) return RESUME_REASON_TEXT.unlinked;
   if (s.archived) return '会话已归档；取消归档后才能继续';
+  if (isLinked(s) && !s.active && !s.can_resume) return RESUME_REASON_TEXT[s.native_link.resume_reason] || '这个原生会话当前不能恢复，只能查看历史';
   if (s.active && !s.attached) return '上次运行遗留的进程仍在；请先在工具栏结束它';
   if (!s.active && !harnessOk(s.harness)) return `找不到 ${HARNESS[s.harness].label}`;
   if (S.switching.has(s.session_id)) return '正在切换视图…';
@@ -857,7 +1059,7 @@ function updateConvChrome(s, c) {
   const pendingPerm = [...c.items.values()].some((x) => x.type === 'permission' && x.status === 'pending');
   root._ta.disabled = !!blocked;
   root._box.classList.toggle('disabled', !!blocked);
-  root._ta.placeholder = blocked || (s.external ? `这个会话已在 ${s.external.app} 中打开` : !s.active
+  root._ta.placeholder = blocked || (linkHold(s) ? `确认外部已结束后，发送消息会用原生恢复继续这个 ${label} 会话` : s.external ? `这个会话已在 ${s.external.app} 中打开` : !s.active
     ? (s.can_resume ? `发送消息，用原生恢复继续这个 ${label} 会话` : `发送第一条消息，启动 ${label}`)
     : `给 ${label} 发消息`);
   const atts = attachments(s.session_id);
@@ -902,19 +1104,10 @@ async function sendFromComposer(sid, confirmExternal = false) {
   const atts = attachments(sid);
   const ids = atts.filter((a) => a.id && !a.error).map((a) => a.id);
   if ((!text.trim() && !ids.length) || composerBlock(s) || atts.some((a) => a.uploading) || S.pending.has(`send:${sid}`)) return;
-  const askExternal = (app) => confirmPopover(root._send, {
-    title: '在 RepoBridge 中继续？',
-    text: `这个会话已在 ${app} 中打开。RepoBridge 看不到那边是否还在执行；请先确认那边的这一轮已经结束，避免两边同时写入。`,
-    confirm: '那边已结束，继续',
-    onConfirm: () => sendFromComposer(sid, true),
-  });
-  if (s.external && !confirmExternal) { askExternal(s.external.app); return; }
+  const askExternal = (ext) => confirmPopover(root._send, externalPrompt(findSession(sid) || s, ext, () => sendFromComposer(sid, true)));
+  if (s.external && !confirmExternal) { askExternal(s.external); return; }
   const clientId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-  const restore = () => {
-    if (convEl && convEl.dataset.sid === sid && convEl._ta && !convEl._ta.value) { convEl._ta.value = text; autosize(convEl._ta); }
-    if (!S.drafts.get(sid)) S.drafts.set(sid, text);
-    updateConvChrome(findSession(sid), convFor(sid));
-  };
+  unsentReleaseBox(S.unsent, sid);
   S.pending.add(`send:${sid}`);
   root._ta.value = '';
   S.drafts.delete(sid);
@@ -923,12 +1116,30 @@ async function sendFromComposer(sid, confirmExternal = false) {
   updateConvChrome(s, convFor(sid));
   try {
     await api('POST', `/api/sessions/${sid}/send`, { text, client_id: clientId, confirm_external: confirmExternal, attachments: ids });
+    // Tracked by client_id until the CLI reports it delivered (or the connection ends first).
+    unsentTrack(S.unsent, { sid, clientId, text, atts: atts.filter((a) => ids.includes(a.id)), at: Date.now() });
     S.attach.set(sid, atts.filter((a) => !ids.includes(a.id)));
+    const c = S.convs.get(sid);
+    settleInflight(sid, c && c.items.get(`user:${clientId}`));
+    setTimeout(checkInflight, 400); // the run may have ended before this response arrived
     renderAttachRow(sid);
   } catch (e) {
-    restore();
-    if (e.details && e.details.external && !confirmExternal) askExternal(e.details.external.app);
-    else fail(e);
+    // Not accepted: the attachments are still in the box; the text goes back, or next to a
+    // draft typed meanwhile, never over it.
+    unsentTrack(S.unsent, { sid, clientId, text, atts: [], at: Date.now() });
+    const box = boxOf(sid);
+    box.attIds = box.attIds.filter((id) => !ids.includes(id)); // this message's own attachments
+    const r = unsentFail(S.unsent, clientId, box);
+    applyUnsent(sid, r, '这条消息没有发出', { quiet: true });
+    if (e.details && e.details.external && !confirmExternal) {
+      if (r && r.to === 'held') {
+        // Confirming would send the new draft instead; only record that outside use has ended.
+        confirmPopover(root._send, externalPrompt(findSession(sid) || s, e.details.external, () => guarded(`return:${sid}`, async () => {
+          await api('POST', `/api/sessions/${sid}/desktop/return`, {});
+          toast('已记录外部已结束。原消息保留在输入框上方，放回后再发送。');
+        })));
+      } else askExternal(e.details.external);
+    } else fail(e);
   } finally { S.pending.delete(`send:${sid}`); }
 }
 
@@ -1011,7 +1222,7 @@ async function desktopReturn(s) {
   await guarded(`return:${s.session_id}`, async () => {
     await api('POST', `/api/sessions/${s.session_id}/desktop/return`, {});
     toast('已回到 RepoBridge。继续时会接续同一个原生会话。');
-    if (s.view_mode === 'conversation') loadConversation(s.session_id, { refresh: true });
+    if (s.view_mode === 'conversation') refreshConversation(s.session_id);
   });
 }
 
@@ -1047,7 +1258,11 @@ function select(sel, { focus = true } = {}) {
 }
 
 function loadForSession(s) {
-  if (s.view_mode === 'conversation') { const c = convFor(s.session_id); if (!c.loaded || c.stale || !c.live) loadConversation(s.session_id); }
+  if (s.view_mode === 'conversation') {
+    const c = convFor(s.session_id);
+    if (!c.loaded || c.stale || c.error) loadConversation(s.session_id);
+    else if (!c.live) refreshConversation(s.session_id, { quiet: true });
+  }
   loadEvents(s.session_id);
   scheduleChanges(s.session_id, 0);
   if (S.prefs.inspector_open && S.prefs.inspector_tab === 'details') loadDetails(s.session_id);
@@ -1116,17 +1331,42 @@ async function guarded(key, fn, button) {
   }
 }
 
+// The explicit confirmation before a second writer could appear: an official desktop client the
+// user opened, or (for an added existing session) any outside client RepoBridge cannot observe.
+function externalPrompt(s, ext, onConfirm) {
+  const label = HARNESS[s.harness].label;
+  if ((ext && ext.via === 'native-link') || linkHold(s)) {
+    return {
+      title: `继续这个 ${label} 会话？`,
+      text: `这个会话来自 RepoBridge 之外，${holdText(s)}确认后会用 ${label} 的原生恢复继续同一个会话（原生 ID 不变，不会新建会话）。`,
+      confirm: '外部已结束，继续',
+      onConfirm,
+    };
+  }
+  return {
+    title: '在 RepoBridge 中继续？',
+    text: `这个会话已在 ${ext.app} 中打开。RepoBridge 看不到那边是否还在执行；请先确认那边的这一轮已经结束，避免两边同时写入。`,
+    confirm: '那边已结束，继续',
+    onConfirm,
+  };
+}
+
 async function startRun(s, kind, button, confirmExternal = false) {
   if (s.external && !confirmExternal) {
-    confirmPopover(button || $('#toolbar'), {
-      title: '在 RepoBridge 中继续？',
-      text: `这个会话已在 ${s.external.app} 中打开。RepoBridge 看不到那边是否还在执行；请先确认那边的这一轮已经结束，避免两边同时写入。`,
-      confirm: '那边已结束，继续',
-      onConfirm: () => startRun(findSession(s.session_id), kind, button, true),
-    });
+    confirmPopover(button || $('#toolbar'), externalPrompt(s, s.external, () => startRun(findSession(s.session_id), kind, button, true)));
     return;
   }
-  await guarded(`start:${s.session_id}`, () => api('POST', `/api/sessions/${s.session_id}/start`, { kind, confirm_external: confirmExternal }), button);
+  await guarded(`start:${s.session_id}`, async () => {
+    try {
+      await api('POST', `/api/sessions/${s.session_id}/start`, { kind, confirm_external: confirmExternal });
+    } catch (e) {
+      if (e.details && e.details.external && !confirmExternal) {
+        confirmPopover(button || $('#toolbar'), externalPrompt(findSession(s.session_id) || s, e.details.external, () => startRun(findSession(s.session_id), kind, button, true)));
+        return;
+      }
+      throw e;
+    }
+  }, button);
   focusTerminal(s.session_id);
 }
 
@@ -1369,9 +1609,11 @@ function sessionRow(s) {
   const st = statusOf(s);
   const selected = S.sel && S.sel.type === 'session' && S.sel.id === s.session_id;
   const from = s.handoff_from && findSession(s.handoff_from);
-  const tip = `${s.title}\n${HARNESS[s.harness].label} · ${st.label}${from ? `\n交接自「${from.title}」` : ''}`;
+  const tip = `${s.title}\n${HARNESS[s.harness].label} · ${st.label}${from ? `\n交接自「${from.title}」` : ''}${s.native_link ? '\n添加的已有原生会话' : ''}`;
   const trail = h('span', { class: 'trail' }, h('span', { class: 'tag rest-only' }, HARNESS[s.harness].short));
-  if (s.archived) {
+  if (wasUnlinked(s)) {
+    // Removed association: brought back with "add existing", not by unarchiving.
+  } else if (s.archived) {
     trail.append(h('button', { class: 'icon-btn small hover-only', type: 'button', title: '取消归档', 'aria-label': '取消归档',
       onclick: (e) => { e.stopPropagation(); unarchiveSession(s); } }, icon('unarchive')));
   } else if (!s.active) {
@@ -1388,6 +1630,7 @@ function sessionRow(s) {
   stGlyph(st),
   from ? h('span', { class: 'relation', title: `交接自「${from.title}」` }, '↳') : null,
   h('span', { class: 'name' }, s.title),
+  s.native_link ? h('span', { class: 'link-mark', title: '添加的已有原生会话' }, icon('link')) : null,
   trail);
 }
 
@@ -1459,8 +1702,9 @@ function renderToolbar() {
   right.append(
     h('button', { class: `icon-btn ${open && tab === 'activity' ? 'active' : ''}`, type: 'button', title: '活动（⌘⇧A）', 'aria-label': '活动', onclick: () => toggleInspector('activity') }, icon('activity')),
     h('button', { class: `icon-btn ${open && tab === 'details' ? 'active' : ''}`, type: 'button', title: '详情（⌘⇧I）', 'aria-label': '详情', onclick: () => toggleInspector('details') }, icon('info')),
-    h('span', { class: 'tb-sep' }),
-    h('button', { class: 'btn', type: 'button', title: '交接：在同一项目中新建会话继续这项工作', onclick: () => openHandoff(s) }, icon('handoff'), h('span', { class: 'tb-label-2' }, '交接')));
+    h('span', { class: 'tb-sep' }));
+  // Element.append would print a null; the handoff button is left out for a removed association.
+  if (!wasUnlinked(s)) right.append(h('button', { class: 'btn', type: 'button', title: '交接：在同一项目中新建会话继续这项工作', onclick: () => openHandoff(s) }, icon('handoff'), h('span', { class: 'tb-label-2' }, '交接')));
   const primary = primaryAction(s);
   if (primary) right.append(primary);
   bar.append(right);
@@ -1481,6 +1725,7 @@ function primaryAction(s) {
       onConfirm: () => guarded(`stop:${s.session_id}`, () => api('POST', `/api/sessions/${s.session_id}/stop`, {})),
     }) }, icon('stop', 'i-fill'), h('span', { class: 'tb-label' }, '结束进程'));
   }
+  if (wasUnlinked(s)) return h('button', { class: 'btn', type: 'button', title: '用“添加已有会话”重新关联同一个原生会话', onclick: () => reAddSession(s) }, icon('link'), h('span', { class: 'tb-label' }, '重新添加…'));
   if (s.archived) return h('button', { class: 'btn', type: 'button', onclick: () => unarchiveSession(s) }, icon('unarchive'), h('span', { class: 'tb-label' }, '取消归档'));
   if (s.can_resume) return h('button', { class: 'btn btn-primary', type: 'button', title: `用 ${label} 原生恢复同一会话`, onclick: (e) => startRun(s, 'resume', e.currentTarget) }, icon('resume'), h('span', { class: 'tb-label' }, '恢复'));
   if (s.can_start_fresh) return h('button', { class: 'btn btn-primary', type: 'button', onclick: (e) => startRun(s, 'new', e.currentTarget) }, icon('play', 'i-fill'), h('span', { class: 'tb-label' }, s.status === 'new' ? '启动' : '重新启动'));
@@ -1531,10 +1776,24 @@ function renderNotice() {
   if (p && !p.exists) add('bad', 'warning', `找不到项目文件夹 ${homeify(p.root_path)}。它可能被移动或删除了。`);
   if (!s) return;
   const label = HARNESS[s.harness].label;
-  if (s.external && !s.active) {
+  if (linkHold(s) && !s.active) {
+    add('info', 'external', [h('b', {}, '这个会话来自 RepoBridge 之外'), `：${holdText(s)}`],
+      s.view_mode === 'conversation' ? h('button', { class: 'btn btn-small', type: 'button', title: '重新读取原生历史，查看在别处新增的内容', onclick: () => refreshConversation(s.session_id) }, '刷新历史') : null,
+      h('button', { class: 'btn btn-small', type: 'button', onclick: (e) => confirmOutsideEnded(s, e.currentTarget) }, '外部已结束…'));
+  } else if (s.external && !s.active) {
     add('info', 'external', [h('b', {}, `已在 ${s.external.app} 中打开`), `（${clock(s.external.opened_at)}${s.external.via === 'cli /desktop' ? '，通过终端里的 /desktop' : ''}）。RepoBridge 看不到那边是否还在执行；在那边结束这一轮后，再回到这里继续。`],
-      s.view_mode === 'conversation' ? h('button', { class: 'btn btn-small', type: 'button', title: '重新读取原生历史，查看在那边新增的内容', onclick: () => loadConversation(s.session_id, { refresh: true }) }, '刷新历史') : null,
+      s.view_mode === 'conversation' ? h('button', { class: 'btn btn-small', type: 'button', title: '重新读取原生历史，查看在那边新增的内容', onclick: () => refreshConversation(s.session_id) }, '刷新历史') : null,
       h('button', { class: 'btn btn-small', type: 'button', onclick: () => desktopReturn(s) }, '回到 RepoBridge 继续'));
+  }
+  if (wasUnlinked(s)) {
+    add('info', 'link', [h('b', {}, '已移除关联'), `：原生历史保留在 ${label} 中。重新添加后会回到这个会话，继续前仍需确认外部已经结束。`],
+      h('button', { class: 'btn btn-small', type: 'button', onclick: () => reAddSession(s) }, '重新添加…'));
+  } else if (isLinked(s) && s.native_link.resume_reason && !s.active) {
+    const nl = s.native_link;
+    const sameAsProject = p && !p.exists && p.root_path === s.workdir;
+    const why = nl.resume_reason === 'directory_missing' ? `${sameAsProject ? '项目文件夹' : `工作目录 ${homeify(s.workdir)} `}不存在。历史仍可查看；恢复这个文件夹后才能继续。`
+      : RESUME_REASON_TEXT[nl.resume_reason] || nl.resume_reason;
+    add('warn', 'warning', [h('b', {}, '不能继续这个原生会话'), `：${why}`]);
   }
   if (s.attention && s.view_mode === 'conversation' && s.transport === 'structured') {
     // The permission card in the conversation is the place to answer.
@@ -1631,7 +1890,8 @@ function projectCard(p) {
         const info = harnessInfo(k);
         return h('button', { class: `btn ${k === S.prefs.last_harness ? 'btn-primary' : ''}`, type: 'button', disabled: !info || !info.available,
           title: info && !info.available ? info.problem : null, onclick: () => openNewSession(p.project_id, k) }, icon('plus'), `新建 ${HARNESS[k].label} 会话`);
-      })),
+      }),
+      h('button', { class: 'btn', type: 'button', title: '关联以前在 Claude Code 或 Codex 中创建的会话（不复制、不启动）', onclick: () => openAddExisting({ projectId: p.project_id }) }, icon('history'), '添加已有会话…')),
     h('div', { class: 'facts' },
       h('div', { class: 'fact' }, h('span', { class: 'k' }, '文件夹'), h('span', { class: 'v', title: p.root_path }, homeify(p.root_path))),
       h('div', { class: 'fact' }, h('span', { class: 'k' }, '分支'), h('span', { class: 'v' }, p.branch || '不是 Git 仓库或无法读取'))),
@@ -1644,6 +1904,18 @@ function startCard(s) {
   const label = HARNESS[s.harness].label;
   const p = findProject(s.project_id);
   const busy = p && p.sessions.find((x) => x.active && x.session_id !== s.session_id);
+  if (s.native_link) {
+    const why = !s.can_resume ? (RESUME_REASON_TEXT[s.native_link.resume_reason] || '这个原生会话当前不能恢复') : null;
+    return h('div', { class: 'card' },
+      h('h1', {}, `继续这个 ${label} 会话`),
+      h('p', {}, `这是添加到项目的已有原生会话。会在「${p ? p.name : ''}」中用 ${label} 的原生恢复（${HARNESS[s.harness].resume(s.native_session_id)}）打开同一个会话，不会新建会话，也不会替你发送消息。`),
+      linkHold(s) ? h('div', { class: 'callout info' }, icon('external'), h('div', {}, `这个会话来自 RepoBridge 之外，${holdText(s)}`)) : null,
+      why ? h('div', { class: 'callout warn' }, icon('warning'), h('div', {}, why)) : null,
+      busy ? h('div', { class: 'callout warn' }, icon('warning'), h('div', {}, `「${busy.title}」正在这个项目中运行。先停止它，才能继续这个会话。`)) : null,
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn btn-primary', type: 'button', disabled: !!busy || !!why || !harnessOk(s.harness) || !!wasUnlinked(s), onclick: (e) => startRun(s, 'resume', e.currentTarget) }, icon('resume'), '恢复'),
+        busy ? h('button', { class: 'btn', type: 'button', onclick: () => select({ type: 'session', id: busy.session_id }) }, `切换到「${busy.title}」`) : null));
+  }
   return h('div', { class: 'card' },
     h('h1', {}, `启动 ${label}`),
     h('p', {}, `将在「${p ? p.name : ''}」中打开原生 ${label} 交互会话。对话、工具和权限都在终端里由 ${label} 处理；RepoBridge 不读取登录信息，也不会替你发送消息。`),
@@ -1834,7 +2106,9 @@ function detailsPane(s) {
   const from = s.handoff_from && findSession(s.handoff_from);
   const outs = p ? p.handoffs.filter((x) => x.from_session_id === s.session_id) : [];
   const recovery = s.active ? (s.attached ? '正在运行。' : '记录为运行中，但不在当前窗口的终端里。')
-    : s.can_resume ? `可以恢复：会用 ${label} 的原生恢复回到同一会话。`
+    : wasUnlinked(s) ? RESUME_REASON_TEXT.unlinked
+      : s.native_link && !s.can_resume ? (RESUME_REASON_TEXT[s.native_link.resume_reason] || '这个原生会话当前不能恢复。')
+        : s.can_resume ? `可以恢复：会用 ${label} 的原生恢复回到同一会话${linkHold(s) ? '（先确认外部已经结束）' : ''}。`
       : s.can_start_fresh ? (s.status === 'new' ? '还没有启动。' : '还没有原生对话，可以重新启动。')
         : s.native_session_id ? '原生会话存在，但当前无法恢复。' : `还没有识别到原生会话（${label} 在第一轮结束后才报告）。`;
   const sections = [
@@ -1852,6 +2126,8 @@ function detailsPane(s) {
           h('button', { class: 'icon-btn small', type: 'button', title: '复制命令', 'aria-label': '复制恢复命令', onclick: () => copyText(resumeCommand(s), '已复制恢复命令') }, icon('copy'))),
         h('div', { class: 'hint', style: 'margin-top:6px' }, '也可以在普通终端里，于项目文件夹中运行这条原生命令。')] : null),
   ];
+  const link = linkSection(s);
+  if (link) sections.push(link);
   sections.push(settingsSection(s));
   sections.push(desktopSection(s));
   if (from || outs.length) {
@@ -1876,8 +2152,8 @@ function detailsPane(s) {
     h('div', { class: 'kv selectable', style: 'margin-top:8px' },
       h('div', { class: 'k' }, '会话 ID'), h('div', { class: 'v mono' }, s.session_id),
       h('div', { class: 'k' }, '原生会话 ID'), h('div', { class: 'v mono' }, s.native_session_id || '未知'),
-      h('div', { class: 'k' }, 'ID 来源'), h('div', { class: 'v' }, { pending: '等待 CLI 报告', preassigned: '启动时指定，等待确认', confirmed: '启动时指定，CLI 已确认', observed: 'CLI 报告' }[s.native_binding] || s.native_binding),
-      h('div', { class: 'k' }, '观察到的轮次'), h('div', { class: 'v' }, String(s.turns_observed)),
+      h('div', { class: 'k' }, 'ID 来源'), h('div', { class: 'v' }, { pending: '等待 CLI 报告', preassigned: '启动时指定，等待确认', confirmed: '启动时指定，CLI 已确认', observed: 'CLI 报告', linked: '添加已有会话时关联' }[s.native_binding] || s.native_binding),
+      h('div', { class: 'k' }, '观察到的轮次'), h('div', { class: 'v' }, String(s.turns_observed), s.native_link ? h('span', { class: 'hint' }, ' · 只统计在 RepoBridge 中看到的轮次') : null),
       runs[0] ? [
         h('div', { class: 'k' }, '最近的命令'), h('div', { class: 'v mono' }, (runs[0].argv || []).map((a) => (a.length > 120 ? `${a.slice(0, 117)}…` : a)).join(' ')),
         h('div', { class: 'k' }, '未传递变量'), h('div', { class: 'v' }, runs[0].stripped_env && runs[0].stripped_env.length ? runs[0].stripped_env.join(', ') : '无'),
@@ -1912,12 +2188,13 @@ function desktopSection(s) {
   const label = HARNESS[s.harness].label;
   const rows = [
     h('div', { class: 'k' }, '客户端'), h('div', { class: 'v' }, d.app_found ? `${d.app}${d.app_version ? `（${d.app_version}）` : ''}` : `${d.app}（未找到）`),
-    h('div', { class: 'k' }, '状态'), h('div', { class: 'v' }, s.external ? `已在 ${s.external.app} 中打开（${clock(s.external.opened_at)}）` : d.available ? '可以打开' : (d.reason || '不可用')),
+    h('div', { class: 'k' }, '状态'), h('div', { class: 'v' }, linkHold(s) ? '外部使用未确认结束' : s.external ? `已在 ${s.external.app} 中打开（${clock(s.external.opened_at)}）` : d.available ? '可以打开' : (d.reason || '不可用')),
   ];
   const ref = d.command || d.link;
   return h('div', { class: 'sect' }, h('h3', {}, '官方桌面客户端'), h('div', { class: 'kv' }, rows),
     h('div', { style: 'display:flex;gap:8px;margin-top:10px;flex-wrap:wrap' },
-      s.external ? h('button', { class: 'btn btn-small', type: 'button', onclick: () => desktopReturn(s) }, '回到 RepoBridge 继续')
+      linkHold(s) ? h('button', { class: 'btn btn-small', type: 'button', onclick: (e) => confirmOutsideEnded(s, e.currentTarget) }, '外部已结束…')
+        : s.external ? h('button', { class: 'btn btn-small', type: 'button', onclick: () => desktopReturn(s) }, '回到 RepoBridge 继续')
         : h('button', { class: 'btn btn-small', type: 'button', disabled: !d.available, title: d.reason || null, onclick: (e) => openInDesktop(s, e.currentTarget) }, icon('external'), `在 ${d.app} 中打开`)),
     ref ? h('div', { class: 'code-line selectable', style: 'margin-top:8px' }, h('span', { title: ref }, ref),
       h('button', { class: 'icon-btn small', type: 'button', title: '复制', 'aria-label': '复制', onclick: () => copyText(d.command ? `cd ${shellQuote(s.workdir)} && ${d.command}` : d.link, '已复制') }, icon('copy'))) : null,
@@ -2007,8 +2284,8 @@ function confirmPopover(anchor, { title, text, confirm, danger, onConfirm }) {
 
 const FOCUSABLE = 'input:not([type="hidden"]):not(:disabled), textarea:not(:disabled), select:not(:disabled), button:not(:disabled):not([hidden]), [tabindex="0"]';
 
-function dialog(content, { wide = false, onClose } = {}) {
-  const box = h('div', { class: `dialog ${wide ? 'wide' : ''}`, role: 'dialog', 'aria-modal': 'true', tabindex: '-1' }, content);
+function dialog(content, { wide = false, cls = '', onClose } = {}) {
+  const box = h('div', { class: `dialog ${wide ? 'wide' : ''} ${cls}`, role: 'dialog', 'aria-modal': 'true', tabindex: '-1' }, content);
   const wrap = h('div', { class: 'dialog-wrap' }, box);
   let close = () => {};
   wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
@@ -2036,18 +2313,21 @@ function sessionMenu(s, anchor) {
   const anchorEl = anchor instanceof Element ? anchor : $('#toolbar');
   menu(anchor, [
     { icon: 'pencil', label: '重命名…', action: () => { select({ type: 'session', id: s.session_id }, { focus: false }); setTimeout(() => beginRename(findSession(s.session_id)), 50); } },
-    { icon: 'handoff', label: '交接到新会话…', action: () => openHandoff(s) },
+    wasUnlinked(s) ? null : { icon: 'handoff', label: '交接到新会话…', action: () => openHandoff(s) },
     { icon: s.view_mode === 'conversation' ? 'terminal' : 'chat', label: s.view_mode === 'conversation' ? '切换到终端视图' : '切换到对话视图', disabled: s.archived || (s.active && !s.attached), action: () => switchView(s, s.view_mode === 'conversation' ? 'terminal' : 'conversation', anchorEl) },
-    s.external ? { icon: 'resume', label: '回到 RepoBridge 继续', action: () => desktopReturn(s) }
+    s.external && !linkHold(s) ? { icon: 'resume', label: '回到 RepoBridge 继续', action: () => desktopReturn(s) }
       : { icon: 'external', label: `在 ${(s.desktop && s.desktop.app) || '桌面客户端'} 中打开…`, disabled: !(s.desktop && s.desktop.available), note: s.desktop && !s.desktop.available ? '不可用' : null, title: s.desktop && s.desktop.reason, action: () => openInDesktop(s, anchorEl) },
     '-',
     s.native_session_id && s.can_resume ? { icon: 'copy', label: '复制原生恢复命令', action: () => copyText(resumeCommand(s), '已复制恢复命令') } : null,
     p ? { icon: 'folder', label: '在 Finder 中显示项目', action: () => revealProject(p) } : null,
     { icon: 'info', label: '会话详情', action: () => { select({ type: 'session', id: s.session_id }, { focus: false }); setPref('inspector_open', true); setPref('inspector_tab', 'details'); loadDetails(s.session_id); render(); } },
     '-',
+    linkHold(s) && !s.active ? { icon: 'check', label: '外部已结束…', action: () => confirmOutsideEnded(s, anchorEl) } : null,
     s.active && s.attached ? { icon: 'stop', label: s.transport === 'structured' ? `断开 ${label}` : `停止 ${label}`, action: () => stopSession(s, anchorEl) } : null,
-    s.archived ? { icon: 'unarchive', label: '取消归档', action: () => unarchiveSession(s) }
-      : { icon: 'archive', label: '归档…', disabled: s.active, note: s.active ? '先停止' : null, action: () => archiveSession(s, anchorEl) },
+    isLinked(s) ? { icon: 'link', label: '移除关联…', disabled: s.active, note: s.active ? '先断开' : null, title: '只从 RepoBridge 移除；原生历史保留', action: () => unlinkSession(s, anchorEl) } : null,
+    wasUnlinked(s) ? { icon: 'link', label: '重新添加…', action: () => reAddSession(s) }
+      : s.archived ? { icon: 'unarchive', label: '取消归档', action: () => unarchiveSession(s) }
+        : { icon: 'archive', label: '归档…', disabled: s.active, note: s.active ? '先停止' : null, action: () => archiveSession(s, anchorEl) },
   ]);
 }
 
@@ -2056,6 +2336,7 @@ function projectMenu(p, anchor) {
   menu(anchor, [
     { icon: 'plus', label: '新建 Claude Code 会话', disabled: !harnessOk('claude-code'), action: () => openNewSession(p.project_id, 'claude-code') },
     { icon: 'plus', label: '新建 Codex 会话', disabled: !harnessOk('codex'), action: () => openNewSession(p.project_id, 'codex') },
+    { icon: 'history', label: '添加已有会话…', action: () => openAddExisting({ projectId: p.project_id }) },
     '-',
     { icon: 'folder', label: '在 Finder 中显示', action: () => revealProject(p) },
     { icon: 'copy', label: '复制路径', action: () => copyText(p.root_path, '已复制路径') },
@@ -2068,6 +2349,8 @@ function newSessionMenu(p, anchor) {
   menu(anchor, [
     { head: p.name },
     ...['claude-code', 'codex'].map((k) => ({ icon: 'plus', label: `新建 ${HARNESS[k].label} 会话`, disabled: !harnessOk(k), note: harnessOk(k) ? null : '未找到', action: () => openNewSession(p.project_id, k) })),
+    '-',
+    { icon: 'history', label: '添加已有会话…', title: '关联以前在 Claude Code 或 Codex 中创建的会话', action: () => openAddExisting({ projectId: p.project_id }) },
   ]);
 }
 
@@ -2321,7 +2604,7 @@ window.addEventListener('keydown', (e) => {
 // the native window (which has no automation driver) before capturing its pixels.
 function runDevHash() {
   if (!S.state || !S.state.dev || !location.hash.startsWith('#dev=')) return;
-  const [action, arg] = location.hash.slice(5).split(':');
+  const [action, arg, arg2] = location.hash.slice(5).split(':').map((x) => decodeURIComponent(x));
   history.replaceState(null, '', '/');
   const s = selectedSession();
   queueMicrotask(() => {
@@ -2336,6 +2619,15 @@ function runDevHash() {
     else if (action === 'desktop' && s) openInDesktop(s, $('#toolbar .tb-title .icon-btn'));
     else if (['model', 'effort', 'mode'].includes(action) && s) { S.devOpen = action; render(); }
     else if (action === 'attach' && s && convEl && convEl._attachBtn) attachMenu(s, convEl._attachBtn);
+    else if (action === 'existing') openAddExisting({ harness: arg || undefined, pick: arg2 ? Number(arg2) : undefined });
+    else if (action === 'unsent' && s && convEl && convEl._ta) {
+      // Snapshot of the kept-message state: a synthetic message whose connection "failed" while a
+      // new draft was in the box.
+      convEl._ta.value = '等待连接时写的新草稿';
+      S.drafts.set(s.session_id, convEl._ta.value);
+      unsentTrack(S.unsent, { sid: s.session_id, clientId: 'devunsent', text: '把导出的金额统一保留两位小数，并补一个 0.1 + 0.2 的测试', atts: [], at: 0 });
+      applyUnsent(s.session_id, unsentFail(S.unsent, 'devunsent', boxOf(s.session_id)), '连接失败，这条消息没有发出');
+    }
     else if (action === 'filter') { $('#filter').value = arg || ''; S.filter = arg || ''; renderSidebar(); }
     else if (action === 'diff' && s) {
       const pick = (tries) => {
