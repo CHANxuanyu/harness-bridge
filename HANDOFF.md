@@ -1,28 +1,42 @@
 # Handoff
 
-## Frontend delivered; integrate receipt/error corrections — 2026-10-09
+## Independent integration delivered; Opus recovery correction remains — 2026-10-09
 
-Inputs: backend `ad585c59fc932280f49833414e8ea5b90ca3ff75`; frontend
-`202630f659d0411ef81a611ccc98bf09bfc4b4aa`, explicitly confirmed in PR #3 (contains the original
-`b866e093db3200923ed181f8c98513fcbee3ec87`). Worktrees were clean when checked; front/old main
-checkout are untouched. Separate integration checkout `/Users/chan/Downloads/repobridge-integration`
-on `codex/existing-session-integration` initially combines these at
-`0a16d235ce700e92603461958bce3feca0e37dcf`. No default merge or installed version replacement.
+- Backend input: `ad585c59fc932280f49833414e8ea5b90ca3ff75`.
+- Frontend confirmed in PR #3: `202630f659d0411ef81a611ccc98bf09bfc4b4aa` (includes initial
+  `b866e093db3200923ed181f8c98513fcbee3ec87`).
+- Backend fixes: `9a9d6f9c9be4bedb840edbf931d8f39f38c055b9`, PR #4 remains based on PR #3.
+- Fixed integrated code: `fee9971c6ed5599a679b4a9193c6ba1940609fdc` in
+  `/Users/chan/Downloads/repobridge-integration`, branch `codex/existing-session-integration`.
+  Frontend and old main checkout were not modified; no default merge or installed replacement.
+- Exact interface: [EXISTING_SESSIONS_API.md](docs/EXISTING_SESSIONS_API.md).
+  Final evidence and reproduction: [EXISTING_SESSIONS_INTEGRATION.md](docs/EXISTING_SESSIONS_INTEGRATION.md).
 
-Backend corrections and exact additive contract are in EXISTING_SESSIONS_API's integration section.
-Opus review items: distinguish unknown delivery from definitely-unsent (current `checkInflight`
-does not); consult durable `/delivery?client_id=` after missing events/restart/ended run; preserve
-uncertain text/attachments without automatic resend; handle late sent confirmation; optionally
-classify explicit capability errors using `capability_unsupported`. The backend blocks new sends
-while delivery is unknown. External-held removal still needs user confirmation, now with the
-correct `details.external`. Native-link `/desktop/return` is explicitly supported and sends nothing.
+Final fixed-integration offline suite: **990 passed in 1055.66s (17m35s)**; no failures or skips.
+No live test was run.
+Use **absolute** `PYTHONPATH=/Users/chan/Downloads/repobridge-integration/src` when reusing the
+frontend virtualenv: detached workers change cwd and otherwise import its editable frontend source.
+The initial mixed-path attempt was interrupted and is not final evidence. Static checks passed;
+rendered tests used only isolated native-shaped histories, actual fault stubs and fake desktop apps.
 
-Codex owns the backend and independent integration checks. Previous per-branch test totals are
-historical only; final full-suite evidence must name the fixed integration commit. Live outside
-history/official-desktop continuation remains unverified and unbudgeted. No unrelated private
-history, credentials or real state database are part of this run.
+**Next frontend integration:** Opus must handle `delivery.state=unknown` before treating an ended
+run as definitely unsent. Reproduced P1: backend says possibly delivered, UI says “没有发出的消息”
+and offers recovery into the composer. Query the durable `/delivery?client_id=` after missed events,
+ended run or reload; preserve uncertain text/attachments separately, with no automatic resend.
+Keep current late-sent/new-draft/attachment protections. The backend already blocks new sends while
+unknown. Also review 900×640 composer overflow (P2); optional explicit unsupported display now has
+`capability_unsupported`. Deliver a confirmed new frontend SHA for Codex to merge and reverify in the
+independent integration checkout. Codex does not edit frontend-owned files to bypass this handoff.
 
-## Backend ready for frontend integration — 2026-10-09
+External-held unlink now correctly returns `details.external`; its confirmation requirement is
+unchanged and remains atomic. `/desktop/return` is the intended native-link external-ended
+confirmation: records a user statement, clears hold/cache, starts/sends nothing, and does not claim
+observed external exit. New receipts use existing event storage; no additional schema migration.
+
+Real designated outside-created sessions and official-desktop continuity remain unverified and
+unbudgeted. No unrelated history, credentials, live database, model calls or prior-allowance reuse.
+
+## Prior backend delivery — 2026-10-09
 
 Use backend branch `codex/existing-session-backend` in `/Users/chan/Downloads/repobridge-backend`;
 it starts at exact common handoff `ef75a625577c1848e1079dd6d487a5cdc3afa166`. The first pushed commit
@@ -44,11 +58,11 @@ Backend acceptance: 102 related tests passed, 21 new external-session cases; sta
 Details and test command: [EXISTING_SESSIONS_RESULT.md](docs/EXISTING_SESSIONS_RESULT.md).
 Schema 3→4 is one additive association table. Test with a **fresh isolated state directory and
 port 0**; do not point this branch at the user's live database. Runtime tools were reused read-only
-from the frontend `.venv`, with `PYTHONPATH=src` selecting this backend worktree.
+from the frontend `.venv`. That earlier focused run used a relative source path; for integrated
+checks including detached workers, use the absolute source path documented above.
 
-Next integration owner remains Codex: verify Opus's frontend commits in the integration checkout,
-run its UI-specific checks against these endpoints, then check user-designated outside-created
-native samples. Do not use prior App-created acceptance threads, scan other project histories, or
+Current integration owner remains Codex: integrate Opus's next confirmed recovery correction,
+then separately check user-designated outside-created native samples when authorized. Do not use prior App-created acceptance threads, scan other project histories, or
 start model turns under the exhausted W6–W8 allowance. Full real continuation needs a new explicit
 bounded allowance and designated samples. Read-only scoped checks need no model allowance.
 

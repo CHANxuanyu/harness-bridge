@@ -1,7 +1,8 @@
 # Existing-session backend acceptance — 2026-10-09
 
-Backend implementation is ready for frontend integration. This record does not claim new UI or
-real outside-created-session acceptance.
+This is the earlier backend-only acceptance record. The fixed integrated-version evidence and
+remaining frontend findings are in [EXISTING_SESSIONS_INTEGRATION.md](EXISTING_SESSIONS_INTEGRATION.md).
+Neither record claims real outside-created-session or real official-desktop acceptance.
 
 ## Delivered
 
