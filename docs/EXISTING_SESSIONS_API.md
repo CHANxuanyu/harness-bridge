@@ -258,10 +258,22 @@ invalidates the history cache. Result stays `{"external":null}`. The audit paylo
 `source:"user_confirmation",process_exit_observed:false`. It never resumes, sends, kills an
 external process or asserts observed exit. The next resume/send remains a separate explicit action.
 
-Frontend `0253b2f` consumes these fields and passes the normal fault-stub recovery and capability
-classification checks. Remaining review: stale events/queries can regress frontend sent after
-reload even though the backend remains sent. Exact reproduction and owner locations are in
-EXISTING_SESSIONS_INTEGRATION.md; this is not permission to edit Opus's worktree.
+Frontend `462cda4` preserves confirmed sent across same-page/reload events, queries and first-page/history refresh. Independent verification still finds existing uncertainty not cleared when sent is first read through `loadOlder`; see EXISTING_SESSIONS_INTEGRATION.md. Confirmation must clean existing recovery entries on **every** read path, including older-page items deduplicated out of the visible list and non-selected sessions. This is not permission to edit Opus's worktree.
+
+**Run failure and delivery are separate (2026-10-10).** `run.status`, `exit_code`, `exit_signal`,
+`exit_confirmed` and diagnostics keep their meanings after sent is confirmed. New exit summaries
+in `run.failure` use process-exit facts and native stderr, excluding provisional application
+message-delivery notices. Those notices remain in `output_tail` as historical diagnostics;
+`delivery.state` is the current acceptance conclusion. This introduces no API fields or schema
+change and does not rewrite already persisted old failure strings. A fresh corrected run can
+remain `failed` / exit 3 while its message is `sent`. Never infer run success from delivery.
+
+**First ordinary Codex turn with a lost reply.** `turns_observed=0` is not proof that a known native
+thread has no submitted message. If a durable receipt records sending/unknown/sent, read history
+for that exact native ID and prohibit `start(kind:new)` / `can_start_fresh`; resume keeps that ID.
+No count is fabricated. Missing/unmaterialized history leaves unknown unchanged; only exact native
+clientId evidence settles it. Read/refresh does not resume or send. An explicit subsequent send
+continues the same thread after uncertainty is settled; all existing writer/permission guards apply.
 
 Use isolated homes/native histories, stub CLIs, temp state and server port 0. Fixtures must be seeded
 outside RepoBridge before link. Assert no new native session/turn/send/replay for list/preview/link;

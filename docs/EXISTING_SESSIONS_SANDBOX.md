@@ -11,13 +11,13 @@ listens only on loopback with port 0. No real native histories, credentials or m
 cd /Users/chan/Downloads/repobridge-integration
 export PYTHONPATH=/Users/chan/Downloads/repobridge-integration/src
 HB_QA_PY=/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9/.venv/bin/python
-HB_QA_DIR=/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-0253b2f
+HB_QA_DIR=/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-462cda4
 "$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --scenario normal --native
 ```
 
 Requires the existing development virtualenv (including pywebview) shown above. It is read-only;
 no install or dependency change is needed. Source under test is
-`a0381264eed8c120ac7be3787d71d7ff76f8ee7b`; later documentation-only integration commits have the same
+`e2512ee9b952be940f030f30ab2047e2ccc928c0`; later documentation-only integration commits have the same
 code. Before a later revalidation, record `git rev-parse HEAD` and check the source tree, rather than
 assuming the moving branch still matches this receipt.
 
@@ -72,13 +72,14 @@ removes the injected CLI failure; it does not erase an unknown receipt or author
 Refresh results reads only. Add exact-clientId native evidence only to the designated **synthetic**
 fixture when reproducing settlement; never edit a real vendor history file.
 
-Browser probes are retained as `busy.cjs`, `unknown_continue.cjs`, `late.cjs`, `network.cjs`,
-`classify.cjs`, `query-order.cjs`, plus `common.cjs`. They encode particular fixture states and
-ordering (some consume prior result JSON), so are evidence/reproduction source, not a general
-one-command reusable test suite. `native_probe.py` is likewise tied to this run's synthetic root.
-The commands above use `sandbox.py`, which creates fresh safe fixtures without those dependencies.
-The long model label in layout evidence was supplied by a temporary copy of the stub catalog;
-fresh fixtures otherwise display the default short stub model label.
+Browser probes retained here include `p1.cjs`, `busy.cjs`, `network.cjs`, `races.cjs`,
+`late-not-sent.cjs`, `older-focused.cjs`, `restart-setup.cjs`, `restart-check.cjs`, `classify.cjs`,
+`layout.cjs` and `common.cjs`. They depend on particular fixture state and prior result JSON;
+use the reproduction order in EXISTING_SESSIONS_INTEGRATION.md, not as a one-command general suite.
+`common.cjs` writes to `/private/tmp/repobridge-recheck-462cda4`; copy the retained scripts there
+first. The sandbox commands above work independently and always create safe fresh fixtures.
+New browser layout regression uses the short stub model label. Previous long-label and native
+WKWebView evidence remains in `repobridge-qa-0253b2f`; it was not rerun as native this round.
 
 For the repository's repeatable offline checks, use the same absolute source root:
 
@@ -93,5 +94,5 @@ HB_QA_BIN=/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-prod
 ```
 
 These are the four checks in `scripts/check.sh`, using existing binaries directly to avoid changing
-another worktree's environment. The recorded run was 994 passed / 983.79s. Do not re-run after a
+another worktree's environment. The recorded run was 1003 passed / 1011.98s, zero failures/skips; ruff check/format (190 files) and strict mypy (59 files) passed. Do not re-run after a
 pure documentation addition unless code changed or new evidence requires it.

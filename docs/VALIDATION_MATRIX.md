@@ -10,15 +10,15 @@ SQLite/loopback HTTP with **stub** harness executables) · UI-offline (browser/w
 harnesses) · T3-W real single native harness session on the user's machine · T4-W real Claude Code +
 Codex sessions with handoff.
 
-## Existing sessions created outside RepoBridge — 2026-10-09
+## Existing sessions created outside RepoBridge — 2026-10-10
 
-Fixed current code: `a0381264eed8c120ac7be3787d71d7ff76f8ee7b` (frontend `0253b2f`, backend
-fix `9a9d6f9` unchanged). Final fixed-code offline check: **994 passed in 983.79s (16m23s), zero failures and zero skips**.
-Ruff check and format passed (189 files); strict mypy passed (59 source files).
-62 focused tests / 50.40s also passed. No live tests/model calls. Previous 990/961/102 totals are
-historical only. P2 closed within offline scope; **P1 ordering boundary still open**, so whole
-synthetic feature acceptance is not yet passed. Exact evidence and limitations:
-[EXISTING_SESSIONS_INTEGRATION.md](EXISTING_SESSIONS_INTEGRATION.md).
+Fixed current code: `e2512ee9b952be940f030f30ab2047e2ccc928c0` (frontend `462cda4`; backend corrections `a35a868` / `1856bd4`).
+Final fixed-code offline check: **1003 passed in 1011.98s (16m51s), zero failures and zero skips**.
+Ruff check and format passed (190 files); strict mypy passed (59 source files).
+Focused backend regression: 25 passed / 35.31s. Final page probes rerun against this code. Original
+stale-sent repros pass; **P1 remains open only for older-page recovery cleanup**. New banner P2
+passes, prior narrow P2 remains closed. Full synthetic feature acceptance is not yet passed.
+[Exact evidence](EXISTING_SESSIONS_INTEGRATION.md). No live model tests or renewed allowance.
 
 | ID | Check | Level | Result |
 |---|---|---|---|
@@ -30,11 +30,12 @@ synthetic feature acceptance is not yet passed. Exact evidence and limitations:
 | E06 | Additive schema 3→4 preserves old session; HTTP routes/error envelope/auth and legacy conversation response compatible | T2-W isolated DB/server port 0 | pass |
 | E07 | Installed Codex `generate-json-schema` confirms `thread/list` exact cwd and useStateDbOnly, search/cursor/order and turns pagination; isolated credential-free HOME/CODEX_HOME, no app-server/session started | real binary, schema only | pass (shape only) |
 | E08 | Final affected regression 102 tests / 70.35s (21 external-session cases + 81 existing workbench checks); ruff check/format (185 files), strict mypy (59 files) | static + T1/T2-W | pass |
-| E09 | Opus's new discovery/link UI and integrated interaction | UI-offline | actual fault-stub paths pass after 0253b2f; **P1 open:** stale event/query can downgrade frontend sent; backend remains sent; not full UI acceptance |
-| E11 | Durable client-ID receipts, failed handshake/timeout/early exit, attempted-but-unknown, exact-ID retry/no replay, restart recovery, late native proof, sent never downgraded | T2-W actual fault stubs | pass in current 994-test full suite; UI ordering failure tracked in E09 |
+| E09 | Discovery/link UI and integrated interaction | UI-offline | actual fault-stub normal paths pass; **P1 open:** older history reads sent but leaves existing unknown card/send block; backend remains sent |
+| E11 | Durable receipts, failed handshake/timeout/exit, unknown, restart, exact native proof, no replay; first ordinary turn with zero observed turns retains ID | T2-W actual fault stubs + page | pass; missing history or mismatched client ID never settles; explicit next message resumes original ID |
 | E12 | Atomic external-vs-local unlink errors; native-link return only records confirmation/clears cache; stable reasons and explicit unsupported vs general read failure | T2-W isolated HTTP/native stubs | pass |
 | E13 | 900×640 sidebar expanded, 700px, 1280×900, long model, attachments/draft/unknown card; controls and no horizontal overflow | UI-offline Chrome + isolated native WKWebView | **P2 pass**: measurements and content screenshot observations separately recorded; blank full-window captures excluded |
-| E14 | Missed SSE, lost send response, query errors/missing receipt; stale/duplicate events and queries after sent | UI-offline page/network injection | missing evidence never inferred not_sent; **stale sent regression fails P1**, no automatic resend; not native traffic evidence |
+| E14 | Missed SSE, lost send response, missing/error receipt; stale/duplicate events and earlier query arriving late after sent, history failure | UI-offline page/HTTP injection | original P1 repros pass on 462cda4; no downgrade/retracking/re-send. Older-page existing-card cleanup remains E09. Not real-native disorder evidence |
+| E15 | Run failure summary vs delivery, unknown→sent and reload/restart | T2-W + UI-offline | new banner P2 pass for corrected runs: failed/exit 3/diagnostics unchanged; summary factual, unresolved unknown warned separately; no old failure-string migration |
 | E10 | Designated native sessions actually created outside RepoBridge; real official desktop open/history/continuation/return/resume | T3-W/T4-W | **not run**; prior App-created samples do not qualify; prior turn allowance exhausted |
 
 Reproduction and limits: [EXISTING_SESSIONS_RESULT.md](EXISTING_SESSIONS_RESULT.md).
