@@ -1,4 +1,167 @@
-# Existing-session independent integration — 2026-10-09
+# Existing-session independent revalidation — 2026-10-09
+
+**P1 remains open; P2 is closed for the tested offline browser/WKWebView surfaces.** The original
+unknown-as-unsent fault is fixed in normal delivery paths, but stale events/queries can still
+regress a frontend message that was already confirmed sent. The durable backend receipt stays
+sent. Therefore this combination is **not yet fully accepted for offline/synthetic integration**.
+Real-native acceptance is separately pending. No frontend-owned implementation was changed here.
+
+## Fixed version and ownership
+
+| Input | Full commit |
+|---|---|
+| Previous integration input | `67d6e1e52e6b26a2318284c04ae1c4d9963bd674` |
+| New confirmed frontend, PR #3 (includes 202630f and b866e09) | `0253b2f3ee89511c0222607dc3d418cfc742731e` |
+| Backend fix, retained unchanged | `9a9d6f9c9be4bedb840edbf931d8f39f38c055b9` |
+| Backend documentation input | `47583acfda53d0b65bdba37dfa156858f99dde30` |
+| **Exact merged code tested in this revalidation** | **`a0381264eed8c120ac7be3787d71d7ff76f8ee7b`** |
+
+Existing integration worktree `/Users/chan/Downloads/repobridge-integration`, branch
+`codex/existing-session-integration`, was preserved and merged once without conflict. No old delivery
+was reapplied. Backend PR #4 remains stacked on frontend PR #3. The frontend worktree and old main
+checkout were not edited. Subsequent commits consolidate documentation only; source, tests, scripts,
+assets and dependency files are identical to the fixed code above. Final pushed documentation and
+integration-head SHAs are recorded in PR #4 (avoids a self-referential commit hash in this file).
+
+## New independent checks on that code
+
+Final fixed-code offline check: **994 passed in 983.79s (16m23s), zero failures and zero skips**.
+Ruff check and format passed (189 files); strict mypy passed (59 source files).
+
+Focused regression first: **62 passed in 50.40s**, covering existing sessions, delivery,
+conversation and frontend recovery/paging rules. Previous 961 frontend / 990 integration / 102
+backend results do not stand in for this run. No live test was run; no test was removed or skipped
+to obtain green. Tests and browsers used isolated HOME/config/native fixtures, temporary databases,
+explicit stub binaries, fake desktop applications and port 0. The frontend virtualenv was reused
+read-only with **absolute** `PYTHONPATH=/Users/chan/Downloads/repobridge-integration/src`.
+
+The flow under test was: load an ordinary or linked native conversation → explicitly send a
+synthetic message → observe the fault stub's actual receipt → reload/restart/read native evidence
+→ retain drafts and correct delivery state. Browser plugin not available; regular Playwright drove
+installed Chrome in fresh profiles, with only test-owned 127.0.0.1 traffic allowed. Server roots and
+safe loopback addresses are listed in the local evidence; auth metadata is not published.
+
+| P1 case | Evidence type | New result |
+|---|---|---|
+| Linked Codex handshake writer refusal | Actual backend + RPC fault stub, rendered UI | `not_sent/native_writer_busy`; text and attachment retained once; separate newer draft preserved; explicit restore appends without duplicating attachment; reload exposes retained receipt. |
+| Ordinary and linked Codex submit then exit before response | Actual backend + fault stub | `unknown/native_process_exited`; separate “发送结果待确认” card, no unsent recovery action; send blocked, editor usable. |
+| Refresh result without native confirmation | UI + actual backend RPC log/run counts | Still unknown; no run or `turn/start` added; draft retained. |
+| Reload and actual service-process restart | Same isolated database, new server process/port | Unknown receipt/card restored with text and attachment. Ordinary unsent draft does not survive full page reload. |
+| Exact `clientId` added to same synthetic native history, then refresh | Actual backend reads fixture; synthetic proof, not real native acceptance | Receipt sent, one matching user item, uncertainty removed, sending unblocked, edited draft retained; no run starts. |
+| Ordinary Codex and ordinary Claude with attachments | UI + actual normal stub protocols | Codex sent receipt and Claude native user echo, no leftover recovery copy. Claude is not claimed to have durable receipts. |
+| Drop conversation SSE and `/send` response; make history/query reads fail | **Browser/network fault injection** over actual backend | Never inferred not_sent; receipt recovery settled sent. Dropping a request before acceptance and receiving real 404 also stayed unknown. |
+| Late/duplicate/old unknown or not_sent after known sent | **Page event / stale HTTP response injection** | **FAIL P1** below; backend receipt remained sent. |
+
+Capability checks used separate **actual fault-stub services**: method-not-found gave
+`native_capability_unsupported` and “当前不支持”; general failure gave `native_read_failed` and
+“读取失败”. Opening the dialog was scripted; payload/error classification came from the backend.
+External-held unlink remained 409 with `details.external`, no self `busy_session_id`;
+`desktop/return` confirmation cleared the hold without adding a run. The final offline suite also
+regresses true local-writer distinction, atomic removal, confirmation audit, original-ID resume,
+discovery, preview, deduplication, paging, refresh, unlink/relink and fake desktop continuation.
+
+## Remaining P1: sent must stay sent in the frontend
+
+[Handoff to Opus in PR #3](https://github.com/CHANxuanyu/harness-bridge/pull/3#issuecomment-6085409315).
+Reproduction on the exact fixed code (all fixtures isolated):
+
+1. Send through the exit-after-submission Codex stub; keep the resulting unknown user receipt.
+2. Add matching `clientId` evidence to that fixture's native history. UI refresh confirms sent,
+   removes uncertainty and preserves the edited new draft. Backend GET delivery also says sent.
+3. Reload the page. Feed the saved older user receipt through the real event entry point:
+   `onConv({session_id:sid,run_id:S.convs.get(sid).runId,op:'upsert',item:oldUnknownItem})`.
+4. One unknown card reappears and send becomes disabled. Injecting the same-ID old not_sent on a
+   fresh sent page instead displays a failed bubble with “放回输入框”. No automatic resend occurred.
+5. Same-page late unknown after live settlement does not re-block, but still downgrades the
+   rendered/cached user item to unknown. A fresh sent page receiving repeated stale unknown HTTP
+   delivery responses through `recheckDelivery`, with history refresh failing, also re-blocks.
+   The independent draft survives; backend GET delivery stays sent throughout.
+
+These are controlled event/network ordering injections, **not observed real-native out-of-order
+traffic**. They verify the requested frontend invariant; no vendor history or receipt was forged
+in the backend. Precise owner locations on 0253b2f: `composer.js:581` (`unsentDelivered` does not
+remember sent when the page has no tracked recovery entry), `app.js:799` (`onConv` overwrites the
+confirmed user item after `noteDelivery`), and shared receipt handling around `app.js:465/538`.
+Opus should preserve confirmed sent across every receipt/history/event entry point, including the
+bubble and recovery maps after reload. Recheck duplicates/ordering and preserve edited drafts.
+Codex did not patch these frontend-owned files or claim their tests already cover this boundary.
+
+## P2: measurements and screenshot observation are separate evidence
+
+Actual stub model catalog supplied a deliberately long model display name. Each measured page
+contained attachments, a new draft and an unknown card. Sending was disabled intentionally by
+unknown; model/permission/effort menus opened, and normal sends worked in the separate flow above.
+
+| Surface | Requested size | Measured content / body / html width | Send control right edge |
+|---|---|---|---|
+| Chrome, sidebar expanded | 900×640 | 900 / 900 / 900 | 861 |
+| Chrome, responsive sidebar hidden | 700×640 | 700 / 700 / 700 | 661 |
+| Chrome, sidebar expanded | 1280×900 | 1280 / 1280 / 1280 | 1149 |
+| Isolated native WKWebView, sidebar expanded | 900×640 outer | 900×612 content; 900 / 900 / 900 | 861 |
+| Isolated native WKWebView, dev resize | 700×640 outer | 700×612 content; 700 / 700 / 700 | 661 |
+| Isolated native WKWebView | 1280×900 outer | 1280×872 content; 1280 / 1280 / 1280 | 1149 |
+
+DOM measurements (`unknown-result.json`, `native-result.json`) verify widths and all composer
+button rectangles. Browser controls were clicked through Playwright; native menus used scripted
+DOM clicks inside the test-owned window. Native draft/attachment setup was scripted from the
+synthetic receipt. This is not physical pointer, IME or clipboard acceptance. 700px native size was
+requested through the development resize API, not a claim about manual minimum-size dragging.
+
+Screenshots were separately opened and visually inspected: `layout-900.png`, `layout-700.png`,
+`layout-1280.png` and native **content** snapshots `native-900.png`, `native-700.png`,
+`native-1280.png`. Controls are visible, long labels truncate inside their buttons, cards and draft
+stay inside the window. No horizontal page overflow or control clipping observed. The companion
+`native-*-window.png` captures include a title bar but have blank content; those captures are **not
+visual passing evidence**. WKWebView content snapshots contain the actual rendered interface.
+The temporary native window was closed after measurement; the installed app was not replaced.
+
+## QA record / local evidence
+
+| Check | Result |
+|---|---|
+| Correct page/project/session; nonblank content | Pass on completed browser probes and native content snapshots |
+| Fatal overlay / JavaScript page exceptions | No application overlay or page exceptions in completed browser probes |
+| Console/network health | Expected exercised 409/412/500/503, aborted response/event and 404 errors; not zero-network-error claim |
+| Interaction proof | Retained message + editable draft, read-only refresh, receipt settlement and menus verified above |
+| Screenshot evidence | Browser and WKWebView content pass P2; stale-not-sent/stale-unknown/stale-query demonstrate open P1 |
+| Whole feature | **Not fully accepted** while sent monotonicity remains open |
+
+Evidence initially saved to `/private/tmp/repobridge-recheck-0253b2f/`; a durable copy is at
+`/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-0253b2f/`.
+Contains probe source, final test log, result JSON and screenshots; excludes auth URL/runtime files,
+real user data and credentials. Initial probe failures were probe defects: wrong expected title,
+ambiguous locator, incorrect Claude client-ID field, polling/async assumptions and leftover test
+writer. They were corrected before the completed observations reported here. Native evaluator
+first hit CSP `unsafe-eval`, then Foundation serialization; the probe switched to supported direct
+`run_js` and JSON serialization without changing product CSP or product code. Blank full-window
+captures remain recorded as a capture limitation rather than converted to a pass.
+
+[Exact isolated launch instructions](EXISTING_SESSIONS_SANDBOX.md). Key browser APIs:
+Playwright `chromium.launch`, locator fill/click/filechooser, screenshot and DOM measurement;
+`route.fetch/abort/fulfill` only for labelled network faults. Native own-window snapshot and resize
+used the existing development hooks. No real harness binary, official desktop or model was invoked.
+
+## Separate limitations
+
+- Full-page refresh loses **ordinary unsent composer drafts**. History refresh retaining a draft
+  and persistent receipts recovering already accepted messages are different behaviors. No draft
+  persistence feature was added.
+- Claude has no corresponding durable receipt mechanism. Normal echo/send was tested; Claude
+  exit-before-echo evidence is limited to existing unit/page injection coverage, not a new actual
+  fault-stub/real-native proof.
+- Real outside-created sessions, real official desktop continuation, IME, clipboard and VoiceOver
+  remain unverified. All real model allowances remain exhausted and were not renewed.
+- No private history scan, credential reads, installed database upgrade, default-branch merge,
+  release, or replacement of the user's running version.
+
+---
+
+## Previous integration evidence (historical, superseded for current acceptance)
+
+The following record is retained for provenance. Its old frontend findings/counts do not describe
+0253b2f; the current findings and fixed-version evidence are above.
+
+### Prior independent integration — 2026-10-09
 
 Backend corrections are implemented. The integrated UI still has an **open P1 delivery-state
 finding**, so this is not a claim of complete frontend or real-native acceptance.

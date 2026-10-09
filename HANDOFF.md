@@ -1,40 +1,49 @@
 # Handoff
 
-## Independent integration delivered; Opus recovery correction remains — 2026-10-09
+## Independent revalidation delivered; sent monotonicity remains — 2026-10-09
 
-- Backend input: `ad585c59fc932280f49833414e8ea5b90ca3ff75`.
-- Frontend confirmed in PR #3: `202630f659d0411ef81a611ccc98bf09bfc4b4aa` (includes initial
-  `b866e093db3200923ed181f8c98513fcbee3ec87`).
-- Backend fixes: `9a9d6f9c9be4bedb840edbf931d8f39f38c055b9`, PR #4 remains based on PR #3.
-- Fixed integrated code: `fee9971c6ed5599a679b4a9193c6ba1940609fdc` in
+- Confirmed frontend input: `0253b2f3ee89511c0222607dc3d418cfc742731e` (includes both earlier deliveries).
+- Backend fix unchanged: `9a9d6f9c9be4bedb840edbf931d8f39f38c055b9`.
+- Previous integration: `67d6e1e52e6b26a2318284c04ae1c4d9963bd674`.
+- New exact merge/code tested: `a0381264eed8c120ac7be3787d71d7ff76f8ee7b` in the existing
   `/Users/chan/Downloads/repobridge-integration`, branch `codex/existing-session-integration`.
-  Frontend and old main checkout were not modified; no default merge or installed replacement.
-- Exact interface: [EXISTING_SESSIONS_API.md](docs/EXISTING_SESSIONS_API.md).
-  Final evidence and reproduction: [EXISTING_SESSIONS_INTEGRATION.md](docs/EXISTING_SESSIONS_INTEGRATION.md).
+- PR #4 remains based on frontend PR #3. Final documentation receipt/merge hashes are in PR #4;
+  only documentation follows the tested code. Frontend worktree and old main checkout unchanged.
 
-Final fixed-integration offline suite: **990 passed in 1055.66s (17m35s)**; no failures or skips.
-No live test was run.
-Use **absolute** `PYTHONPATH=/Users/chan/Downloads/repobridge-integration/src` when reusing the
-frontend virtualenv: detached workers change cwd and otherwise import its editable frontend source.
-The initial mixed-path attempt was interrupted and is not final evidence. Static checks passed;
-rendered tests used only isolated native-shaped histories, actual fault stubs and fake desktop apps.
+Final fixed-code offline check: **994 passed in 983.79s (16m23s), zero failures and zero skips**.
+Ruff check and format passed (189 files); strict mypy passed (59 source files).
+62 focused tests passed before the full check. Absolute integration PYTHONPATH was used throughout.
+Actual fault stubs, isolated native histories/HOME/state, fake desktop apps and independent port-0
+servers only. No previous frontend/backend test count substitutes for this run.
 
-**Next frontend integration:** Opus must handle `delivery.state=unknown` before treating an ended
-run as definitely unsent. Reproduced P1: backend says possibly delivered, UI says “没有发出的消息”
-and offers recovery into the composer. Query the durable `/delivery?client_id=` after missed events,
-ended run or reload; preserve uncertain text/attachments separately, with no automatic resend.
-Keep current late-sent/new-draft/attachment protections. The backend already blocks new sends while
-unknown. Also review 900×640 composer overflow (P2); optional explicit unsupported display now has
-`capability_unsupported`. Deliver a confirmed new frontend SHA for Codex to merge and reverify in the
-independent integration checkout. Codex does not edit frontend-owned files to bypass this handoff.
+**P1 partially corrected, still open:** normal not_sent/unknown paths, persistent reload/restart,
+exact clientId history confirmation, draft/attachment retention and no blind retries pass. But a
+fresh page that has read sent can be downgraded by a stale unknown event or query, re-blocking send;
+a stale not_sent event exposes misleading recovery. Backend receipt remains sent. On the same page,
+late unknown still overwrites the confirmed user bubble. These ordering probes inject page events
+or HTTP responses; they are not observed real-native traffic.
 
-External-held unlink now correctly returns `details.external`; its confirmation requirement is
-unchanged and remains atomic. `/desktop/return` is the intended native-link external-ended
-confirmation: records a user statement, clears hold/cache, starts/sends nothing, and does not claim
-observed external exit. New receipts use existing event storage; no additional schema migration.
+Opus owns the correction in `static/composer.js` and `static/app.js`: retain confirmed sent even
+without a tracked entry after reload; apply monotonicity to both recovery state and conversation
+items across history/SSE/query paths. Preserve edited drafts and do not auto-resend.
+[Reproduction already delivered to PR #3](https://github.com/CHANxuanyu/harness-bridge/pull/3#issuecomment-6085409315).
+Codex continues integration after Opus supplies a confirmed SHA; do not bypass file ownership.
 
-Real designated outside-created sessions and official-desktop continuity remain unverified and
-unbudgeted. No unrelated history, credentials, live database, model calls or prior-allowance reuse.
+**P2 closed within offline scope:** 900×640 sidebar-open, 700px and 1280×900 browser checks plus
+isolated native WKWebView measurements/content snapshots pass. Whole-window captures were blank
+and are not passing evidence. Explicit unsupported/read-failure UI classification and external
+confirmation-only semantics also pass. Full synthetic feature acceptance cannot be marked passed
+while the remaining P1 is open.
+
+[Detailed evidence](docs/EXISTING_SESSIONS_INTEGRATION.md) ·
+[Contract](docs/EXISTING_SESSIONS_API.md) · [Safe isolated startup](docs/EXISTING_SESSIONS_SANDBOX.md).
+Local durable evidence: `/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-0253b2f/`.
+
+Keep separate: ordinary unsent drafts are lost on full-page reload (not history refresh or receipt
+recovery); Claude lacks durable receipt and pre-echo exit evidence is limited; real outside-created
+sessions, real official desktop continuation, IME, clipboard and VoiceOver remain unverified.
+No real model allowance, credential/private-history access, installed database change, default
+merge, release or installed replacement occurred. Only owned test processes were closed.
 
 ## Prior backend delivery — 2026-10-09
 
