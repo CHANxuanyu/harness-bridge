@@ -298,8 +298,14 @@ function updateWindowTitle(force = false) {
 
 function connect() {
   const es = new EventSource('/api/stream');
-  es.addEventListener('open', () => { S.connected = true; renderNotice(); });
-  es.addEventListener('error', () => { S.connected = false; renderNotice(); });
+  es.addEventListener('open', () => {
+    const missed = S.wasDisconnected;
+    S.connected = true;
+    S.wasDisconnected = false;
+    renderNotice();
+    if (missed) checkInflight({ force: true }); // events may have been missed while away
+  });
+  es.addEventListener('error', () => { S.connected = false; S.wasDisconnected = true; renderNotice(); });
   es.addEventListener('state', (e) => onState(JSON.parse(e.data)));
   es.addEventListener('reset', (e) => onReset(JSON.parse(e.data)));
   es.addEventListener('output', (e) => onOutput(JSON.parse(e.data)));
@@ -441,31 +447,111 @@ function onOutput(msg) {
   }
 }
 
-// Undelivered messages: the store (composer.js) decides, this applies it to the input box.
+// Message delivery (composer.js holds the rules): every source of a receipt goes through
+// noteDelivery — the /send answer, user items from the conversation and its SSE stream, history
+// reloads and GET …/delivery. An ended run, a missing receipt or a failed query proves nothing.
 function boxOf(sid) {
   const root = convEl;
   const visible = !!(root && !root.hidden && root.dataset.sid === sid && root._ta);
   return { visible, draft: visible ? root._ta.value : (S.drafts.get(sid) || ''), attIds: attachments(sid).map((a) => a.id || a.name) };
 }
 
-function settleInflight(sid, item) {
-  if (!item || typeof item.id !== 'string' || !item.id.startsWith('user:')) return;
-  const cid = item.id.slice(5);
-  if (item.status === 'sent') applyUnsent(sid, unsentDelivered(S.unsent, cid, boxOf(sid)));
-  else if (item.status === 'failed') applyUnsent(sid, unsentFail(S.unsent, cid, boxOf(sid)), '这条消息没有发送成功');
+function itemClientId(item) {
+  if (!item) return null;
+  if (item.client_id) return String(item.client_id);
+  return typeof item.id === 'string' && item.id.startsWith('user:') ? item.id.slice(5) : null;
 }
 
-function checkInflight() {
+function noteDelivery(sid, item) {
+  const cid = itemClientId(item);
+  if (!cid || (item.type && item.type !== 'user')) return;
+  const outcome = deliveryOutcome(item);
+  const d = item.delivery || {};
+  if (outcome === 'sent') applyUnsent(sid, unsentDelivered(S.unsent, cid, boxOf(sid)));
+  else if (outcome === 'not_sent') applyUnsent(sid, unsentFail(S.unsent, cid, boxOf(sid)));
+  else if (outcome === 'unknown') {
+    // Only a backend receipt can be adopted after a reload; a bare status is not one.
+    const info = { receipt: !!item.delivery, reason: d.reason || null, message: d.message || null };
+    applyUnsent(sid, unsentUnknown(S.unsent, cid, info, item.delivery ? { ...item, sid } : null));
+  }
+}
+
+// After a page of history arrives (reload, restart, refresh): settle what it confirms and pick up
+// receipts the backend keeps for unresolved messages.
+function reconcileDeliveries(sid, items) {
+  for (const it of items) {
+    if (!it || it.type !== 'user') continue;
+    const cid = itemClientId(it);
+    if (it.delivery || (cid && (S.unsent.inflight.has(cid) || S.unsent.placed.has(cid) || [...S.unsent.uncertain.values(), ...S.unsent.held.values()].some((l) => l.some((e) => e.clientId === cid))))) noteDelivery(sid, it);
+  }
+}
+
+let inflightTimer = null;
+function scheduleInflightCheck(ms = 2000) {
+  clearTimeout(inflightTimer);
+  if (S.unsent.inflight.size) inflightTimer = setTimeout(() => checkInflight(), ms);
+}
+
+// Open messages are settled by their receipt: when the run has ended, when no answer came for a
+// while (a missed SSE event), or on demand (reconnect, "刷新结果").
+function checkInflight({ force = false } = {}) {
   for (const e of [...S.unsent.inflight.values()]) {
     const c = S.convs.get(e.sid);
     const it = c && c.items.get(`user:${e.clientId}`);
-    if (it && (it.status === 'sent' || it.status === 'failed')) { settleInflight(e.sid, it); continue; }
+    const outcome = deliveryOutcome(it);
+    if (outcome && outcome !== 'pending') { noteDelivery(e.sid, it); continue; }
     const s = findSession(e.sid);
     if (!s) { S.unsent.inflight.delete(e.clientId); continue; }
-    if (!s.active && Date.now() - e.at > 200) {
-      applyUnsent(e.sid, unsentFail(S.unsent, e.clientId, boxOf(e.sid)), s.run && s.run.failure ? '连接失败，这条消息没有发出' : '连接已结束，这条消息没有发出');
-    }
+    const due = force || !s.active || Date.now() - e.at > 8000;
+    if (due && !e.checking && Date.now() >= (e.nextCheck || 0)) queryReceipt(e);
   }
+  scheduleInflightCheck();
+}
+
+async function queryReceipt(e) {
+  e.checking = true;
+  let receipt = null;
+  let error = null;
+  try {
+    receipt = await api('GET', `/api/sessions/${e.sid}/delivery?client_id=${encodeURIComponent(e.clientId)}`);
+  } catch (x) { error = x; }
+  e.checking = false;
+  if (!S.unsent.inflight.has(e.clientId)) return;
+  const outcome = deliveryOutcome(receipt);
+  if (outcome && outcome !== 'pending') { noteDelivery(e.sid, receipt); return; }
+  e.tries = (e.tries || 0) + 1;
+  e.nextCheck = Date.now() + Math.min(30000, 1000 * 2 ** e.tries);
+  const s = findSession(e.sid);
+  const missing = error && error.details && error.details.reason === 'message_not_found';
+  if (s && s.active && !(missing && e.lostAnswer)) { scheduleInflightCheck(Math.max(500, e.nextCheck - Date.now())); return; }
+  // Nothing settles it (the connection has ended, or the answer was lost and no receipt exists):
+  // keep the message apart as unknown.
+  const label = s ? HARNESS[s.harness].label : 'CLI';
+  let message = null;
+  if (receipt) message = e.tries >= 5 ? `接收记录仍显示“正在发送”，但连接已经结束；无法确认 ${label} 是否收到。请核对历史。` : null;
+  else if (missing) message = `RepoBridge 没有这条消息的接收记录，连接在确认前结束了；无法确认 ${label} 是否收到。请核对历史，不要直接重发。`;
+  else if (e.tries >= 3) message = `暂时查询不到这条消息的接收结果；无法确认 ${label} 是否收到。可以稍后刷新结果，或核对历史。`;
+  if (message) applyUnsent(e.sid, unsentUnknown(S.unsent, e.clientId, { receipt: false, reason: missing ? 'message_not_found' : null, message }));
+  else scheduleInflightCheck(Math.max(500, e.nextCheck - Date.now()));
+}
+
+// "刷新结果": ask for the receipt again and re-read the history (read-only reconciliation).
+async function recheckDelivery(sid, cid, button) {
+  await guarded(`recheck:${cid}`, async () => {
+    let receipt = null;
+    try { receipt = await api('GET', `/api/sessions/${sid}/delivery?client_id=${encodeURIComponent(cid)}`); } catch (x) { /* no receipt: the history check below still runs */ }
+    if (receipt) noteDelivery(sid, receipt);
+    const s = findSession(sid);
+    if (s && s.view_mode === 'conversation') await refreshConversation(sid, { quiet: true });
+    const still = [...(S.unsent.uncertain.get(sid) || [])].some((x) => x.clientId === cid);
+    if (still) toast('结果仍未确认：接收记录和原生历史里都还没有它被收到的证据。');
+  }, button);
+}
+
+function deliveryBlock(s) {
+  // Same rule as the backend's delivery_unknown refusal (receipt-backed unknowns only).
+  const u = unsentBlocking(S.unsent, s.session_id);
+  return u ? '上一条消息是否送达还不确定：先“刷新结果”并核对历史，确认前不能发送新消息（可以继续编辑草稿）。' : null;
 }
 
 // Every toast says what actually happened to the text.
@@ -474,18 +560,27 @@ function applyUnsent(sid, r, why = '这条消息没有发出', { quiet = false }
   const root = convEl;
   const s = findSession(sid);
   const here = boxOf(sid).visible;
+  const name = s ? `「${s.title}」` : '另一个会话';
   if (r.to === 'box') {
     root._ta.value = r.entry.text;
     S.drafts.set(sid, r.entry.text);
     autosize(root._ta);
     mergeAttachments(attachments(sid), r.entry.atts);
     renderAttachRow(sid);
-    updateConvChrome(s, convFor(sid));
     if (!quiet) toast(`${why}，已放回输入框。`);
   } else if (r.to === 'held') {
     renderUnsent(sid);
     toast(r.visible ? `${why}。输入框里有新的草稿，没有覆盖它；原消息保留在输入框上方。`
-      : `${s ? `「${s.title}」` : '另一个会话'}中有一条消息没有发出，已保留；回到那个会话后可以放回输入框。`);
+      : `${name}中有一条消息没有发出，已保留；回到那个会话后可以放回输入框。`);
+  } else if (r.to === 'uncertain') {
+    renderUnsent(sid);
+    if (!r.adopted && !r.updated) {
+      toast(here ? '这条消息是否送达还不确定，已单独保留；请核对历史，不要直接重发。'
+        : `${name}中有一条消息是否送达还不确定，已单独保留。`);
+    }
+  } else if (r.to === 'resolved') {
+    renderUnsent(sid);
+    toast('那条结果待确认的消息已确认送达（CLI 已接收）。这不代表那一轮已经完成。');
   } else if (r.to === 'unheld') {
     renderUnsent(sid);
     toast('一条标为“没有发出”的消息后来由 CLI 确认已送达，已从未发送列表中移除。');
@@ -495,11 +590,32 @@ function applyUnsent(sid, r, why = '这条消息没有发出', { quiet = false }
     const ids = new Set(r.entry.atts.map((a) => a.id).filter(Boolean));
     S.attach.set(sid, attachments(sid).filter((a) => !ids.has(a.id)));
     renderAttachRow(sid);
-    if (here) updateConvChrome(s, convFor(sid));
-    toast('那条消息其实已经送达（CLI 已确认），已从输入框移除，避免重复发送。');
+    toast('那条消息其实已经送达（CLI 已接收），已从输入框移除，避免重复发送。');
   } else if (r.to === 'edited') {
-    toast('那条消息其实已经送达（CLI 已确认）。输入框里的文字已改动，没有自动清除；发送前请确认是否还需要。');
+    toast('那条消息其实已经送达（CLI 已接收）。输入框里的文字已改动，没有自动清除；发送前请确认是否还需要。');
   }
+  if (here) updateConvChrome(s, convFor(sid));
+}
+
+// A user item the history shows as not sent can be put back by hand (also after a reload).
+function restoreFromItem(sid, it) {
+  const root = convEl;
+  if (!boxOf(sid).visible) return;
+  const cid = itemClientId(it);
+  unsentTake(S.unsent, sid, cid);
+  const text = it.text || '';
+  const atts = (it.attachments || []).filter((a) => a.id);
+  root._ta.value = root._ta.value.trim() ? `${root._ta.value.replace(/\s+$/, '')}\n\n${text}` : text;
+  S.drafts.set(sid, root._ta.value);
+  mergeAttachments(attachments(sid), atts);
+  S.unsent.settled.add(cid);
+  S.unsent.placed.set(cid, { sid, clientId: cid, text, atts, at: Date.now() });
+  autosize(root._ta);
+  renderAttachRow(sid);
+  renderUnsent(sid);
+  updateConvChrome(findSession(sid), convFor(sid));
+  queuePatch(sid, it.id);
+  root._ta.focus();
 }
 
 function onEnded(msg) {
@@ -614,6 +730,7 @@ async function loadConversation(sid, { refresh = false } = {}) {
   } finally { c.loading = false; }
   if (c.reloadAfter) { c.reloadAfter = false; loadConversation(sid); return; }
   if (S.sel && S.sel.id === sid) renderConversation(findSession(sid), { full: true });
+  if (!c.error) reconcileDeliveries(sid, [...c.items.values()]);
   checkInflight();
 }
 
@@ -643,6 +760,7 @@ async function refreshConversation(sid, { quiet = false } = {}) {
     // The loaded history stays; the failure is shown next to it.
     c.refreshNote = `刷新失败：${e.message}`;
   } finally { c.refreshing = false; }
+  if (result) reconcileDeliveries(sid, result.reset ? [...c.items.values()] : [...result.changed, ...result.added].map((id) => c.items.get(id)));
   if (!S.sel || S.sel.id !== sid) return;
   const s = findSession(sid);
   if (result && result.reset) { renderConversation(s, { full: true }); return; }
@@ -688,7 +806,7 @@ function onConv(msg) {
     c.turn = msg.turn;
     if (S.sel && S.sel.id === msg.session_id) updateConvChrome(findSession(msg.session_id), c);
   } else if (msg.op === 'upsert') {
-    settleInflight(msg.session_id, msg.item);
+    noteDelivery(msg.session_id, msg.item);
     const prev = c.items.get(msg.item.id);
     c.items.set(msg.item.id, prev ? { ...prev, ...msg.item } : msg.item);
     if (!prev) c.order.push(msg.item.id);
@@ -726,6 +844,7 @@ function flushPatches() {
     if (node) root._nodes.set(id, node); else root._nodes.delete(id);
   }
   patchQueue.clear();
+  if (c.paged && root._head) fillHistoryHead(root._head, s, c); // e.g. "empty" → messages arrived
   updateEmpty(root, s, c);
   restickOrJump(root, keep);
   updateConvChrome(s, c);
@@ -828,6 +947,11 @@ function buildConversation(root, s, c) {
 // The top of the list: where the history came from, whether it is complete, refresh, and the
 // control for older pages. Updated in place so a refresh never rebuilds the list.
 function fillHistoryHead(head, s, c) {
+  // Rebuilt only when what it shows changes (it is refreshed on every streamed patch).
+  const st = historyState(c);
+  const key = JSON.stringify([c.paged, st, c.loading, c.refreshing, c.refreshNote, c.error, c.live, c.hasMore, c.olderLoading, c.olderError, !!c.order.length, c.history && c.history.source]);
+  if (head._key === key) return;
+  head._key = key;
   head.replaceChildren();
   if (!c.paged) { const line = sourceLine(s, c); if (line) head.append(line); return; }
   const banner = historyBanner(c, {
@@ -909,9 +1033,15 @@ const TOOL_STATE = {
 function itemNode(s, it) {
   if (!it) return null;
   if (it.type === 'user') {
-    const meta = it.status === 'sending' ? '发送中…' : it.status === 'failed' ? '没有发送成功' : null;
+    const outcome = deliveryOutcome(it);
+    const meta = outcome === 'pending' ? (it.delivery && it.delivery.state === 'queued' ? '等待连接…' : '发送中…')
+      : outcome === 'not_sent' ? '没有发出' : outcome === 'unknown' ? '发送结果待确认' : null;
+    const cid = itemClientId(it);
+    const putBack = outcome === 'not_sent' && s.session_id && !s.preview && !S.unsent.placed.has(cid) && !(S.unsent.held.get(s.session_id) || []).some((x) => x.clientId === cid)
+      ? h('button', { class: 'btn-plain', type: 'button', title: '把这条没有发出的消息放回输入框（有草稿时接在后面）', onclick: () => restoreFromItem(s.session_id, it) }, '放回输入框') : null;
     const atts = (it.attachments || []).length ? h('div', { class: 'msg-atts' }, it.attachments.map((a) => h('span', { class: 'att-chip small', title: a.name }, icon(a.kind === 'image' ? 'image' : 'file'), h('span', { class: 'att-name' }, a.name)))) : null;
-    return h('div', { class: `msg user selectable ${it.status === 'failed' ? 'failed' : ''}`, dataset: { id: it.id } }, atts, it.text || null, meta ? h('div', { class: 'meta' }, meta) : null);
+    return h('div', { class: `msg user selectable ${outcome === 'not_sent' ? 'failed' : outcome === 'unknown' ? 'uncertain' : ''}`, dataset: { id: it.id } }, atts, it.text || null,
+      meta ? h('div', { class: 'meta', title: (it.delivery && it.delivery.message) || null }, meta, putBack ? ' · ' : null, putBack) : null);
   }
   if (it.type === 'assistant') {
     const md = renderMarkdown(it.text || '', { onCopy: (code) => copyText(code, '已复制代码') });
@@ -1069,7 +1199,9 @@ function updateConvChrome(s, c) {
   root._send.classList.toggle('stop', running);
   root._send.title = running ? '停止这一轮（Esc）' : uploading ? '附件还在上传…' : '发送（↩）';
   root._send.setAttribute('aria-label', running ? '停止这一轮' : '发送');
-  root._send.disabled = running ? false : (!!blocked || uploading || (!root._ta.value.trim() && !ready.length));
+  const waiting = deliveryBlock(s);
+  root._send.disabled = running ? false : (!!blocked || !!waiting || uploading || (!root._ta.value.trim() && !ready.length));
+  if (!running && waiting) root._send.title = waiting;
   root._hint.textContent = running ? 'Esc 停止这一轮' : '↩ 发送 · ⇧↩ 换行 · @ 引用文件';
   renderControls(s);
   const st = root._status;
@@ -1078,6 +1210,7 @@ function updateConvChrome(s, c) {
   const pick = settingsStatus(s);
   if (S.switching.has(s.session_id)) st.append(stGlyph({ tone: 'idle', glyph: 'spin' }), '正在切换视图：结束原连接，再用原生恢复接续…');
   else if (pendingPerm) { st.classList.add('warn'); st.append(stGlyph({ tone: 'warn', glyph: 'alert' }), `${label} 在等你确认权限或回答问题`); }
+  else if (waiting && !running) { st.classList.add('warn'); st.append(stGlyph({ tone: 'warn', glyph: 'alert' }), h('span', { class: 'grow' }, waiting)); }
   else if (pick && pick.tone === 'bad') {
     st.classList.add('bad');
     st.append(icon('warning'), h('span', { class: 'grow selectable' }, pick.text),
@@ -1104,9 +1237,12 @@ async function sendFromComposer(sid, confirmExternal = false) {
   const atts = attachments(sid);
   const ids = atts.filter((a) => a.id && !a.error).map((a) => a.id);
   if ((!text.trim() && !ids.length) || composerBlock(s) || atts.some((a) => a.uploading) || S.pending.has(`send:${sid}`)) return;
+  const waiting = deliveryBlock(s);
+  if (waiting) { toast(waiting, 'error'); return; } // the draft stays in the box
   const askExternal = (ext) => confirmPopover(root._send, externalPrompt(findSession(sid) || s, ext, () => sendFromComposer(sid, true)));
   if (s.external && !confirmExternal) { askExternal(s.external); return; }
   const clientId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const sent = atts.filter((a) => ids.includes(a.id));
   unsentReleaseBox(S.unsent, sid);
   S.pending.add(`send:${sid}`);
   root._ta.value = '';
@@ -1114,31 +1250,52 @@ async function sendFromComposer(sid, confirmExternal = false) {
   autosize(root._ta);
   hidePop();
   updateConvChrome(s, convFor(sid));
-  try {
-    await api('POST', `/api/sessions/${sid}/send`, { text, client_id: clientId, confirm_external: confirmExternal, attachments: ids });
-    // Tracked by client_id until the CLI reports it delivered (or the connection ends first).
-    unsentTrack(S.unsent, { sid, clientId, text, atts: atts.filter((a) => ids.includes(a.id)), at: Date.now() });
-    S.attach.set(sid, atts.filter((a) => !ids.includes(a.id)));
-    const c = S.convs.get(sid);
-    settleInflight(sid, c && c.items.get(`user:${clientId}`));
-    setTimeout(checkInflight, 400); // the run may have ended before this response arrived
+  const track = () => {
+    unsentTrack(S.unsent, { sid, clientId, text, atts: sent, at: Date.now() });
+    S.attach.set(sid, attachments(sid).filter((a) => !ids.includes(a.id)));
     renderAttachRow(sid);
+  };
+  try {
+    const res = await api('POST', `/api/sessions/${sid}/send`, { text, client_id: clientId, confirm_external: confirmExternal, attachments: ids });
+    // Accepted locally; tracked by client_id until a receipt or the CLI settles it. 200 is not
+    // native delivery: queued / sending stay open.
+    track();
+    const c = S.convs.get(sid);
+    noteDelivery(sid, res && res.delivery ? { client_id: clientId, type: 'user', text, attachments: sent, delivery: res.delivery } : c && c.items.get(`user:${clientId}`));
+    setTimeout(checkInflight, 400); // the run may have ended before this response arrived
   } catch (e) {
-    // Not accepted: the attachments are still in the box; the text goes back, or next to a
-    // draft typed meanwhile, never over it.
+    const d = e.details || {};
+    if (!e.code) {
+      // No answer reached the page: the request may still have been accepted. Its receipt decides;
+      // without one the message is kept as unknown, not put back as unsent.
+      track();
+      const entry = S.unsent.inflight.get(clientId);
+      Object.assign(entry, { at: 0, tries: 2, lostAnswer: true });
+      queryReceipt(entry);
+      toast(`${e.message}。正在核对这条消息是否已被接收…`, 'error');
+      return;
+    }
+    // Refused before acceptance (the backend answered with an error): definitely not sent. The
+    // attachments are still in the box; the text goes back, or next to a draft typed meanwhile.
     unsentTrack(S.unsent, { sid, clientId, text, atts: [], at: Date.now() });
     const box = boxOf(sid);
     box.attIds = box.attIds.filter((id) => !ids.includes(id)); // this message's own attachments
     const r = unsentFail(S.unsent, clientId, box);
     applyUnsent(sid, r, '这条消息没有发出', { quiet: true });
-    if (e.details && e.details.external && !confirmExternal) {
+    if (d.reason === 'delivery_unknown' && d.client_id) {
+      // An earlier message's result is unknown: show that one (from its receipt) as the reason.
+      try { noteDelivery(sid, await api('GET', `/api/sessions/${sid}/delivery?client_id=${encodeURIComponent(d.client_id)}`)); } catch (x) {
+        if (d.delivery) noteDelivery(sid, { client_id: d.client_id, type: 'user', text: '', attachments: [], delivery: d.delivery });
+      }
+      toast(e.message, 'error');
+    } else if (d.external && !confirmExternal) {
       if (r && r.to === 'held') {
         // Confirming would send the new draft instead; only record that outside use has ended.
-        confirmPopover(root._send, externalPrompt(findSession(sid) || s, e.details.external, () => guarded(`return:${sid}`, async () => {
+        confirmPopover(root._send, externalPrompt(findSession(sid) || s, d.external, () => guarded(`return:${sid}`, async () => {
           await api('POST', `/api/sessions/${sid}/desktop/return`, {});
           toast('已记录外部已结束。原消息保留在输入框上方，放回后再发送。');
         })));
-      } else askExternal(e.details.external);
+      } else askExternal(d.external);
     } else fail(e);
   } finally { S.pending.delete(`send:${sid}`); }
 }

@@ -155,3 +155,94 @@ def test_the_page_tracks_the_same_client_id_it_sends() -> None:
     assert "item.id.startsWith('user:')" in app and "`user:${e.clientId}`" in app
     # The old helper that dropped the text when a draft existed is gone.
     assert "restoreUnsent" not in app
+
+
+def test_receipt_states_map_to_outcomes() -> None:
+    out = _node(
+        """
+const o = (delivery, status) => deliveryOutcome({ type: 'user', status, delivery });
+({
+  queued: o({ state: 'queued' }, 'sending'),
+  sending: o({ state: 'sending' }, 'sending'),
+  notSent: o({ state: 'not_sent' }, 'failed'),
+  sent: o({ state: 'sent' }, 'sent'),
+  unknown: o({ state: 'unknown' }, 'unknown'),
+  claudeEcho: o(undefined, 'sent'),
+  claudeFailed: o(undefined, 'failed'),
+  nothing: deliveryOutcome(null),
+})
+"""
+    )
+    assert out == {
+        "queued": "pending",
+        "sending": "pending",
+        "notSent": "not_sent",
+        "sent": "sent",
+        "unknown": "unknown",
+        "claudeEcho": "sent",
+        "claudeFailed": "not_sent",
+        "nothing": None,
+    }
+
+
+def test_unknown_is_kept_apart_never_restored_as_unsent_and_blocks_only_with_a_receipt() -> None:
+    out = _node(
+        """
+send('c1', '可能已送达', [att('a1')]);
+const info = (message) => ({ receipt: true, reason: 'native_process_exited', message });
+const r = unsentUnknown(st, 'c1', info('m'));
+const again = unsentUnknown(st, 'c1', info('m2'));
+const blocking = unsentBlocking(st, 's1') && unsentBlocking(st, 's1').clientId;
+const cannotDismiss = unsentDismiss(st, 's1', 'c1');
+send('c2', '没有回执的会话');
+unsentUnknown(st, 'c2', { receipt: false, message: 'no receipt' });
+const uncertain = (st.uncertain.get('s1') || []).map((e) => [e.clientId, e.receipt]);
+const dismissed = unsentDismiss(st, 's1', 'c2').clientId;
+({ to: r.to, adopted: r.adopted, againUpdated: again.updated, blocking, cannotDismiss,
+   uncertain, dismissed, held: held(), placed: [...st.placed.keys()] })
+"""
+    )
+    assert out["to"] == "uncertain" and out["adopted"] is False and out["againUpdated"] is True
+    assert out["blocking"] == "c1"  # a receipt-backed unknown waits for evidence
+    assert out["cannotDismiss"] is None  # only native evidence resolves it
+    assert out["uncertain"] == [["c1", True], ["c2", False]]
+    assert out["dismissed"] == "c2"  # no receipt: the user may remove the kept copy after checking
+    assert out["held"] == [] and out["placed"] == []  # never put back as a definite failure
+
+
+def test_late_sent_resolves_unknown_and_a_reload_adopts_the_receipt_once() -> None:
+    out = _node(
+        """
+send('c1', '提交后失去回复');
+unsentUnknown(st, 'c1', { receipt: true });
+const resolved = unsentDelivered(st, 'c1', box('新草稿')).to;
+const afterResolve = unsentBlocking(st, 's1');
+const lateFail = unsentFail(st, 'c1', box(''));
+// After a page reload nothing is tracked: the receipt in the history is adopted, once.
+const item = { sid: 's2', client_id: 'r1', text: '重启前的消息',
+  attachments: [att('x1'), { name: 'no-id' }] };
+const adopted = unsentUnknown(st, 'r1', { receipt: true }, item);
+const twice = unsentUnknown(st, 'r1', { receipt: true }, item);
+const bare = unsentUnknown(st, 'r2', { receipt: true });
+const adoptedView = [adopted.to, adopted.adopted, adopted.entry.atts.length];
+({ resolved, afterResolve, lateFail, adopted: adoptedView,
+   twice: twice.updated, bare, heldS2: held('s2') })
+"""
+    )
+    assert out["resolved"] == "resolved" and out["afterResolve"] is None
+    assert out["lateFail"] is None  # a confirmed message is never downgraded
+    assert out["adopted"] == ["uncertain", True, 1]  # attachment references with an ID only
+    assert out["twice"] is True and out["bare"] is None and out["heldS2"] == []
+
+
+def test_a_definite_failure_after_unknown_follows_the_not_sent_rules_once() -> None:
+    out = _node(
+        """
+send('c1', '原本不确定', [att('a1')]);
+unsentUnknown(st, 'c1', { receipt: true });
+const r = unsentFail(st, 'c1', box('新草稿'));
+const again = unsentFail(st, 'c1', box(''));
+({ to: r.to, again, uncertain: (st.uncertain.get('s1') || []).length, held: held() })
+"""
+    )
+    assert out == {"to": "held", "again": None, "uncertain": 0, "held": ["c1"]}

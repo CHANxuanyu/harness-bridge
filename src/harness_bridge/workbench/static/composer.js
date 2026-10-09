@@ -501,26 +501,51 @@ function popKey(e, sid) {
   return false;
 }
 
-// ---------------------------------------------------------------- messages not yet delivered
-// A sent message is tracked by its client_id (the ID the backend and the CLI echo report) until
-// the CLI says it was delivered. If the connection fails first, its text and attachments are kept:
-// back in the input box when that box is empty, otherwise in a visible "not sent" list above it.
-// Never over a new draft, never resent by itself, never restored twice; a late delivery report
-// takes the kept copy back out. The functions below hold no DOM state (tested in Node).
+// ---------------------------------------------------------------- message delivery
+// Every sent message is tracked by its client_id: the ID in the /send request, the user item
+// `user:<client_id>` and the backend's durable receipt (docs/EXISTING_SESSIONS_API.md, "message
+// receipts"). Only the receipt or the CLI decides what happened:
+// - queued / sending: still open; the text and attachments stay tracked.
+// - not_sent: definitely not submitted. Put back into the input box when it is empty, otherwise
+//   kept in a "没有发出" list above it; never over a new draft, never twice, never resent.
+// - sent: accepted by the CLI (not "the turn succeeded"); an untouched kept copy is taken out.
+// - unknown: may have reached the CLI. Kept apart as "发送结果待确认"; never treated as unsent,
+//   never put back as a retry, never resent. Only a receipt or the user's own check resolves it.
+// A missing receipt, a failed query or an ended process is never proof either way. The functions
+// below hold no DOM state (tested in Node).
 
 function unsentStore() {
-  // inflight: cid -> entry; held: sid -> [entry]; placed: cid -> entry put back into the box.
-  return { inflight: new Map(), held: new Map(), placed: new Map(), settled: new Set() };
+  // inflight: cid -> entry; held: sid -> [not_sent entry]; uncertain: sid -> [unknown entry];
+  // placed: cid -> entry put back into the box; settled: cids whose outcome was applied.
+  return { inflight: new Map(), held: new Map(), uncertain: new Map(), placed: new Map(), settled: new Set() };
+}
+
+// What a receipt or user item says: 'pending' | 'not_sent' | 'sent' | 'unknown' | null.
+function deliveryOutcome(item) {
+  if (!item) return null;
+  const state = item.delivery && item.delivery.state;
+  if (state === 'queued' || state === 'sending') return 'pending';
+  if (state === 'not_sent' || state === 'sent' || state === 'unknown') return state;
+  return { sending: 'pending', sent: 'sent', failed: 'not_sent', unknown: 'unknown' }[item.status] || null;
 }
 
 function unsentTrack(st, entry) {
   st.inflight.set(entry.clientId, entry);
 }
 
-// `box` describes that session's input box right now: { visible, draft, attIds }.
+function takeUncertain(st, cid) {
+  for (const [sid, list] of st.uncertain) {
+    const e = list.find((x) => x.clientId === cid);
+    if (e) { st.uncertain.set(sid, list.filter((x) => x !== e)); return e; }
+  }
+  return null;
+}
+
+// Definitely not sent. `box` describes that session's input box now: { visible, draft, attIds }.
 function unsentFail(st, cid, box) {
-  const e = st.inflight.get(cid);
-  if (!e || st.settled.has(cid)) return null;
+  if (st.settled.has(cid)) return null;
+  const e = st.inflight.get(cid) || takeUncertain(st, cid);
+  if (!e) return null;
   st.inflight.delete(cid);
   st.settled.add(cid);
   if (box.visible && !box.draft.trim() && !box.attIds.length) {
@@ -531,8 +556,32 @@ function unsentFail(st, cid, box) {
   return { to: 'held', entry: e, visible: box.visible };
 }
 
+// Result unknown. `info`: { reason, message, receipt } — receipt=true when the backend holds an
+// unknown receipt (it then refuses new sends), false when RepoBridge has no receipt to consult.
+// `item` adopts a receipt seen after a reload, when nothing is tracked for it here.
+function unsentUnknown(st, cid, info, item) {
+  if (st.settled.has(cid)) return null;
+  let e = st.inflight.get(cid);
+  const tracked = !!e;
+  if (e) st.inflight.delete(cid);
+  else {
+    for (const list of st.uncertain.values()) {
+      const known = list.find((x) => x.clientId === cid);
+      if (known) { Object.assign(known, info); return { to: 'uncertain', entry: known, updated: true }; }
+    }
+    if (!item) return null;
+    e = { sid: item.sid, clientId: cid, text: item.text || '', atts: (item.attachments || []).filter((a) => a.id), at: 0 };
+  }
+  Object.assign(e, info);
+  st.uncertain.set(e.sid, [...(st.uncertain.get(e.sid) || []), e]);
+  return { to: 'uncertain', entry: e, adopted: !tracked };
+}
+
+// Accepted by the CLI (now, or as a late receipt).
 function unsentDelivered(st, cid, box) {
   if (st.inflight.delete(cid)) { st.settled.add(cid); return { to: 'delivered' }; }
+  const u = takeUncertain(st, cid);
+  if (u) { st.settled.add(cid); return { to: 'resolved', entry: u }; }
   for (const [sid, list] of st.held) {
     const e = list.find((x) => x.clientId === cid);
     if (e) { st.held.set(sid, list.filter((x) => x !== e)); return { to: 'unheld', entry: e }; }
@@ -549,6 +598,20 @@ function unsentTake(st, sid, cid) {
   const e = list.find((x) => x.clientId === cid) || null;
   if (e) st.held.set(sid, list.filter((x) => x !== e));
   return e;
+}
+
+// The user checked the history and removes a copy RepoBridge holds no receipt for. A copy backed by
+// an unknown receipt cannot be dismissed here: only native evidence resolves it.
+function unsentDismiss(st, sid, cid) {
+  const list = st.uncertain.get(sid) || [];
+  const e = list.find((x) => x.clientId === cid && !x.receipt) || null;
+  if (e) { st.uncertain.set(sid, list.filter((x) => x !== e)); st.settled.add(cid); }
+  return e;
+}
+
+// A send in this session must wait while the backend holds an unknown receipt (delivery_unknown).
+function unsentBlocking(st, sid) {
+  return (st.uncertain.get(sid) || []).find((x) => x.receipt) || null;
 }
 
 // The user sent from the box again: copies put back there are theirs from now on.
@@ -613,23 +676,40 @@ function buildComposer(s) {
 function renderUnsent(sid) {
   const root = convEl;
   if (!root || !root._unsent || root.dataset.sid !== sid) return;
-  const list = S.unsent.held.get(sid) || [];
-  root._unsent.hidden = !list.length;
-  root._unsent.replaceChildren(...list.map((e) => {
+  const held = S.unsent.held.get(sid) || [];
+  const uncertain = S.unsent.uncertain.get(sid) || [];
+  root._unsent.hidden = !held.length && !uncertain.length;
+  const preview = (e) => {
     const text = e.text.trim();
-    return h('div', { class: 'unsent-item', dataset: { cid: e.clientId } },
+    return h('div', { class: 'unsent-text selectable', title: text }, text || '（只有附件）');
+  };
+  const copyBtn = (e) => h('button', { class: 'icon-btn small', type: 'button', title: '复制文字', 'aria-label': '复制这条消息的文字', onclick: () => copyText(e.text, '已复制') }, icon('copy'));
+  root._unsent.replaceChildren(
+    ...uncertain.map((e) => h('div', { class: 'unsent-item uncertain', dataset: { cid: e.clientId }, role: 'status' },
+      icon('info'),
+      h('div', { class: 'unsent-body' },
+        h('div', { class: 'unsent-head' }, '发送结果待确认', e.atts.length ? h('span', { class: 'hint' }, ` · ${e.atts.length} 个附件`) : null),
+        h('div', { class: 'unsent-why' }, e.message || '这条消息可能已经送达，但没有收到确认。请核对历史，不要重复发送。'),
+        preview(e)),
+      h('div', { class: 'unsent-actions' },
+        h('button', { class: 'btn btn-small', type: 'button', title: '重新查询接收记录，并重新读取原生历史', onclick: (ev) => recheckDelivery(sid, e.clientId, ev.currentTarget) }, '刷新结果'),
+        copyBtn(e),
+        e.receipt ? null : h('button', { class: 'icon-btn small', type: 'button', title: '已在历史中核对过：移除这份留存（不发送、不撤回任何内容）', 'aria-label': '移除这份留存', onclick: (ev) => confirmPopover(ev.currentTarget, {
+          title: '移除这份留存？', text: '只移除 RepoBridge 里保留的副本，不会发送、重发或撤回任何内容。请先在历史中核对它是否已经送达。', confirm: '移除', danger: true,
+          onConfirm: () => { unsentDismiss(S.unsent, sid, e.clientId); renderUnsent(sid); updateConvChrome(findSession(sid), convFor(sid)); },
+        }) }, icon('close'))))),
+    ...held.map((e) => h('div', { class: 'unsent-item', dataset: { cid: e.clientId } },
       icon('warning'),
       h('div', { class: 'unsent-body' },
         h('div', { class: 'unsent-head' }, '没有发出的消息', e.atts.length ? h('span', { class: 'hint' }, ` · ${e.atts.length} 个附件`) : null),
-        h('div', { class: 'unsent-text selectable', title: text }, text || '（只有附件）')),
+        preview(e)),
       h('div', { class: 'unsent-actions' },
         h('button', { class: 'btn btn-small', type: 'button', title: '放到输入框里；输入框已有文字时接在后面，不覆盖', onclick: () => putBackUnsent(sid, e.clientId) }, '放回输入框'),
-        h('button', { class: 'icon-btn small', type: 'button', title: '复制文字', 'aria-label': '复制没有发出的文字', onclick: () => copyText(e.text, '已复制') }, icon('copy')),
+        copyBtn(e),
         h('button', { class: 'icon-btn small', type: 'button', title: '丢弃这条没有发出的消息', 'aria-label': '丢弃这条没有发出的消息', onclick: (ev) => confirmPopover(ev.currentTarget, {
           title: '丢弃这条消息？', text: '它没有发给 CLI。丢弃后无法从 RepoBridge 找回（可以先复制文字）。', confirm: '丢弃', danger: true,
           onConfirm: () => { unsentTake(S.unsent, sid, e.clientId); renderUnsent(sid); },
-        }) }, icon('close'))));
-  }));
+        }) }, icon('close'))))));
 }
 
 function putBackUnsent(sid, cid) {
