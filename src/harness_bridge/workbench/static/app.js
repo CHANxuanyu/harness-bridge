@@ -450,16 +450,12 @@ function onOutput(msg) {
 // Message delivery (composer.js holds the rules): every source of a receipt goes through
 // noteDelivery — the /send answer, user items from the conversation and its SSE stream, history
 // reloads and GET …/delivery. An ended run, a missing receipt or a failed query proves nothing.
+// Every user item written to the conversation cache goes through deliveryView, so a confirmed
+// message is never shown, kept or blocking as anything but sent.
 function boxOf(sid) {
   const root = convEl;
   const visible = !!(root && !root.hidden && root.dataset.sid === sid && root._ta);
   return { visible, draft: visible ? root._ta.value : (S.drafts.get(sid) || ''), attIds: attachments(sid).map((a) => a.id || a.name) };
-}
-
-function itemClientId(item) {
-  if (!item) return null;
-  if (item.client_id) return String(item.client_id);
-  return typeof item.id === 'string' && item.id.startsWith('user:') ? item.id.slice(5) : null;
 }
 
 function noteDelivery(sid, item) {
@@ -467,12 +463,37 @@ function noteDelivery(sid, item) {
   if (!cid || (item.type && item.type !== 'user')) return;
   const outcome = deliveryOutcome(item);
   const d = item.delivery || {};
-  if (outcome === 'sent') applyUnsent(sid, unsentDelivered(S.unsent, cid, boxOf(sid)));
-  else if (outcome === 'not_sent') applyUnsent(sid, unsentFail(S.unsent, cid, boxOf(sid)));
+  if (outcome === 'sent') applyUnsent(sid, unsentDelivered(S.unsent, sid, cid, boxOf(sid), item.delivery));
+  else if (outcome === 'not_sent') applyUnsent(sid, unsentFail(S.unsent, sid, cid, boxOf(sid)));
   else if (outcome === 'unknown') {
     // Only a backend receipt can be adopted after a reload; a bare status is not one.
     const info = { receipt: !!item.delivery, reason: d.reason || null, message: d.message || null };
-    applyUnsent(sid, unsentUnknown(S.unsent, cid, info, item.delivery ? { ...item, sid } : null));
+    applyUnsent(sid, unsentUnknown(S.unsent, sid, cid, info, item.delivery ? item : null));
+  }
+  syncBubble(sid, cid, item);
+}
+
+// A receipt that did not come with the item itself (the /send answer, a query) moves the cached
+// bubble forward only: from waiting to the receipt's state, or to sent once confirmed. Unknown and
+// not_sent do not replace each other here; events and history pages carry those.
+function syncBubble(sid, cid, receipt) {
+  const c = S.convs.get(sid);
+  const id = `user:${cid}`;
+  const it = c && c.items.get(id);
+  const was = deliveryOutcome(it);
+  const now = deliveryOutcome(receipt);
+  if (!it || !now || now === 'pending' || now === was || (was && was !== 'pending' && now !== 'sent')) return;
+  const status = receipt.status || { sent: 'sent', not_sent: 'failed', unknown: 'unknown' }[now];
+  c.items.set(id, deliveryView(S.unsent, sid, { ...it, status, ...(receipt.delivery ? { delivery: receipt.delivery } : {}) }));
+  queuePatch(sid, id);
+}
+
+// History pages are cached through deliveryView too (first page, refresh, older page).
+function viewItems(sid, c, ids) {
+  for (const id of ids) {
+    const it = c.items.get(id);
+    const v = it && it.type === 'user' ? deliveryView(S.unsent, sid, it) : it;
+    if (v !== it) c.items.set(id, v);
   }
 }
 
@@ -531,7 +552,7 @@ async function queryReceipt(e) {
   if (receipt) message = e.tries >= 5 ? `接收记录仍显示“正在发送”，但连接已经结束；无法确认 ${label} 是否收到。请核对历史。` : null;
   else if (missing) message = `RepoBridge 没有这条消息的接收记录，连接在确认前结束了；无法确认 ${label} 是否收到。请核对历史，不要直接重发。`;
   else if (e.tries >= 3) message = `暂时查询不到这条消息的接收结果；无法确认 ${label} 是否收到。可以稍后刷新结果，或核对历史。`;
-  if (message) applyUnsent(e.sid, unsentUnknown(S.unsent, e.clientId, { receipt: false, reason: missing ? 'message_not_found' : null, message }));
+  if (message) applyUnsent(e.sid, unsentUnknown(S.unsent, e.sid, e.clientId, { receipt: false, reason: missing ? 'message_not_found' : null, message }));
   else scheduleInflightCheck(Math.max(500, e.nextCheck - Date.now()));
 }
 
@@ -602,13 +623,15 @@ function restoreFromItem(sid, it) {
   const root = convEl;
   if (!boxOf(sid).visible) return;
   const cid = itemClientId(it);
+  // Confirmed since this bubble was drawn: nothing to put back.
+  if (unsentConfirmed(S.unsent, sid, cid)) { queuePatch(sid, it.id); return; }
   unsentTake(S.unsent, sid, cid);
   const text = it.text || '';
   const atts = (it.attachments || []).filter((a) => a.id);
   root._ta.value = root._ta.value.trim() ? `${root._ta.value.replace(/\s+$/, '')}\n\n${text}` : text;
   S.drafts.set(sid, root._ta.value);
   mergeAttachments(attachments(sid), atts);
-  S.unsent.settled.add(cid);
+  S.unsent.handled.add(cid);
   S.unsent.placed.set(cid, { sid, clientId: cid, text, atts, at: Date.now() });
   autosize(root._ta);
   renderAttachRow(sid);
@@ -715,6 +738,7 @@ async function loadConversation(sid, { refresh = false } = {}) {
   try {
     const data = await api('GET', `/api/sessions/${sid}/conversation?limit=${PAGE_SIZE}${refresh ? '&refresh=1' : ''}`);
     pagerReplace(c, data);
+    viewItems(sid, c, c.order);
     c.turn = data.turn;
     c.live = data.live;
     c.runId = data.run_id;
@@ -748,6 +772,7 @@ async function refreshConversation(sid, { quiet = false } = {}) {
     const data = await api('GET', `/api/sessions/${sid}/conversation?limit=${PAGE_SIZE}&since=${encodeURIComponent(c.nextSince)}`);
     if (data.live && c.runId && data.run_id !== c.runId) { c.refreshing = false; loadConversation(sid); return; }
     result = pagerMerge(c, data);
+    viewItems(sid, c, result.reset ? c.order : [...result.changed, ...result.added]);
     if (result.reset) c.olderError = null;
     c.turn = data.turn;
     c.live = data.live;
@@ -778,6 +803,7 @@ async function loadOlder(sid) {
   try {
     const data = await api('GET', `/api/sessions/${sid}/conversation?limit=${PAGE_SIZE}&before=${encodeURIComponent(c.nextBefore)}`);
     fresh = pagerPrepend(c, data);
+    viewItems(sid, c, fresh);
   } catch (e) {
     c.olderError = historyFailure(e);
   } finally { c.olderLoading = false; }
@@ -808,7 +834,7 @@ function onConv(msg) {
   } else if (msg.op === 'upsert') {
     noteDelivery(msg.session_id, msg.item);
     const prev = c.items.get(msg.item.id);
-    c.items.set(msg.item.id, prev ? { ...prev, ...msg.item } : msg.item);
+    c.items.set(msg.item.id, deliveryView(S.unsent, msg.session_id, prev ? { ...prev, ...msg.item } : msg.item));
     if (!prev) c.order.push(msg.item.id);
     queuePatch(msg.session_id, msg.item.id);
   } else if (msg.op === 'delta') {
@@ -1270,6 +1296,7 @@ async function sendFromComposer(sid, confirmExternal = false) {
       // without one the message is kept as unknown, not put back as unsent.
       track();
       const entry = S.unsent.inflight.get(clientId);
+      if (!entry) return; // its event already confirmed it
       Object.assign(entry, { at: 0, tries: 2, lostAnswer: true });
       queryReceipt(entry);
       toast(`${e.message}。正在核对这条消息是否已被接收…`, 'error');
@@ -1280,7 +1307,7 @@ async function sendFromComposer(sid, confirmExternal = false) {
     unsentTrack(S.unsent, { sid, clientId, text, atts: [], at: Date.now() });
     const box = boxOf(sid);
     box.attIds = box.attIds.filter((id) => !ids.includes(id)); // this message's own attachments
-    const r = unsentFail(S.unsent, clientId, box);
+    const r = unsentFail(S.unsent, sid, clientId, box);
     applyUnsent(sid, r, '这条消息没有发出', { quiet: true });
     if (d.reason === 'delivery_unknown' && d.client_id) {
       // An earlier message's result is unknown: show that one (from its receipt) as the reason.
@@ -2783,7 +2810,7 @@ function runDevHash() {
       convEl._ta.value = '等待连接时写的新草稿';
       S.drafts.set(s.session_id, convEl._ta.value);
       unsentTrack(S.unsent, { sid: s.session_id, clientId: 'devunsent', text: '把导出的金额统一保留两位小数，并补一个 0.1 + 0.2 的测试', atts: [], at: 0 });
-      applyUnsent(s.session_id, unsentFail(S.unsent, 'devunsent', boxOf(s.session_id)), '连接失败，这条消息没有发出');
+      applyUnsent(s.session_id, unsentFail(S.unsent, s.session_id, 'devunsent', boxOf(s.session_id)), '连接失败，这条消息没有发出');
     }
     else if (action === 'filter') { $('#filter').value = arg || ''; S.filter = arg || ''; renderSidebar(); }
     else if (action === 'diff' && s) {
