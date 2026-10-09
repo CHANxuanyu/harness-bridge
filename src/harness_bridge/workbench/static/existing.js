@@ -40,11 +40,15 @@ const wasUnlinked = (s) => !!(s && s.native_link && !s.native_link.linked);
 const linkHold = (s) => !!(s && s.external && s.external.via === 'native-link');
 
 // What a failed request means for the history UI; decided by code/details, never by message text.
+// PREFLIGHT_FAILED covers any failed precondition or native read, so it is a read failure: "not
+// supported" needs an explicit capability reason from the contract, and the contract
+// (docs/EXISTING_SESSIONS_API.md at ad585c5) does not define one yet. Sources that cannot be
+// resumed are told apart by the candidate's own resume_reason instead.
 function historyFailure(e) {
   const code = e && e.code;
   const d = (e && e.details) || {};
   if (code === 'STATE_CONFLICT' && d.reason === 'cursor_expired') return { kind: 'expired', text: '读取位置已过期（超过 10 分钟、应用重启过或缓存已满）' };
-  if (code === 'PREFLIGHT_FAILED') return { kind: 'unsupported', text: (e && e.message) || '当前无法读取' };
+  if (code === 'PREFLIGHT_FAILED') return { kind: 'error', preflight: true, text: (e && e.message) || '读取前的检查没有通过' };
   if (code === 'NOT_FOUND') return { kind: 'gone', text: (e && e.message) || '找不到' };
   return { kind: 'error', text: (e && e.message) || String(e) };
 }
@@ -352,10 +356,10 @@ function openAddExisting({ projectId, harness, query, pick, prefer } = {}) {
       list.append(h('div', { class: 'ex-state' }, stGlyph({ tone: 'idle', glyph: 'spin' }), `正在读取这个项目的 ${label} 原生记录…`));
     } else if (st.listError) {
       const f = st.listError;
-      list.append(h('div', { class: `ex-state ${f.kind === 'unsupported' ? 'warn' : 'bad'}`, role: 'alert' },
-        h('b', {}, f.kind === 'unsupported' ? '当前不支持' : '读取失败'),
+      list.append(h('div', { class: 'ex-state bad', role: 'alert' },
+        h('b', {}, '读取失败'),
         h('div', { class: 'selectable' }, f.text),
-        h('div', { class: 'hint' }, f.kind === 'unsupported' ? `没有退回到更大范围的搜索。可以检查 ${label} 是否可用后重试。` : '这不是“没有会话”：读取本身没有成功。'),
+        h('div', { class: 'hint' }, f.preflight ? `这不是“没有会话”：读取前的检查没有通过，也没有退回到更大范围的搜索。可以检查 ${label} 和项目文件夹后重试。` : '这不是“没有会话”：读取本身没有成功。'),
         h('button', { class: 'btn btn-small', type: 'button', onclick: () => discover() }, '重试')));
     } else if (!st.rows.length) {
       list.append(h('div', { class: 'ex-state' }, h('b', {}, st.q ? '没有匹配的会话' : `没有找到 ${label} 会话`),

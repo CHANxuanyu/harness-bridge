@@ -54,7 +54,7 @@ const S = {
   drafts: new Map(),      // session_id -> unsent composer text
   openItems: new Set(),   // expanded tool / reasoning items
   switching: new Set(),   // sessions changing view
-  inflight: new Map(),    // session_id -> sent message not yet confirmed delivered {clientId, text, atts}
+  unsent: unsentStore(),  // sent messages until delivered; kept copies of undelivered ones (composer.js)
 };
 
 // ---------------------------------------------------------------- helpers
@@ -441,35 +441,64 @@ function onOutput(msg) {
   }
 }
 
-// A message the backend accepted is kept until the CLI reports it delivered: a connection that ends
-// first (for example a native writer lock refusing the resume) puts it back into the input box
-// instead of losing it.
-function settleInflight(sid, item) {
-  const f = S.inflight.get(sid);
-  if (!f || !item || item.id !== `user:${f.clientId}`) return;
-  if (item.status === 'sent') S.inflight.delete(sid);
-  else if (item.status === 'failed') restoreUnsent(sid, '这条消息没有发送成功，已放回输入框。');
+// Undelivered messages: the store (composer.js) decides, this applies it to the input box.
+function boxOf(sid) {
+  const root = convEl;
+  const visible = !!(root && !root.hidden && root.dataset.sid === sid && root._ta);
+  return { visible, draft: visible ? root._ta.value : (S.drafts.get(sid) || ''), attIds: attachments(sid).map((a) => a.id || a.name) };
 }
 
-function restoreUnsent(sid, message) {
-  const f = S.inflight.get(sid);
-  if (!f) return;
-  S.inflight.delete(sid);
-  const here = convEl && convEl.dataset.sid === sid && convEl._ta;
-  if (here && !convEl._ta.value) { convEl._ta.value = f.text; autosize(convEl._ta); } else if (!here && !S.drafts.get(sid)) S.drafts.set(sid, f.text);
-  if (f.atts.length) { S.attach.set(sid, [...attachments(sid), ...f.atts]); renderAttachRow(sid); }
-  if (here) updateConvChrome(findSession(sid), convFor(sid));
-  toast(message);
+function settleInflight(sid, item) {
+  if (!item || typeof item.id !== 'string' || !item.id.startsWith('user:')) return;
+  const cid = item.id.slice(5);
+  if (item.status === 'sent') applyUnsent(sid, unsentDelivered(S.unsent, cid, boxOf(sid)));
+  else if (item.status === 'failed') applyUnsent(sid, unsentFail(S.unsent, cid, boxOf(sid)), '这条消息没有发送成功');
 }
 
 function checkInflight() {
-  for (const [sid, f] of S.inflight) {
-    const s = findSession(sid);
-    if (!s) { S.inflight.delete(sid); continue; }
-    const c = S.convs.get(sid);
-    const it = c && c.items.get(`user:${f.clientId}`);
-    if (it && it.status === 'sent') { S.inflight.delete(sid); continue; }
-    if (!s.active && Date.now() - f.at > 200) restoreUnsent(sid, `这条消息没有发出（${s.run && s.run.failure ? '连接失败' : '连接已结束'}），已放回输入框。`);
+  for (const e of [...S.unsent.inflight.values()]) {
+    const c = S.convs.get(e.sid);
+    const it = c && c.items.get(`user:${e.clientId}`);
+    if (it && (it.status === 'sent' || it.status === 'failed')) { settleInflight(e.sid, it); continue; }
+    const s = findSession(e.sid);
+    if (!s) { S.unsent.inflight.delete(e.clientId); continue; }
+    if (!s.active && Date.now() - e.at > 200) {
+      applyUnsent(e.sid, unsentFail(S.unsent, e.clientId, boxOf(e.sid)), s.run && s.run.failure ? '连接失败，这条消息没有发出' : '连接已结束，这条消息没有发出');
+    }
+  }
+}
+
+// Every toast says what actually happened to the text.
+function applyUnsent(sid, r, why = '这条消息没有发出', { quiet = false } = {}) {
+  if (!r || r.to === 'delivered') return;
+  const root = convEl;
+  const s = findSession(sid);
+  const here = boxOf(sid).visible;
+  if (r.to === 'box') {
+    root._ta.value = r.entry.text;
+    S.drafts.set(sid, r.entry.text);
+    autosize(root._ta);
+    mergeAttachments(attachments(sid), r.entry.atts);
+    renderAttachRow(sid);
+    updateConvChrome(s, convFor(sid));
+    if (!quiet) toast(`${why}，已放回输入框。`);
+  } else if (r.to === 'held') {
+    renderUnsent(sid);
+    toast(r.visible ? `${why}。输入框里有新的草稿，没有覆盖它；原消息保留在输入框上方。`
+      : `${s ? `「${s.title}」` : '另一个会话'}中有一条消息没有发出，已保留；回到那个会话后可以放回输入框。`);
+  } else if (r.to === 'unheld') {
+    renderUnsent(sid);
+    toast('一条标为“没有发出”的消息后来由 CLI 确认已送达，已从未发送列表中移除。');
+  } else if (r.to === 'cleared') {
+    if (here) { root._ta.value = ''; autosize(root._ta); }
+    S.drafts.delete(sid);
+    const ids = new Set(r.entry.atts.map((a) => a.id).filter(Boolean));
+    S.attach.set(sid, attachments(sid).filter((a) => !ids.has(a.id)));
+    renderAttachRow(sid);
+    if (here) updateConvChrome(s, convFor(sid));
+    toast('那条消息其实已经送达（CLI 已确认），已从输入框移除，避免重复发送。');
+  } else if (r.to === 'edited') {
+    toast('那条消息其实已经送达（CLI 已确认）。输入框里的文字已改动，没有自动清除；发送前请确认是否还需要。');
   }
 }
 
@@ -585,6 +614,7 @@ async function loadConversation(sid, { refresh = false } = {}) {
   } finally { c.loading = false; }
   if (c.reloadAfter) { c.reloadAfter = false; loadConversation(sid); return; }
   if (S.sel && S.sel.id === sid) renderConversation(findSession(sid), { full: true });
+  checkInflight();
 }
 
 // User-initiated (or after "outside has ended"): fetch what changed since the last page and patch
@@ -1077,11 +1107,7 @@ async function sendFromComposer(sid, confirmExternal = false) {
   const askExternal = (ext) => confirmPopover(root._send, externalPrompt(findSession(sid) || s, ext, () => sendFromComposer(sid, true)));
   if (s.external && !confirmExternal) { askExternal(s.external); return; }
   const clientId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-  const restore = () => {
-    if (convEl && convEl.dataset.sid === sid && convEl._ta && !convEl._ta.value) { convEl._ta.value = text; autosize(convEl._ta); }
-    if (!S.drafts.get(sid)) S.drafts.set(sid, text);
-    updateConvChrome(findSession(sid), convFor(sid));
-  };
+  unsentReleaseBox(S.unsent, sid);
   S.pending.add(`send:${sid}`);
   root._ta.value = '';
   S.drafts.delete(sid);
@@ -1090,16 +1116,30 @@ async function sendFromComposer(sid, confirmExternal = false) {
   updateConvChrome(s, convFor(sid));
   try {
     await api('POST', `/api/sessions/${sid}/send`, { text, client_id: clientId, confirm_external: confirmExternal, attachments: ids });
-    S.inflight.set(sid, { clientId, text, atts: atts.filter((a) => ids.includes(a.id)), at: Date.now() });
+    // Tracked by client_id until the CLI reports it delivered (or the connection ends first).
+    unsentTrack(S.unsent, { sid, clientId, text, atts: atts.filter((a) => ids.includes(a.id)), at: Date.now() });
     S.attach.set(sid, atts.filter((a) => !ids.includes(a.id)));
     const c = S.convs.get(sid);
     settleInflight(sid, c && c.items.get(`user:${clientId}`));
     setTimeout(checkInflight, 400); // the run may have ended before this response arrived
     renderAttachRow(sid);
   } catch (e) {
-    restore();
-    if (e.details && e.details.external && !confirmExternal) askExternal(e.details.external);
-    else fail(e);
+    // Not accepted: the attachments are still in the box; the text goes back, or next to a
+    // draft typed meanwhile, never over it.
+    unsentTrack(S.unsent, { sid, clientId, text, atts: [], at: Date.now() });
+    const box = boxOf(sid);
+    box.attIds = box.attIds.filter((id) => !ids.includes(id)); // this message's own attachments
+    const r = unsentFail(S.unsent, clientId, box);
+    applyUnsent(sid, r, '这条消息没有发出', { quiet: true });
+    if (e.details && e.details.external && !confirmExternal) {
+      if (r && r.to === 'held') {
+        // Confirming would send the new draft instead; only record that outside use has ended.
+        confirmPopover(root._send, externalPrompt(findSession(sid) || s, e.details.external, () => guarded(`return:${sid}`, async () => {
+          await api('POST', `/api/sessions/${sid}/desktop/return`, {});
+          toast('已记录外部已结束。原消息保留在输入框上方，放回后再发送。');
+        })));
+      } else askExternal(e.details.external);
+    } else fail(e);
   } finally { S.pending.delete(`send:${sid}`); }
 }
 
@@ -2580,6 +2620,14 @@ function runDevHash() {
     else if (['model', 'effort', 'mode'].includes(action) && s) { S.devOpen = action; render(); }
     else if (action === 'attach' && s && convEl && convEl._attachBtn) attachMenu(s, convEl._attachBtn);
     else if (action === 'existing') openAddExisting({ harness: arg || undefined, pick: arg2 ? Number(arg2) : undefined });
+    else if (action === 'unsent' && s && convEl && convEl._ta) {
+      // Snapshot of the kept-message state: a synthetic message whose connection "failed" while a
+      // new draft was in the box.
+      convEl._ta.value = '等待连接时写的新草稿';
+      S.drafts.set(s.session_id, convEl._ta.value);
+      unsentTrack(S.unsent, { sid: s.session_id, clientId: 'devunsent', text: '把导出的金额统一保留两位小数，并补一个 0.1 + 0.2 的测试', atts: [], at: 0 });
+      applyUnsent(s.session_id, unsentFail(S.unsent, 'devunsent', boxOf(s.session_id)), '连接失败，这条消息没有发出');
+    }
     else if (action === 'filter') { $('#filter').value = arg || ''; S.filter = arg || ''; renderSidebar(); }
     else if (action === 'diff' && s) {
       const pick = (tries) => {

@@ -810,3 +810,11 @@ input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--primary-
   .ex-bar .select { max-width: none; flex: 1; }
   .ex-view-label { display: none; }
 }
+/* kept copies of messages that were not delivered, above the input box */
+.unsent-list { display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px; }
+.unsent-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: var(--r-pop); background: var(--warn-soft); font-size: 12.5px; }
+.unsent-item > .i { color: var(--warn); flex: none; margin-top: 2px; width: 14px; height: 14px; }
+.unsent-body { flex: 1; min-width: 0; }
+.unsent-head { font-weight: 600; font-size: 12px; margin-bottom: 2px; }
+.unsent-text { color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.unsent-actions { display: flex; gap: 4px; align-items: center; flex: none; }

@@ -160,23 +160,29 @@ const done = (state, reasons) => ({ state, completeness: { state: 'x', reasons: 
 def test_failures_are_classified_by_code_and_details_not_message_text() -> None:
     out = _node(
         """
-const f = (code, details, message) => historyFailure({ code, details, message }).kind;
+const f = (code, details, message) => historyFailure({ code, details, message });
 ({
-  expired: f('STATE_CONFLICT', { reason: 'cursor_expired' }, 'anything'),
-  conflict: f('STATE_CONFLICT', {}, 'History cursor expired; reload the first page'),
-  unsupported: f('PREFLIGHT_FAILED', {}, 'x'),
-  gone: f('NOT_FOUND', {}, 'x'),
-  other: f('INVALID_INPUT', {}, 'x'),
+  expired: f('STATE_CONFLICT', { reason: 'cursor_expired' }, 'anything').kind,
+  conflict: f('STATE_CONFLICT', {}, 'History cursor expired; reload the first page').kind,
+  preflight: f('PREFLIGHT_FAILED', {}, 'Codex is unavailable for native history'),
+  // No capability reason is defined by the contract yet: nothing is guessed from fields or text.
+  guessed: f('PREFLIGHT_FAILED', { reason: 'unsupported' }, 'unsupported; no fallback').kind,
+  gone: f('NOT_FOUND', {}, 'x').kind,
+  other: f('INVALID_INPUT', {}, 'x').kind,
 })
 """
     )
-    assert out == {
-        "expired": "expired",
-        "conflict": "error",
-        "unsupported": "unsupported",
-        "gone": "gone",
-        "other": "error",
+    assert out["expired"] == "expired"
+    assert out["conflict"] == "error"
+    assert out["preflight"] == {
+        "kind": "error",
+        "preflight": True,
+        "text": "Codex is unavailable for native history",
     }
+    assert out["guessed"] == "error"
+    assert out["gone"] == "gone" and out["other"] == "error"
+    src = (STATIC / "existing.js").read_text(encoding="utf-8")
+    assert "当前不支持" not in src
 
 
 def test_existing_session_ui_uses_only_contract_routes() -> None:
