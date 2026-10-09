@@ -251,3 +251,55 @@ def test_unknown_survives_restart_and_only_exact_native_receipt_settles_it(fx: W
         assert len(calls(fx, "turn/start")) == 1
     finally:
         server.close()
+
+
+@pytest.mark.parametrize("native_diagnostic", ["", "synthetic CLI diagnostic"])
+def test_run_failure_does_not_freeze_delivery_uncertainty(fx: WB, native_diagnostic: str) -> None:
+    wb, sid = setup(fx, WB_STUB_TURN_DELIVERY="exit")
+    wb.start_run(sid, "resume", confirm_external=True)
+    wait_for(lambda: idle(wb, sid))
+    live = wb._live[sid]
+    assert live.conv is not None
+    # Historical application notice remains diagnostic evidence, not a process-exit summary.
+    notice = "这条消息可能已被 Codex 接收，但结果无法确认。"
+    live.conv.upsert({"id": "n:old-delivery", "type": "notice", "level": "error", "text": notice})
+    if native_diagnostic:
+        with (live.run_dir / "stderr.log").open("a") as log:
+            log.write(native_diagnostic + "\n")
+    wb.send_message(sid, "late proof", client_id="banner-proof")
+    wait_for(lambda: not WB.view(wb, sid)["active"])
+    run = WB.run(wb, sid)
+    assert run["status"] == "failed" and run["exit_code"] == 3 and run["exit_confirmed"]
+    assert "退出码 3" in run["failure"] and "无法确认" not in run["failure"]
+    assert notice in run["output_tail"]
+    if native_diagnostic:
+        assert native_diagnostic in run["failure"] and native_diagnostic in run["output_tail"]
+    assert wb.message_delivery(sid, "banner-proof")["delivery"]["state"] == "unknown"
+    native = wb.store.get_session(sid)["native_session_id"]
+    path = Path(fx.env["WB_STUB_HOME"]) / "codex" / f"{native}.turns.json"
+    rows = json.loads(path.read_text())
+    rows.append(
+        {
+            "id": "late-proof",
+            "status": "completed",
+            "items": [
+                {
+                    "type": "userMessage",
+                    "id": "late-proof-user",
+                    "clientId": "banner-proof",
+                    "content": [{"type": "text", "text": "late proof"}],
+                }
+            ],
+        }
+    )
+    path.write_text(json.dumps(rows))
+    wb.conversation(sid, refresh=True)
+    assert wb.message_delivery(sid, "banner-proof")["delivery"]["state"] == "sent"
+    assert WB.run(wb, sid) == run
+    wb.close()
+    fx.instances.remove(wb)
+    wb = fx.open()
+    wb.conversation(sid, refresh=True)
+    assert WB.run(wb, sid) == run
+    assert wb.message_delivery(sid, "banner-proof")["delivery"]["state"] == "sent"
+    assert len(wb.store.list_runs(sid)) == 1 and len(calls(fx, "turn/start")) == 1
