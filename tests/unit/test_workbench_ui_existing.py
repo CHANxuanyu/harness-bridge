@@ -153,36 +153,55 @@ const done = (state, reasons) => ({ state, completeness: { state: 'x', reasons: 
     )
     assert out["legacy"] == {"paged": False, "hasMore": False, "state": "legacy"}
     assert out["empty"] == "empty"  # a successful empty read, never a failure
-    assert out["partial"] == {"state": "partial", "reasons": ["native_file_limit"], "error": None}
+    assert out["partial"] == {
+        "state": "partial",
+        "reasons": ["native_file_limit"],
+        "error": None,
+        "unsupported": False,
+    }
     assert out["unavailable"]["state"] == "unavailable" and out["unavailable"]["error"] == "boom"
 
 
-def test_failures_are_classified_by_code_and_details_not_message_text() -> None:
+def test_failures_are_classified_by_stable_fields_not_message_text() -> None:
     out = _node(
         """
 const f = (code, details, message) => historyFailure({ code, details, message });
+const st = (history) => {
+  const m = {};
+  pagerReplace(m, { items: [], history, page: { state: 'unavailable', completeness: {} } });
+  return historyState(m);
+};
 ({
   expired: f('STATE_CONFLICT', { reason: 'cursor_expired' }, 'anything').kind,
+  candidate: f('STATE_CONFLICT', { reason: 'candidate_expired' }, 'x').kind,
   conflict: f('STATE_CONFLICT', {}, 'History cursor expired; reload the first page').kind,
-  preflight: f('PREFLIGHT_FAILED', {}, 'Codex is unavailable for native history'),
-  // No capability reason is defined by the contract yet: nothing is guessed from fields or text.
-  guessed: f('PREFLIGHT_FAILED', { reason: 'unsupported' }, 'unsupported; no fallback').kind,
+  unsupported: f('PREFLIGHT_FAILED', {
+    reason: 'native_capability_unsupported', capability_unsupported: true }, '不支持').kind,
+  // A generic PREFLIGHT_FAILED is a failed precondition or read, whatever its text says.
+  readFailure: f('PREFLIGHT_FAILED', { reason: 'native_read_failed' }, 'unsupported?'),
+  noField: f('PREFLIGHT_FAILED', {}, 'Native history query failed or is unsupported').kind,
+  falseFlag: f('PREFLIGHT_FAILED', { capability_unsupported: false }, 'x').kind,
   gone: f('NOT_FOUND', {}, 'x').kind,
   other: f('INVALID_INPUT', {}, 'x').kind,
+  pageUnsupported: st({ source: 'codex', error: '不支持', capability_unsupported: true })
+    .unsupported,
+  pageFailure: st({ source: 'codex', error: '读取失败', reason: 'native_timeout' }).unsupported,
 })
 """
     )
     assert out["expired"] == "expired"
+    assert out["candidate"] == "gone"
     assert out["conflict"] == "error"
-    assert out["preflight"] == {
+    assert out["unsupported"] == "unsupported"
+    assert out["readFailure"] == {
         "kind": "error",
         "preflight": True,
-        "text": "Codex is unavailable for native history",
+        "reason": "native_read_failed",
+        "text": "unsupported?",
     }
-    assert out["guessed"] == "error"
+    assert out["noField"] == "error" and out["falseFlag"] == "error"
     assert out["gone"] == "gone" and out["other"] == "error"
-    src = (STATIC / "existing.js").read_text(encoding="utf-8")
-    assert "当前不支持" not in src
+    assert out["pageUnsupported"] is True and out["pageFailure"] is False
 
 
 def test_existing_session_ui_uses_only_contract_routes() -> None:

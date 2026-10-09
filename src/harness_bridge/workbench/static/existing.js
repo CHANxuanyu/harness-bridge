@@ -39,16 +39,18 @@ const isLinked = (s) => !!(s && s.native_link && s.native_link.linked);
 const wasUnlinked = (s) => !!(s && s.native_link && !s.native_link.linked);
 const linkHold = (s) => !!(s && s.external && s.external.via === 'native-link');
 
-// What a failed request means for the history UI; decided by code/details, never by message text.
-// PREFLIGHT_FAILED covers any failed precondition or native read, so it is a read failure: "not
-// supported" needs an explicit capability reason from the contract, and the contract
-// (docs/EXISTING_SESSIONS_API.md at ad585c5) does not define one yet. Sources that cannot be
-// resumed are told apart by the candidate's own resume_reason instead.
+// What a failed request means for the history UI; decided by code and the contract's stable fields
+// (details.reason, details.capability_unsupported), never by message text. Only an explicit
+// capability_unsupported=true is "not supported"; any other PREFLIGHT_FAILED is a failed
+// precondition or read. Sources that cannot be resumed are told apart by resume_reason.
 function historyFailure(e) {
   const code = e && e.code;
   const d = (e && e.details) || {};
-  if (code === 'STATE_CONFLICT' && d.reason === 'cursor_expired') return { kind: 'expired', text: '读取位置已过期（超过 10 分钟、应用重启过或缓存已满）' };
-  if (code === 'PREFLIGHT_FAILED') return { kind: 'error', preflight: true, text: (e && e.message) || '读取前的检查没有通过' };
+  const text = (e && e.message) || '';
+  if (d.capability_unsupported === true) return { kind: 'unsupported', reason: d.reason || null, text: text || '当前不支持' };
+  if (d.reason === 'cursor_expired') return { kind: 'expired', reason: d.reason, text: '读取位置已过期（超过 10 分钟、应用重启过或缓存已满）' };
+  if (d.reason === 'candidate_expired') return { kind: 'gone', reason: d.reason, text: text || '这一项已过期，需要重新读取列表' };
+  if (code === 'PREFLIGHT_FAILED') return { kind: 'error', preflight: true, reason: d.reason || null, text: text || '读取前的检查没有通过' };
   if (code === 'NOT_FOUND') return { kind: 'gone', text: (e && e.message) || '找不到' };
   return { kind: 'error', text: (e && e.message) || String(e) };
 }
@@ -109,10 +111,13 @@ function pagerMerge(m, data) {
 // What the loaded history amounts to, for the state line: loading / empty / partial / unavailable /
 // ready, plus why.
 function historyState(m) {
-  if (!m.paged) return { state: (m.history && m.history.error) ? 'unavailable' : 'legacy', reasons: [] };
+  const unsupported = !!(m.history && m.history.capability_unsupported === true);
+  if (!m.paged) return { state: (m.history && m.history.error) ? 'unavailable' : 'legacy', reasons: [], unsupported };
   const p = m.page || {};
   const reasons = (p.completeness && p.completeness.reasons) || m.partial || [];
-  return { state: p.state || 'ready', reasons, error: m.history && m.history.error };
+  // A page read as empty stops being empty once live messages arrive in it.
+  const state = p.state === 'empty' && m.order.length ? 'ready' : p.state || 'ready';
+  return { state, reasons, error: m.history && m.history.error, unsupported };
 }
 
 // ---------------------------------------------------------------- shared pieces of UI
@@ -134,7 +139,7 @@ function historyBanner(m, { label, loading, refreshing, error, refreshNote, onRe
     if (from) line.append(h('span', {}, `历史来自 ${from}`));
     if (st.state === 'partial') line.append(h('span', { class: 'hist-tag warn' }, '部分可见'));
     else if (st.state === 'empty') line.append(h('span', { class: 'hist-tag' }, '原生历史为空'));
-    else if (st.state === 'unavailable') line.append(h('span', { class: 'hist-tag bad' }, '读取失败'));
+    else if (st.state === 'unavailable') line.append(h('span', { class: 'hist-tag bad' }, st.unsupported ? '不支持' : '读取失败'));
   }
   if (refreshing) line.append(stGlyph({ tone: 'idle', glyph: 'spin' }), h('span', {}, '正在刷新…'));
   else if (refreshNote) line.append(h('span', { class: 'hist-note' }, refreshNote));
@@ -142,7 +147,7 @@ function historyBanner(m, { label, loading, refreshing, error, refreshNote, onRe
   if (line.childNodes.length) box.append(line);
   const problems = [];
   if (error) problems.push(h('div', { class: 'hist-problem bad', role: 'alert' }, icon('warning'), h('span', { class: 'selectable' }, error), onRetry ? h('button', { class: 'btn-plain', type: 'button', onclick: onRetry }, retryLabel) : null));
-  if (st.state === 'unavailable' && st.error) problems.push(h('div', { class: 'hist-problem bad', role: 'alert' }, icon('warning'), h('span', { class: 'selectable' }, `无法读取原生历史：${st.error}`)));
+  if (st.state === 'unavailable' && st.error) problems.push(h('div', { class: 'hist-problem bad', role: 'alert' }, icon('warning'), h('span', { class: 'selectable' }, `${st.unsupported ? '当前不支持读取这段原生历史' : '无法读取原生历史'}：${st.error}`)));
   if (st.state === 'partial' && st.reasons.length) {
     problems.push(h('div', { class: 'hist-problem warn' }, icon('warning'), h('span', {}, `只显示了能读到的部分：${st.reasons.map(reasonText).join('；')}`)));
   }
@@ -215,10 +220,10 @@ function unlinkSession(s, anchor) {
         const now = findSession(s.session_id) || s;
         const d = e.details || {};
         // A refusal is shown as such; RepoBridge never lifts the protection by itself.
-        if (d.external || (d.busy_session_id === s.session_id && now.external)) {
+        if (d.reason === 'external_confirmation_required' || d.external) {
           toast('它可能仍在外部使用，所以没有移除。确认外部已经结束（“外部已结束…”）后再移除；RepoBridge 不会自动解除这个保护。', 'error');
-        } else if (d.busy_session_id === s.session_id) {
-          toast('这个会话正在 RepoBridge 中运行，先断开或停止它，再移除关联。', 'error');
+        } else if ((d.reason === 'local_writer_busy' || d.busy_session_id) && (!d.busy_session_id || d.busy_session_id === s.session_id || now.active)) {
+          toast('这个会话正在 RepoBridge 中运行（或上次的进程还没确认退出），先断开或停止它，再移除关联。', 'error');
         } else fail(e);
       } finally { S.pending.delete(`unlink:${s.session_id}`); }
     },
@@ -356,10 +361,11 @@ function openAddExisting({ projectId, harness, query, pick, prefer } = {}) {
       list.append(h('div', { class: 'ex-state' }, stGlyph({ tone: 'idle', glyph: 'spin' }), `正在读取这个项目的 ${label} 原生记录…`));
     } else if (st.listError) {
       const f = st.listError;
-      list.append(h('div', { class: 'ex-state bad', role: 'alert' },
-        h('b', {}, '读取失败'),
+      list.append(h('div', { class: `ex-state ${f.kind === 'unsupported' ? 'warn' : 'bad'}`, role: 'alert' },
+        h('b', {}, f.kind === 'unsupported' ? '当前不支持' : '读取失败'),
         h('div', { class: 'selectable' }, f.text),
-        h('div', { class: 'hint' }, f.preflight ? `这不是“没有会话”：读取前的检查没有通过，也没有退回到更大范围的搜索。可以检查 ${label} 和项目文件夹后重试。` : '这不是“没有会话”：读取本身没有成功。'),
+        h('div', { class: 'hint' }, f.kind === 'unsupported' ? `这个版本的 ${label} 不提供这项能力；没有退回到更大范围的搜索。`
+          : f.preflight ? `这不是“没有会话”：读取前的检查没有通过，也没有退回到更大范围的搜索。可以检查 ${label} 和项目文件夹后重试。` : '这不是“没有会话”：读取本身没有成功。'),
         h('button', { class: 'btn btn-small', type: 'button', onclick: () => discover() }, '重试')));
     } else if (!st.rows.length) {
       list.append(h('div', { class: 'ex-state' }, h('b', {}, st.q ? '没有匹配的会话' : `没有找到 ${label} 会话`),
