@@ -258,7 +258,12 @@ invalidates the history cache. Result stays `{"external":null}`. The audit paylo
 `source:"user_confirmation",process_exit_observed:false`. It never resumes, sends, kills an
 external process or asserts observed exit. The next resume/send remains a separate explicit action.
 
-Frontend `462cda4` preserves confirmed sent across same-page/reload events, queries and first-page/history refresh. Independent verification still finds existing uncertainty not cleared when sent is first read through `loadOlder`; see EXISTING_SESSIONS_INTEGRATION.md. Confirmation must clean existing recovery entries on **every** read path, including older-page items deduplicated out of the visible list and non-selected sessions. This is not permission to edit Opus's worktree.
+Frontend `72a3255` passes independent confirmation reconciliation across first load, refresh and
+older pages. Each page's complete user-item input is considered, including IDs skipped by paging
+deduplication. A confirmed cached copy retains its content and place while its bubble and recovery
+state update. Older-page cleanup also runs before checking whether that session is still visible;
+other sessions and unrelated unknown entries remain protected. Duplicate pages do not repeat notices,
+restore attachments, resume or send. No endpoint, response field or schema change is needed.
 
 **Run failure and delivery are separate (2026-10-10).** `run.status`, `exit_code`, `exit_signal`,
 `exit_confirmed` and diagnostics keep their meanings after sent is confirmed. New exit summaries
