@@ -324,6 +324,7 @@ class Workbench:
             and (native_link is None or native_link["resumable"]),
             "can_start_fresh": (not active)
             and session["turns_observed"] == 0
+            and not self._has_submitted_delivery(session)
             and self.store.native_link(session["session_id"]) is None,
             "native_link": native_link,
             "external": external,
@@ -639,9 +640,11 @@ class Workbench:
                     f"这个 {LABELS[harness]} 会话还没有对话，原生 CLI 中没有可恢复的内容",
                 )
         elif kind == "new":
-            if session["turns_observed"] > 0:
+            if session["turns_observed"] > 0 or self._has_submitted_delivery(session):
                 raise BridgeError(
-                    "STATE_CONFLICT", "该会话已有原生对话；请使用恢复，或在项目中新建会话"
+                    "STATE_CONFLICT",
+                    "该会话已有原生对话或待确认的投递；请核对历史后使用恢复，或在项目中新建会话",
+                    details={"reason": "resume_required"},
                 )
             if not runs:
                 initial_prompt = self._handoff_prompt(session_id)
@@ -1756,7 +1759,9 @@ class Workbench:
         if link:
             self._check_link(session)
             return self.native_history.history(json.loads(link["metadata_json"]))
-        if not native or session["turns_observed"] == 0:
+        if not native or (
+            session["turns_observed"] == 0 and not self._has_submitted_delivery(session)
+        ):
             return {"items": [], "history": {"source": "none", "error": None}}
         key = f"{sid}:{native}"
         cached = self._history_cache.get(key)
@@ -2426,7 +2431,18 @@ class Workbench:
         link = self.store.native_link(session["session_id"])
         if link:
             return bool(link["linked"] and json.loads(link["metadata_json"])["resumable"])
-        return bool(session["native_session_id"]) and session["turns_observed"] > 0
+        return bool(session["native_session_id"]) and (
+            session["turns_observed"] > 0 or self._has_submitted_delivery(session)
+        )
+
+    def _has_submitted_delivery(self, session: Mapping[str, Any]) -> bool:
+        # The first turn may have reached Codex even when its reply/turn event was lost.
+        # Read that known thread and resume only its ID; do not fabricate an observed turn
+        # or allow "new" to replace the binding. Missing history leaves the receipt unknown.
+        return session["harness"] == CODEX and any(
+            record["delivery"]["state"] in ("sending", "unknown", "sent")
+            for record in self.store.message_deliveries(session["session_id"]).values()
+        )
 
     def _project(self, project_id: str) -> dict[str, Any]:
         project = self.store.get_project(project_id)
