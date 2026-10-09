@@ -488,17 +488,24 @@ function syncBubble(sid, cid, receipt) {
   queuePatch(sid, id);
 }
 
-// History pages are cached through deliveryView too (first page, refresh, older page).
-function viewItems(sid, c, ids) {
+// A history page (first page, refresh, older page) is cached through deliveryView. The sent items
+// in it are recorded first, including those the pager skipped because their ID was already loaded:
+// the loaded copy keeps its content and place, and is shown as sent. Returns the page's user item
+// IDs and those whose cached copy changed.
+function viewPage(sid, c, items) {
+  const ids = [];
+  for (const it of items) if (it && it.type === 'user') { deliveryView(S.unsent, sid, it); ids.push(it.id); }
+  const changed = [];
   for (const id of ids) {
     const it = c.items.get(id);
-    const v = it && it.type === 'user' ? deliveryView(S.unsent, sid, it) : it;
-    if (v !== it) c.items.set(id, v);
+    const v = it ? deliveryView(S.unsent, sid, it) : it;
+    if (v !== it) { c.items.set(id, v); changed.push(id); }
   }
+  return { ids, changed };
 }
 
-// After a page of history arrives (reload, restart, refresh): settle what it confirms and pick up
-// receipts the backend keeps for unresolved messages.
+// After a page of history arrives (reload, restart, refresh, older page): settle what it confirms
+// and pick up receipts the backend keeps for unresolved messages.
 function reconcileDeliveries(sid, items) {
   for (const it of items) {
     if (!it || it.type !== 'user') continue;
@@ -601,10 +608,10 @@ function applyUnsent(sid, r, why = '这条消息没有发出', { quiet = false }
     }
   } else if (r.to === 'resolved') {
     renderUnsent(sid);
-    toast('那条结果待确认的消息已确认送达（CLI 已接收）。这不代表那一轮已经完成。');
+    toast(`${here ? '' : name + '中'}那条结果待确认的消息已确认送达（CLI 已接收）。这不代表那一轮已经完成。`);
   } else if (r.to === 'unheld') {
     renderUnsent(sid);
-    toast('一条标为“没有发出”的消息后来由 CLI 确认已送达，已从未发送列表中移除。');
+    toast(`${here ? '' : name + '中'}一条标为“没有发出”的消息后来由 CLI 确认已送达，已从未发送列表中移除。`);
   } else if (r.to === 'cleared') {
     if (here) { root._ta.value = ''; autosize(root._ta); }
     S.drafts.delete(sid);
@@ -738,7 +745,7 @@ async function loadConversation(sid, { refresh = false } = {}) {
   try {
     const data = await api('GET', `/api/sessions/${sid}/conversation?limit=${PAGE_SIZE}${refresh ? '&refresh=1' : ''}`);
     pagerReplace(c, data);
-    viewItems(sid, c, c.order);
+    viewPage(sid, c, data.items || []);
     c.turn = data.turn;
     c.live = data.live;
     c.runId = data.run_id;
@@ -772,7 +779,7 @@ async function refreshConversation(sid, { quiet = false } = {}) {
     const data = await api('GET', `/api/sessions/${sid}/conversation?limit=${PAGE_SIZE}&since=${encodeURIComponent(c.nextSince)}`);
     if (data.live && c.runId && data.run_id !== c.runId) { c.refreshing = false; loadConversation(sid); return; }
     result = pagerMerge(c, data);
-    viewItems(sid, c, result.reset ? c.order : [...result.changed, ...result.added]);
+    viewPage(sid, c, data.items || []);
     if (result.reset) c.olderError = null;
     c.turn = data.turn;
     c.live = data.live;
@@ -800,16 +807,22 @@ async function loadOlder(sid) {
   c.olderError = null;
   updateHistoryHead(sid);
   let fresh = [];
+  let page = null;
   try {
     const data = await api('GET', `/api/sessions/${sid}/conversation?limit=${PAGE_SIZE}&before=${encodeURIComponent(c.nextBefore)}`);
     fresh = pagerPrepend(c, data);
-    viewItems(sid, c, fresh);
+    page = viewPage(sid, c, data.items || []);
   } catch (e) {
     c.olderError = historyFailure(e);
   } finally { c.olderLoading = false; }
+  // Like the first page and a refresh, an older page settles what is kept for its messages (the
+  // 待确认 card, a put-back copy, the send block), whether or not this session is still in view.
+  if (page) reconcileDeliveries(sid, page.ids.map((id) => c.items.get(id)));
   const root = convEl;
   const s = findSession(sid);
   if (!s || !root || root.dataset.sid !== sid || !root._head) return;
+  // Loaded copies that are now shown as sent are redrawn in place.
+  if (page) for (const id of page.changed) if (!fresh.includes(id)) queuePatch(sid, id);
   keepAnchor(root._scroll, () => {
     const frag = document.createDocumentFragment();
     for (const id of fresh) {

@@ -363,8 +363,28 @@ def test_every_cache_write_in_the_page_goes_through_the_delivery_view() -> None:
     # Events (onConv), receipts that move a bubble, and each kind of history page.
     assert "c.items.set(msg.item.id, deliveryView(S.unsent, msg.session_id," in app
     assert "c.items.set(id, deliveryView(S.unsent, sid," in app
+    # Every history page passes all of its items, not only those the pager kept, so a sent item
+    # skipped because its ID was already loaded still counts.
+    view = r"\(c, data\);\n    (page = )?viewPage\(sid, c, data\.items"
     for pager in ("pagerReplace", "pagerMerge", "pagerPrepend"):
-        assert f"{pager}(c, data);\n    viewItems(" in app, pager
+        assert re.search(pager + view, app), pager
     # No other writes of user items into the conversation cache.
     writes = re.findall(r"c\.items\.set\([^;]*", app)
     assert all("deliveryView" in w or w.startswith("c.items.set(id, v)") for w in writes), writes
+
+
+def _function(source: str, name: str) -> str:
+    body = source[source.index(f"function {name}(") :]
+    return body[: body.index("\n}\n")]
+
+
+def test_every_history_path_settles_what_is_kept_for_its_messages() -> None:
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    # First page, refresh and older page all reconcile the kept copies (cards, put-back copies,
+    # the send block) against what they read. The older page does so before it checks whether the
+    # session is still in view, and for the page's items whether or not the pager kept them.
+    assert "reconcileDeliveries(sid, [...c.items.values()])" in _function(app, "loadConversation")
+    assert "reconcileDeliveries(sid, result.reset" in _function(app, "refreshConversation")
+    older = _function(app, "loadOlder")
+    settle = older.index("reconcileDeliveries(sid, page.ids.map(")
+    assert settle < older.index("root.dataset.sid !== sid"), "settled only while in view"
