@@ -1,4 +1,143 @@
-# Existing-session independent revalidation — 2026-10-10
+# Existing-session independent acceptance — 2026-10-10 (frontend 72a3255)
+
+**P1 closed. Offline/synthetic integration acceptance passed.**
+Both P2 findings stay closed within their recorded scope. Real outside-created native sessions and
+real official-desktop continuation remain a separate acceptance step. No frontend implementation
+was changed by Codex this round.
+
+## Fixed versions and actual checks
+
+| Input | Full SHA |
+|---|---|
+| Integration input | `9f866e901b623a770b729afd460cef5ffe8acbf7` |
+| Frontend PR #3 input | `72a32557cc7f0196655841628d3c2dcf5a81383e` |
+| Exact frontend parent (not reapplied) | `462cda4d34bfbd5e13a22a79783758b26fde4bf6` |
+| **Actual fixed integrated code tested** | **`1676fdc8b412a565bc2b697d262f29fdc3bb561d`** |
+| Retained backend factual-banner fix | `a35a868f191f8377444a0cad136cf387906e0bf8` |
+| Retained backend first-submission ID protection | `1856bd44f950ec456d9becf53d4c24f368c0b95d` |
+
+Preserved worktree `/Users/chan/Downloads/repobridge-integration`, branch
+`codex/existing-session-integration`. Merge was conflict-free. Backend PR #4 remains draft, stacked
+on draft PR #3. Final documentation and integration head SHAs are in PR #4; only seven Markdown
+files follow the tested code. Source/tests/assets/scripts/dependencies remain identical. Frontend
+worktree and old main directory untouched; no default-branch merge/release/install.
+
+Final fixed-code offline check: **1004 passed in 1006.77s (16m46s), zero failures and zero skips**. Ruff check and format passed (190 files); strict mypy passed (59 source files).
+
+Focused tests: **43 passed / 42.60s**, comprising backend delivery/conversation plus UI retention
+regressions. Independent older-page probe: **35 explicit assertions passed** (4 setup, 31 behavior
+and health). These are new execution results on the actual integration, not Opus's 27/105/14/968
+input evidence and not the previous 1003-test integrated result.
+
+Runtime import paths and absolute `PYTHONPATH=/Users/chan/Downloads/repobridge-integration/src` were
+verified. Existing frontend virtualenv reused read-only. Every fixture has isolated HOME/config/
+native history/state and port 0 with explicit stub executables/fake desktop apps. Browser plugin
+not available; regular Playwright used installed Chrome in fresh contexts, with loopback-only
+traffic. No real model, account credential, private-history scan, real DB upgrade or current-instance
+access. The four owned UI services were stopped after verification; fixture data remain available.
+
+## Remaining P1 independently verified and closed
+
+The flow tested is: actual backend submission-lost-reply stub produces unknown → a read of synthetic
+native history with the same clientId produces sent → controlled first/older-page HTTP ordering
+→ actual “加载更早的消息” button clears only the confirmed message's pending card.
+
+Opus's `artifacts/qa-older-72a3255/README.md`, scripts and reports were read as inputs. `older.cjs`
+was copied into Codex's own QA directory, adapted to its fresh fixtures and actual integration
+source, and strengthened with attachment isolation, full content/order, reading-anchor and protocol
+count assertions. Original artifacts and ix4 instance were not changed or executed. The old shell
+launchers with their temporary paths/cleanup commands were not used.
+
+M2 (linked Codex) and M4 (ordinary Codex, first turn) originate from **actual backend + exit-after-
+submission stub**, each with a durable unknown receipt. Only M2 receives exact-clientId proof in
+its owned synthetic native history; M4 stays actually unknown. First/older page placement, stale
+receipt delivery and the extra unknown X are **browser HTTP injection**, not real-native disorder.
+X is a separate synthetic injected receipt; it is not claimed as a second native accepted turn.
+
+| Required behavior | Explicit evidence/result |
+|---|---|
+| Current session, first confirmation in older page | Before: confirmed=false, target uncertain=1, item absent, card present and send disabled. After: cached=sent, confirmed=true, target uncertain=0, one sent bubble, no recovery button, valid draft makes send usable. Draft and its attachment unchanged. |
+| Same ID already cached and skipped by pagination dedupe | Confirmation is retained and existing bubble repainted. Deliberately different cached text and marker survive. Full relative order remains; index advances only by the two newly prepended items. Reading anchor moved **0.078125 px** (88.671875→88.59375), below the asserted 1 px tolerance. |
+| Switch sessions while older page is outstanding | A clears M2 while not visible. B retains actual unknown M4, disabled send, its own draft and B-draft.txt. A retains its separate draft/A-draft.txt. Switching back displays one sent M2 bubble and only the remaining X card. Background toast names A. |
+| Same session has another unknown | A's injected X remains uncertain and blocking; only M2 is removed. B's actual M4 is also untouched. |
+| Repeated/late page | One bubble, unique item IDs, unchanged draft/attachment, no repeated confirmation/recovery notice. No `/send` request and no new run in either session. Actual stub `turn/start` count stays **2→2** throughout paging. |
+
+**Isolation of the clearing path:** while each older page is gated, all other history and receipt
+responses for A are held and counted. In the three windows there were **zero** such competing
+requests; no hidden successful refresh could clear the card. Switching back to A triggers a quiet
+history refresh, which is held and cannot settle anything. Report entries clone assertion-time
+snapshots so subsequent duplicate-page requests do not mutate earlier recorded counters.
+
+Artifacts: `older-out/report.json` contains all before/after states, page counts and toasts;
+`older-run.log` lists the assertions. `older-1-before.png` / `older-1-after.png` show the card clearing
+and editable draft/attachment; `older-3-other-session.png` / `older-3-back.png` show independent
+remaining uncertainty and attachments. Screenshots were visually inspected separately from DOM
+measurements. Product acceptance is based on those state assertions, not script exit or source text.
+
+## Related regressions and both P2 findings
+
+| Regression | New evidence |
+|---|---|
+| Same-page/reload old unknown/not_sent/queued/sending after sent; earlier query returns stale unknown while history refresh fails | `p1-result.json`: actual page entrypoints with explicit event/HTTP injection keep cache/bubble/recovery sent, preserve draft/attachment, add no turn. First-page and history refresh also pass. |
+| Lost `/send` response + missed SSE, failed/missing receipt read | `network-result.json`: never infer definitely not_sent. Accepted backend receipt later settles sent; aborted-before-accept + real 404 remains unknown. |
+| Native event before delayed/lost HTTP response | `races-result.json`: four ordinary Codex/Claude cases; no retracking, duplicate bubble/attachment or overwrite of independent draft. Claude proof is native echo, not durable receipt. |
+| Normal not_sent restoration and late confirmation | `busy-result.json`, `late-not-sent-result.json`: retain text/attachment once; manual restore preserves newer draft; later exact proof removes offer but keeps user edits. External-held unlink uses details.external; return adds no run. |
+| Ordinary Codex first-turn ID protection and restart | Focused/full backend regression proves no fresh replacement, missing/wrong-ID proof remains unknown, and explicit next message resumes original ID. `restart-result.json` independently verifies actual service restart, durable unknown/attachment, exact proof→sent, edited draft retained and no added turn. |
+| **Run-banner P2** | `banner-unknown.png`, `sent-after-reload.png`, `restart-sent.png`: failed status/exit 3 retained; unresolved unknown warns separately. Proof/reload/restart remove delivery uncertainty without changing the run or starting it. Diagnostics preserved; old stored failure summaries not migrated. |
+| **Narrow-window P2** | `layout-result.json`: Chrome 900×640/sidebar open, 700×640, 1280×900 have body/document width equal viewport and composer controls inside bounds. `layout-900.png` separately inspected with draft/attachment. Short stub model this round; previous long-model and isolated WKWebView acceptance retained, not represented as rerun. No CSS change. |
+
+Pagination probe: page identity/content, no framework overlay, no JS page errors and no console
+errors all pass. Related fault probes report no JS page errors; console resource failures are the
+expected deliberate 409, 404, 500, 503 and aborted requests, recorded in `console.jsonl`. Native
+capability/read-failure semantics and association flows remain covered by the full offline suite;
+the previous independent UI classification evidence is retained, not re-counted as a new probe.
+
+## Reproduction and retained evidence
+
+Durable local directory:
+`/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-72a3255/`.
+`verification.json`, `focused-check.log`, `final-check.log` and `SHA256SUMS` fix versions/results and
+artifact contents. No launch authorization URL, runtime.json, credentials or real native data are
+copied into it. Original Opus input script/README retained separately for provenance.
+
+[Isolated startup commands](EXISTING_SESSIONS_SANDBOX.md). To reproduce the primary probe with
+already installed machine-local runtimes, first copy the retained `.cjs` files and `sandbox.py` to
+`/private/tmp/repobridge-recheck-72a3255` (use a new output directory or preserve existing reports
+before another run). Then:
+
+1. Launch `sandbox.py --scenario unknown` with absolute integration PYTHONPATH. Record its printed
+   ROOT; never use the current App's state or launch URL.
+2. Run `node older.cjs setup ROOT`. This explicitly sends only to the stub and records M2/M4 unknown.
+3. Stop that owned service, reopen **the same** `--root ROOT --scenario normal`.
+4. Run `node older.cjs older ROOT`. It reads runtime metadata locally, adds proof only to this
+   synthetic native store and exercises all five paging behaviors. Inspect the boolean assertions
+   and before/after details in `older-out/report.json`, not just the exit code.
+5. Related probes use fresh separate fixtures: busy→`busy.cjs`, `late-not-sent.cjs`; normal→
+   `network.cjs`, `races.cjs`; another unknown→`p1.cjs`, `layout.cjs`, `restart-setup.cjs`, then reopen
+   that last root as normal and run `restart-check.cjs`.
+
+Node: `/Users/chan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node`.
+The retained helper specifies installed Playwright/Chrome paths. No dependency installation or
+original ix4 launcher is needed. The final pagination probe was repeated only to freeze diagnostic
+objects at assertion time; no product change or additional turn was involved. No failing behavior
+was removed, skipped or relabelled to obtain acceptance.
+
+## Limits and future real acceptance
+
+- Real sessions created outside RepoBridge and official Claude/Codex desktop continuation remain
+  **not validated** by these stubs. Prior App-created samples do not substitute. No new real-turn
+  allowance is granted here.
+- IME, system clipboard and VoiceOver remain unverified. This round did not launch a native window;
+  prior narrow-window native evidence keeps its stated scope.
+- Claude has no corresponding durable receipt; exit before native echo has limited evidence.
+- Full-page reload loses ordinary unsent drafts. History refresh and accepted-message receipt
+  recovery are different; no new draft-storage feature was added.
+- Historical persisted run-failure summaries are not migrated. Corrected new summaries keep failure
+  facts separate from message acceptance while preserving diagnostic output.
+
+---
+
+# Historical independent revalidation — 2026-10-10 (462cda4)
 
 **P1 remains open for one older-page cleanup gap. The previous original sent-downgrade reproductions
 are corrected. The new run-banner P2 passes on corrected runs; narrow-window P2 remains closed.**

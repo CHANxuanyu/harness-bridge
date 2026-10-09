@@ -1,50 +1,40 @@
 # Status
 
-## Existing-session independent revalidation — 2026-10-10
+## Existing-session independent acceptance — 2026-10-10 (frontend 72a3255)
 
-**Original stale-sent reproductions corrected; P1 still open for older-page cleanup. New run-banner
-P2 corrected in the backend; the previous narrow-window P2 remains closed.** No full synthetic
-feature acceptance claim while the remaining P1 is open.
+**P1 closed. Offline/synthetic integration acceptance passed.**
 
-Confirmed frontend `462cda4d34bfbd5e13a22a79783758b26fde4bf6` was merged once into the preserved independent integration checkout
+Merged exact frontend `72a32557cc7f0196655841628d3c2dcf5a81383e` (parent `462cda4d34bfbd5e13a22a79783758b26fde4bf6`) into the preserved
 `/Users/chan/Downloads/repobridge-integration`, branch `codex/existing-session-integration`, from
-`fc1550220d7b183ed51c495b39563d3e865a74a6`. Exact final code tested: **`e2512ee9b952be940f030f30ab2047e2ccc928c0`**.
-Backend fixes: `a35a868f191f8377444a0cad136cf387906e0bf8` (factual process summary) and
-`1856bd44f950ec456d9becf53d4c24f368c0b95d` (first-turn unknown preserves its native identity).
-PR #4 remains draft and stacked on draft frontend PR #3. Only documentation follows tested code;
-final pushed head hashes are in PR #4. No frontend-owned implementation was modified.
+`9f866e901b623a770b729afd460cef5ffe8acbf7`. **Exact code tested: `1676fdc8b412a565bc2b697d262f29fdc3bb561d`**.
+Backend banner fix `a35a868` and first-turn native-ID protection `1856bd4` are unchanged. PR #4
+remains draft and based on draft PR #3. Only documentation follows this test version; final pushed
+head hashes are recorded in PR #4. No frontend-owned implementation was edited by Codex.
 
-Final fixed-code offline check: **1003 passed in 1011.98s (16m51s), zero failures and zero skips**.
-Ruff check and format passed (190 files); strict mypy passed (59 source files).
-Focused backend delivery/conversation regression: 25 passed / 35.31s. All browser probes were rerun
-on the final code, using actual backend + isolated fault stubs or explicitly labelled page/HTTP
-ordering injection. Prior Opus 105/14/967 and integration 994 totals are not substitute evidence.
+Final fixed-code offline check: **1004 passed in 1006.77s (16m46s), zero failures and zero skips**. Ruff check and format passed (190 files); strict mypy passed (59 source files).
+Focused delivery/conversation/frontend retention regression: **43 passed / 42.60s**.
+Independent actual-page pagination probe: **35 explicit assertions passed** (4 setup, 31 behavior/
+health), using new isolated fixtures and the actual integrated source, not Opus's exported backend.
 
-Same-page/reload old unknown/not_sent/queued/sending, an earlier query returning late with failed
-history refresh, first-page/history refresh, lost responses/missed events and event-before-response
-no longer downgrade sent. Ordinary/linked Codex, normal Claude echo, not_sent restore-once,
-attachments and edited drafts pass. An independently found first-ordinary-Codex zero-turn history
-guard was fixed: read only its known native ID, keep unknown until exact clientId proof, never
-replace the native thread; no invented turn count. Actual service restart and late proof pass.
+Older-page sent clears the target unknown card and enables sending with a valid draft. A cached
+same-ID item keeps its content/order/position while its bubble becomes sent. Cleanup also completes
+in the background after switching sessions; both drafts/attachments and the other session's actual
+unknown survive. A second injected unknown in the same session keeps its own protection. Duplicate
+pages are idempotent, with no repeated notices/attachments, sends or new runs. Competing history and
+receipt responses were blocked and counted: none participated during the tested paging windows.
 
-**Remaining P1 (Opus):** an unknown card already exists, then `loadOlder` reads sent. The cache and
-confirmed map become sent, but the uncertainty card remains and send stays disabled. This is a
-controlled HTTP/page ordering reproduction, not observed real-native traffic. [Direct handoff
-in PR #3](https://github.com/CHANxuanyu/harness-bridge/pull/3#issuecomment-6089874021).
+Related sent-monotonicity, lost response/missed events, event-before-response, not_sent restore-once,
+ordinary/linked Codex and normal Claude echo regressions pass. Actual service restart and first-turn
+exact-clientId settlement pass. Narrow-window P2 stays closed (new 900/700/1280 browser regression;
+previous long-label/native-window evidence retained). Run-banner P2 stays closed for corrected runs:
+failed status/exit 3/diagnostics remain; unknown is warned separately and confirmation does not send.
 
-New banner P2: run remains failed with exit code 3 and all diagnostic output preserved; summary uses
-exit facts/native stderr, not provisional delivery notices. Unknown keeps its own warning; exact
-proof removes that warning without changing run success or sending. Refresh/restart pass for runs
-created by corrected code; previously stored summary text is not rewritten. Narrow P2: final Chrome
-900/700/1280 widths and controls regressed; previous native WKWebView/long-label evidence retained,
-not relabelled as a new native-window run.
-
-[Full current/historical evidence](docs/EXISTING_SESSIONS_INTEGRATION.md) ·
-[Exact isolated startup](docs/EXISTING_SESSIONS_SANDBOX.md).
-Separate limits: full-page reload loses ordinary unsent drafts; Claude lacks durable delivery
-receipts and pre-echo exit evidence is limited; real outside-created sessions, official desktop
-continuation, IME, clipboard and VoiceOver remain unverified. No real model calls, private-history
-scan, credential read, live database upgrade, default merge, release or installed replacement.
+[Full evidence](docs/EXISTING_SESSIONS_INTEGRATION.md) · [Exact isolated startup](docs/EXISTING_SESSIONS_SANDBOX.md).
+Real outside-created sessions, official desktop continuation, IME/clipboard/VoiceOver remain separate
+future acceptance. Claude has no durable delivery receipt and pre-echo exit evidence is limited;
+ordinary unsent drafts are lost on full-page reload; historical failure summaries are not migrated.
+No real model calls, live database/current-instance access, credential/private-history reads,
+default merge, release or installed replacement. Prior real-turn allowance remains exhausted.
 
 ## Prior backend-only acceptance — 2026-10-09
 
@@ -70,7 +60,7 @@ outside RepoBridge in synthetic native stores. Ruff + formatting passed (185 fil
 passed (59 files). Baseline full 942-test evidence is retained, not rerun or relabelled. See
 [acceptance record](docs/EXISTING_SESSIONS_RESULT.md) and VALIDATION_MATRIX for reproducible checks.
 
-Updated: Opus's current dialog/recovery input is `462cda4`; independent integration findings are recorded above. Still pending: scoped real sessions created outside
+Updated: Opus's current dialog/recovery input is `72a3255`; independent integration findings are recorded above. Still pending: scoped real sessions created outside
 RepoBridge and real official-desktop continuity. The W6–W8 App-created samples do not satisfy this
 new real acceptance. Current prior allowance remains exhausted (Claude 6/6, Codex 6/6).
 

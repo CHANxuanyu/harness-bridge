@@ -11,17 +11,17 @@ listens only on loopback with port 0. No real native histories, credentials or m
 cd /Users/chan/Downloads/repobridge-integration
 export PYTHONPATH=/Users/chan/Downloads/repobridge-integration/src
 HB_QA_PY=/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9/.venv/bin/python
-HB_QA_DIR=/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-462cda4
-"$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --scenario normal --native
+HB_QA_DIR=/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-72a3255
+"$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --scenario normal
 ```
 
-Requires the existing development virtualenv (including pywebview) shown above. It is read-only;
+Requires the existing development virtualenv shown above (pywebview only for optional `--native`). It is read-only;
 no install or dependency change is needed. Source under test is
-`e2512ee9b952be940f030f30ab2047e2ccc928c0`; later documentation-only integration commits have the same
+`1676fdc8b412a565bc2b697d262f29fdc3bb561d`; later documentation-only integration commits have the same
 code. Before a later revalidation, record `git rev-parse HEAD` and check the source tree, rather than
 assuming the moving branch still matches this receipt.
 
-The new window/project is named **隔离复验项目**. It contains ordinary Codex/Claude sessions and
+The isolated project (HTTP-only by default; optional `--native`) is named **隔离复验项目**. It contains ordinary Codex/Claude sessions and
 pre-existing synthetic native histories (Claude 151 user items, Codex 55 turns) discoverable with
 “添加已有会话”. Adding/linking starts nothing. Confirm “外部已结束” only for this synthetic fixture;
 then explicitly sending reaches the stub, never an account. Fake desktop apps only exercise the
@@ -73,10 +73,10 @@ Refresh results reads only. Add exact-clientId native evidence only to the desig
 fixture when reproducing settlement; never edit a real vendor history file.
 
 Browser probes retained here include `p1.cjs`, `busy.cjs`, `network.cjs`, `races.cjs`,
-`late-not-sent.cjs`, `older-focused.cjs`, `restart-setup.cjs`, `restart-check.cjs`, `classify.cjs`,
+`late-not-sent.cjs`, `older.cjs`, `restart-setup.cjs`, `restart-check.cjs`,
 `layout.cjs` and `common.cjs`. They depend on particular fixture state and prior result JSON;
 use the reproduction order in EXISTING_SESSIONS_INTEGRATION.md, not as a one-command general suite.
-`common.cjs` writes to `/private/tmp/repobridge-recheck-462cda4`; copy the retained scripts there
+`common.cjs` writes to `/private/tmp/repobridge-recheck-72a3255`; copy the retained scripts there
 first. The sandbox commands above work independently and always create safe fresh fixtures.
 New browser layout regression uses the short stub model label. Previous long-label and native
 WKWebView evidence remains in `repobridge-qa-0253b2f`; it was not rerun as native this round.
@@ -94,5 +94,5 @@ HB_QA_BIN=/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-prod
 ```
 
 These are the four checks in `scripts/check.sh`, using existing binaries directly to avoid changing
-another worktree's environment. The recorded run was 1003 passed / 1011.98s, zero failures/skips; ruff check/format (190 files) and strict mypy (59 files) passed. Do not re-run after a
+another worktree's environment. Final fixed-code offline check: **1004 passed in 1006.77s (16m46s), zero failures and zero skips**. Ruff check and format passed (190 files); strict mypy passed (59 source files). Do not re-run after a
 pure documentation addition unless code changed or new evidence requires it.
