@@ -511,13 +511,50 @@ function popKey(e, sid) {
 // - sent: accepted by the CLI (not "the turn succeeded"); an untouched kept copy is taken out.
 // - unknown: may have reached the CLI. Kept apart as "发送结果待确认"; never treated as unsent,
 //   never put back as a retry, never resent. Only a receipt or the user's own check resolves it.
-// A missing receipt, a failed query or an ended process is never proof either way. The functions
-// below hold no DOM state (tested in Node).
+// A missing receipt, a failed query or an ended process is never proof either way.
+// Sent is final: once any source (the /send answer, an event, a history page, a receipt query)
+// confirms a message, an older queued / sending / unknown / not_sent copy of it that arrives later
+// changes nothing — not the cached item, the bubble, the kept copies or the send button. That is
+// the only ordering; the other states are not ranked. The functions below hold no DOM state
+// (tested in Node).
 
 function unsentStore() {
   // inflight: cid -> entry; held: sid -> [not_sent entry]; uncertain: sid -> [unknown entry];
-  // placed: cid -> entry put back into the box; settled: cids whose outcome was applied.
-  return { inflight: new Map(), held: new Map(), uncertain: new Map(), placed: new Map(), settled: new Set() };
+  // placed: cid -> entry put back into the box.
+  // Two separate records: confirmed (session + cid -> the sent receipt): the CLI accepted it;
+  // handled (cid): its one recovery step (put back, kept above the box, removed) was taken.
+  return { inflight: new Map(), held: new Map(), uncertain: new Map(), placed: new Map(), handled: new Set(), confirmed: new Map() };
+}
+
+// The client_id of a user item or receipt (`client_id`, or the `user:<client_id>` item ID).
+function itemClientId(item) {
+  if (!item) return null;
+  if (item.client_id) return String(item.client_id);
+  return typeof item.id === 'string' && item.id.startsWith('user:') ? item.id.slice(5) : null;
+}
+
+const confirmKey = (sid, cid) => `${sid}\n${cid}`;
+
+function unsentConfirm(st, sid, cid, delivery) {
+  const known = st.confirmed.get(confirmKey(sid, cid));
+  if (!known || (!known.delivery && delivery)) st.confirmed.set(confirmKey(sid, cid), { delivery: delivery || null });
+}
+
+function unsentConfirmed(st, sid, cid) {
+  return st.confirmed.has(confirmKey(sid, cid));
+}
+
+// How a user item is cached and shown. A sent item is recorded as confirmed; an item for a
+// confirmed message that says anything else is an older copy and is shown as sent.
+function deliveryView(st, sid, item) {
+  const cid = item && (!item.type || item.type === 'user') ? itemClientId(item) : null;
+  if (!cid) return item;
+  if (deliveryOutcome(item) === 'sent') { unsentConfirm(st, sid, cid, item.delivery); return item; }
+  const known = st.confirmed.get(confirmKey(sid, cid));
+  if (!known) return item;
+  const view = { ...item, status: 'sent' };
+  if (known.delivery) view.delivery = known.delivery; else delete view.delivery;
+  return view;
 }
 
 // What a receipt or user item says: 'pending' | 'not_sent' | 'sent' | 'unknown' | null.
@@ -529,8 +566,11 @@ function deliveryOutcome(item) {
   return { sending: 'pending', sent: 'sent', failed: 'not_sent', unknown: 'unknown' }[item.status] || null;
 }
 
+// Returns false when the message was already confirmed (its event outran the /send answer).
 function unsentTrack(st, entry) {
+  if (unsentConfirmed(st, entry.sid, entry.clientId)) return false;
   st.inflight.set(entry.clientId, entry);
+  return true;
 }
 
 function takeUncertain(st, cid) {
@@ -542,12 +582,12 @@ function takeUncertain(st, cid) {
 }
 
 // Definitely not sent. `box` describes that session's input box now: { visible, draft, attIds }.
-function unsentFail(st, cid, box) {
-  if (st.settled.has(cid)) return null;
+function unsentFail(st, sid, cid, box) {
+  if (unsentConfirmed(st, sid, cid) || st.handled.has(cid)) return null;
   const e = st.inflight.get(cid) || takeUncertain(st, cid);
   if (!e) return null;
   st.inflight.delete(cid);
-  st.settled.add(cid);
+  st.handled.add(cid);
   if (box.visible && !box.draft.trim() && !box.attIds.length) {
     st.placed.set(cid, e);
     return { to: 'box', entry: e };
@@ -559,8 +599,8 @@ function unsentFail(st, cid, box) {
 // Result unknown. `info`: { reason, message, receipt } — receipt=true when the backend holds an
 // unknown receipt (it then refuses new sends), false when RepoBridge has no receipt to consult.
 // `item` adopts a receipt seen after a reload, when nothing is tracked for it here.
-function unsentUnknown(st, cid, info, item) {
-  if (st.settled.has(cid)) return null;
+function unsentUnknown(st, sid, cid, info, item) {
+  if (unsentConfirmed(st, sid, cid) || st.handled.has(cid)) return null;
   let e = st.inflight.get(cid);
   const tracked = !!e;
   if (e) st.inflight.delete(cid);
@@ -570,21 +610,23 @@ function unsentUnknown(st, cid, info, item) {
       if (known) { Object.assign(known, info); return { to: 'uncertain', entry: known, updated: true }; }
     }
     if (!item) return null;
-    e = { sid: item.sid, clientId: cid, text: item.text || '', atts: (item.attachments || []).filter((a) => a.id), at: 0 };
+    e = { sid, clientId: cid, text: item.text || '', atts: (item.attachments || []).filter((a) => a.id), at: 0 };
   }
   Object.assign(e, info);
   st.uncertain.set(e.sid, [...(st.uncertain.get(e.sid) || []), e]);
   return { to: 'uncertain', entry: e, adopted: !tracked };
 }
 
-// Accepted by the CLI (now, or as a late receipt).
-function unsentDelivered(st, cid, box) {
-  if (st.inflight.delete(cid)) { st.settled.add(cid); return { to: 'delivered' }; }
+// Accepted by the CLI (now, or as a late receipt). Remembered even when nothing is kept for it
+// here (e.g. first seen after a reload), so an older copy arriving later cannot undo it.
+function unsentDelivered(st, sid, cid, box, delivery) {
+  unsentConfirm(st, sid, cid, delivery);
+  if (st.inflight.delete(cid)) return { to: 'delivered' };
   const u = takeUncertain(st, cid);
-  if (u) { st.settled.add(cid); return { to: 'resolved', entry: u }; }
-  for (const [sid, list] of st.held) {
+  if (u) return { to: 'resolved', entry: u };
+  for (const [hsid, list] of st.held) {
     const e = list.find((x) => x.clientId === cid);
-    if (e) { st.held.set(sid, list.filter((x) => x !== e)); return { to: 'unheld', entry: e }; }
+    if (e) { st.held.set(hsid, list.filter((x) => x !== e)); return { to: 'unheld', entry: e }; }
   }
   const p = st.placed.get(cid);
   if (!p) return null;
@@ -605,7 +647,7 @@ function unsentTake(st, sid, cid) {
 function unsentDismiss(st, sid, cid) {
   const list = st.uncertain.get(sid) || [];
   const e = list.find((x) => x.clientId === cid && !x.receipt) || null;
-  if (e) { st.uncertain.set(sid, list.filter((x) => x !== e)); st.settled.add(cid); }
+  if (e) { st.uncertain.set(sid, list.filter((x) => x !== e)); st.handled.add(cid); }
   return e;
 }
 
