@@ -1,49 +1,52 @@
 # Handoff
 
-## Independent revalidation delivered; sent monotonicity remains — 2026-10-09
+## Independent revalidation delivered; older-page cleanup remains — 2026-10-10
 
-- Confirmed frontend input: `0253b2f3ee89511c0222607dc3d418cfc742731e` (includes both earlier deliveries).
-- Backend fix unchanged: `9a9d6f9c9be4bedb840edbf931d8f39f38c055b9`.
-- Previous integration: `67d6e1e52e6b26a2318284c04ae1c4d9963bd674`.
-- New exact merge/code tested: `a0381264eed8c120ac7be3787d71d7ff76f8ee7b` in the existing
-  `/Users/chan/Downloads/repobridge-integration`, branch `codex/existing-session-integration`.
-- PR #4 remains based on frontend PR #3. Final documentation receipt/merge hashes are in PR #4;
-  only documentation follows the tested code. Frontend worktree and old main checkout unchanged.
+- Frontend input: `462cda4d34bfbd5e13a22a79783758b26fde4bf6`; previous frontend `0253b2f3ee89511c0222607dc3d418cfc742731e` is included, not reapplied.
+- Integration input: `fc1550220d7b183ed51c495b39563d3e865a74a6`.
+- Backend banner fix: `a35a868f191f8377444a0cad136cf387906e0bf8`.
+- Backend first-turn receipt/identity fix: `1856bd44f950ec456d9becf53d4c24f368c0b95d`.
+- **Exact final code tested: `e2512ee9b952be940f030f30ab2047e2ccc928c0`** in the preserved `/Users/chan/Downloads/repobridge-integration`, branch `codex/existing-session-integration`.
+- PR #4 remains draft, based on frontend PR #3. Final documentation and integration head hashes are in PR #4; only Markdown follows tested code. Frontend checkout and old main checkout untouched.
 
-Final fixed-code offline check: **994 passed in 983.79s (16m23s), zero failures and zero skips**.
-Ruff check and format passed (189 files); strict mypy passed (59 source files).
-62 focused tests passed before the full check. Absolute integration PYTHONPATH was used throughout.
-Actual fault stubs, isolated native histories/HOME/state, fake desktop apps and independent port-0
-servers only. No previous frontend/backend test count substitutes for this run.
+Final fixed-code offline check: **1003 passed in 1011.98s (16m51s), zero failures and zero skips**.
+Ruff check and format passed (190 files); strict mypy passed (59 source files).
+Affected backend tests: 25 passed / 35.31s. Actual import paths were printed and point at integration
+src; reused frontend virtualenv read-only with absolute PYTHONPATH. Final page probes have no JS
+page exceptions. All native stores, state, HOME, CLI processes, fake desktop apps and ports isolated.
 
-**P1 partially corrected, still open:** normal not_sent/unknown paths, persistent reload/restart,
-exact clientId history confirmation, draft/attachment retention and no blind retries pass. But a
-fresh page that has read sent can be downgraded by a stale unknown event or query, re-blocking send;
-a stale not_sent event exposes misleading recovery. Backend receipt remains sent. On the same page,
-late unknown still overwrites the confirmed user bubble. These ordering probes inject page events
-or HTTP responses; they are not observed real-native traffic.
+**P1 original sent regressions pass, but overall P1 is still open:** same-page/reload stale states,
+stale query arriving after sent while history fails, first page/refresh, response/event loss and
+event-before-response preserve confirmed sent and edited drafts/attachments. Actual ordinary first
+send → unknown → service restart → exact-clientId proof also passes after the new backend correction.
+That path retains the original native ID, blocks fresh replacement, and does not invent observed
+turns; unknown/missing history never becomes not_sent/sent by guesswork. Normal Claude echo and
+ordinary/linked Codex flows are covered; Claude has no durable receipt claim.
 
-Opus owns the correction in `static/composer.js` and `static/app.js`: retain confirmed sent even
-without a tracked entry after reload; apply monotonicity to both recovery state and conversation
-items across history/SSE/query paths. Preserve edited drafts and do not auto-resend.
-[Reproduction already delivered to PR #3](https://github.com/CHANxuanyu/harness-bridge/pull/3#issuecomment-6085409315).
-Codex continues integration after Opus supplies a confirmed SHA; do not bypass file ownership.
+**Opus's remaining correction:** `static/app.js:loadOlder` calls `viewItems`/`deliveryView`, which
+records confirmed sent, but it does not reconcile an existing uncertainty/recovery entry. Controlled
+HTTP probe: first page excludes the message → old receipt creates one unknown card → older page
+contains sent → cache=sent/confirmed=true, yet uncertain=1/send disabled. Reconcile that path too,
+including non-selected sessions and already-cached items skipped by pager dedupe, without changing
+normal pagination or edited drafts. [Exact handoff already posted to PR #3](https://github.com/CHANxuanyu/harness-bridge/pull/3#issuecomment-6089874021).
+Do not have Codex rewrite frontend-owned code. Codex will integrate a confirmed correction SHA.
 
-**P2 closed within offline scope:** 900×640 sidebar-open, 700px and 1280×900 browser checks plus
-isolated native WKWebView measurements/content snapshots pass. Whole-window captures were blank
-and are not passing evidence. Explicit unsupported/read-failure UI classification and external
-confirmation-only semantics also pass. Full synthetic feature acceptance cannot be marked passed
-while the remaining P1 is open.
+**New run-banner P2 passes on corrected runs:** preserve failed status, exit code and full output
+including historic notices; run.failure derives its summary from exit facts/native stderr. Delivery
+is a separate receipt, so sent never means successful run. Unresolved unknown still warns; proof and
+reload remove only delivery uncertainty, never auto-resume/send. No old stored summaries migrated.
+**Narrow-window P2 stays closed:** browser widths regressed, previous isolated native/long-label
+measurements and screenshots retained. No native window was relaunched this round.
 
-[Detailed evidence](docs/EXISTING_SESSIONS_INTEGRATION.md) ·
-[Contract](docs/EXISTING_SESSIONS_API.md) · [Safe isolated startup](docs/EXISTING_SESSIONS_SANDBOX.md).
-Local durable evidence: `/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-0253b2f/`.
+Full offline/synthetic feature acceptance remains incomplete solely for the older-page UI gap.
+Real acceptance is separate. Ordinary unsent drafts disappear on full-page reload; history refresh
+and accepted-message receipt recovery are different. Claude pre-echo exits, real outside sessions,
+official desktop continuation, IME/clipboard/VoiceOver remain unverified. No renewed model allowance,
+private-history/auth access, live DB change, default merge, release or current-instance replacement.
 
-Keep separate: ordinary unsent drafts are lost on full-page reload (not history refresh or receipt
-recovery); Claude lacks durable receipt and pre-echo exit evidence is limited; real outside-created
-sessions, real official desktop continuation, IME, clipboard and VoiceOver remain unverified.
-No real model allowance, credential/private-history access, installed database change, default
-merge, release or installed replacement occurred. Only owned test processes were closed.
+[Acceptance record](docs/EXISTING_SESSIONS_INTEGRATION.md) · [Contract](docs/EXISTING_SESSIONS_API.md) ·
+[Isolated startup](docs/EXISTING_SESSIONS_SANDBOX.md).
+Evidence: `/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-462cda4/`. Pre-final/interrupted probes are explicitly separated under `prior-f706/`.
 
 ## Prior backend delivery — 2026-10-09
 

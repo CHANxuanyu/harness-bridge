@@ -323,3 +323,7 @@ Each entry: decision — reason. Newest last.
 155. **Read failure is not unsupported:** preserve existing error codes/string fields, add stable reason/capability_unsupported, recognize native method-not-found via RPC code, and provide Chinese descriptions. Frontend never parses native English text; unknown delivery needs distinct UI handling before full acceptance.
 
 - 2026-10-09: Acceptance of frontend 0253b2f stays partial despite 994 green offline tests: independent stale-receipt injection exposes a sent monotonicity defect. Record P2 browser/WKWebView measurements separately from visual evidence and keep frontend remediation with Opus.
+
+- 2026-10-10: A run's failure summary describes process facts/native stderr; provisional delivery notices stay in diagnostics, and only the receipt decides sent/unknown. Confirmation never changes a failed run to success; no old summary migration.
+- 2026-10-10: First Codex submission can outlive a lost first-turn reply. With a known native ID and durable submitted/unknown/sent receipt, allow scoped history reads and original-ID resume, forbid fresh replacement, and leave observed-turn counters untouched. Missing proof stays unknown.
+- 2026-10-10: Frontend 462cda4 fixes the previous stale-sent repros, but independent older-page injection exposes missing recovery cleanup. Keep P1 open and hand the static-file correction to Opus; green offline checks do not substitute for UI acceptance.
