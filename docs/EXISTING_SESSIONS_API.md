@@ -212,7 +212,11 @@ new Codex sends are refused with 409 `delivery_unknown` (and the unresolved clie
 native evidence confirms it. Never infer delivery from matching text or from the process ending.
 Read-only refresh can reconcile a native item with the same `clientId`; it does not start a turn.
 Late receipts may change unknown/not_sent to sent; a confirmed sent receipt cannot be downgraded
-by a later timeout/exit. Failed/uncertain local items remain recoverable after native history reload.
+by a later timeout/exit. Consumers must preserve that monotonicity across all event, history and
+query sources, including when sent is first loaded after a page reload. An older unknown/not_sent
+must not overwrite the confirmed bubble or reintroduce a recovery/uncertainty card. No sequence
+field was added: this is an invariant of confirmed native acceptance, not timestamp guessing.
+Failed/uncertain local items remain recoverable after native history reload.
 
 Synthetic accepted response:
 
@@ -254,10 +258,10 @@ invalidates the history cache. Result stays `{"external":null}`. The audit paylo
 `source:"user_confirmation",process_exit_observed:false`. It never resumes, sends, kills an
 external process or asserts observed exit. The next resume/send remains a separate explicit action.
 
-Frontend review still required on `202630f`: `checkInflight` currently treats an ended run without
-sent/failed as definitely unsent; it must consult this receipt and retain `unknown` separately.
-`historyFailure` can use `capability_unsupported` now. These are interface integration follow-ups,
-not permission to rewrite the frontend or mutate its worktree.
+Frontend `0253b2f` consumes these fields and passes the normal fault-stub recovery and capability
+classification checks. Remaining review: stale events/queries can regress frontend sent after
+reload even though the backend remains sent. Exact reproduction and owner locations are in
+EXISTING_SESSIONS_INTEGRATION.md; this is not permission to edit Opus's worktree.
 
 Use isolated homes/native histories, stub CLIs, temp state and server port 0. Fixtures must be seeded
 outside RepoBridge before link. Assert no new native session/turn/send/replay for list/preview/link;

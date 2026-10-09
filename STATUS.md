@@ -1,37 +1,42 @@
 # Status
 
-## Existing-session backend fixes and independent integration — 2026-10-09
+## Existing-session independent revalidation — 2026-10-09
 
-Backend fixes are delivered; full UI acceptance remains open for the P1 frontend recovery issue
-below. Frontend is delivered in PR #3, confirmed SHA
-`202630f659d0411ef81a611ccc98bf09bfc4b4aa` (includes `b866e093db3200923ed181f8c98513fcbee3ec87`);
-it is no longer waiting for the first API. Backend input: `ad585c59fc932280f49833414e8ea5b90ca3ff75`.
-Backend fix: `9a9d6f9c9be4bedb840edbf931d8f39f38c055b9` (PR #4, still stacked on PR #3).
-Fixed integrated code: `fee9971c6ed5599a679b4a9193c6ba1940609fdc`, independent checkout
-`/Users/chan/Downloads/repobridge-integration`, branch `codex/existing-session-integration`.
+**P2 closed for the tested browser/native content; P1 remains open for stale sent regressions.**
+Merged confirmed frontend `0253b2f3ee89511c0222607dc3d418cfc742731e` (includes 202630f/b866e09)
+once into the preserved independent integration worktree. Exact code tested:
+`a0381264eed8c120ac7be3787d71d7ff76f8ee7b`, branch `codex/existing-session-integration`,
+`/Users/chan/Downloads/repobridge-integration`. Backend fix `9a9d6f9` is unchanged; PR #4 remains
+stacked on PR #3. Subsequent documentation commits have identical source/tests/assets/dependencies.
 
-Codex accepted messages now have durable client-ID receipts: queued, attempted, sent, definitely
-not sent and unknown. Text/attachments survive failed handshake and history reload/restart;
-same-ID retries never resend, unknown delivery blocks new sends, and late sent proof is retained.
-External-held unlink returns `details.external` atomically; actual local activity retains
-`busy_session_id`. History failures carry stable reasons and Chinese explanations, with explicit
-unsupported separate from general failure. Native-link `/desktop/return` confirms only the user's
-statement, clears hold/cache, and neither resumes nor sends. No further schema bump.
+Final fixed-code offline check: **994 passed in 983.79s (16m23s), zero failures and zero skips**.
+Ruff check and format passed (189 files); strict mypy passed (59 source files).
+Focused regression: 62 passed / 50.40s. These are new fixed-combination results, not previous
+frontend/backend totals. No live test/model call, installed-state upgrade or private-history scan.
 
-Final fixed-integration offline suite: **990 passed in 1055.66s (17m35s)**; no failures or skips.
-No live test was run.
-Static checks passed: ruff + format (188 files), strict mypy (59 files). Independent rendered
-integration exercised discovery, 151-item paging, dedupe, original-ID continuation, fake desktop
-return/refresh, unlink/relink and actual stub delivery failures. Full details, exact commands and
-limitations: [EXISTING_SESSIONS_INTEGRATION.md](docs/EXISTING_SESSIONS_INTEGRATION.md).
+Actual backend + fault-stub UI checks pass for handshake not_sent (text/attachment retained once,
+new draft preserved), ordinary/linked Codex unknown (separate card, editable input, sending blocked),
+page/service restart recovery, exact-clientId native-history settlement to sent and dedupe, normal
+Claude/Codex sends, explicit unsupported vs ordinary read failure, external refusal and
+confirmation-only desktop return. Network-fault probes do not infer not_sent from missing evidence.
 
-Opus follow-up: frontend `202630f` still calls an ended-run message definitely unsent when the
-backend reports `unknown`; reproduced with a stub exit after native submission. It must consume
-`delivery.state` and `/delivery?client_id=` and retain uncertainty separately. Backend blocks a
-repeat send. Also review composer controls clipping at 900×640 (body 955px), and optionally wire
-explicit unsupported labels to `capability_unsupported`. Frontend files/worktree are untouched.
-Real outside-created sessions and real desktop continuation remain unverified; no private-history
-scan, credentials, model turns, real database migration, release or installed-version replacement.
+**Remaining P1 (Opus):** after sent is read on a fresh page, old unknown events/queries can re-block
+sending; old not_sent can display “放回输入框”. Backend stays sent. Same-page late events can also
+regress the rendered bubble. Controlled event/HTTP injection, not real-native disorder.
+[Concrete handoff](https://github.com/CHANxuanyu/harness-bridge/pull/3#issuecomment-6085409315).
+No frontend implementation was changed by Codex. Do not mark full offline/synthetic integration
+accepted until this boundary is corrected and independently revalidated.
+
+P2: Chrome 900×640 with sidebar open, 700×640 and 1280×900; isolated native WKWebView same requested
+outer sizes. Measured content/body widths match and controls remain visible. Content screenshots
+were separately inspected; blank full-window captures are excluded as passing visual evidence.
+[Full current and historical evidence](docs/EXISTING_SESSIONS_INTEGRATION.md) ·
+[Exact isolated launch instructions](docs/EXISTING_SESSIONS_SANDBOX.md).
+
+Separate limits: full-page refresh loses ordinary unsent drafts; history refresh/persistent
+accepted-message receipts are different. Claude has no corresponding durable receipt; pre-echo
+exit coverage is limited. Real outside sessions, real official desktop continuation, IME,
+clipboard and VoiceOver remain unverified. No real allowance was renewed; no merge/release/install.
 
 ## Prior backend-only acceptance — 2026-10-09
 
@@ -57,7 +62,7 @@ outside RepoBridge in synthetic native stores. Ruff + formatting passed (185 fil
 passed (59 files). Baseline full 942-test evidence is retained, not rerun or relabelled. See
 [acceptance record](docs/EXISTING_SESSIONS_RESULT.md) and VALIDATION_MATRIX for reproducible checks.
 
-Updated: Opus's dialog is delivered in `202630f`; independent integration findings are recorded above. Still pending: scoped real sessions created outside
+Updated: Opus's current dialog is delivered in `0253b2f`; independent integration findings are recorded above. Still pending: scoped real sessions created outside
 RepoBridge and real official-desktop continuity. The W6–W8 App-created samples do not satisfy this
 new real acceptance. Current prior allowance remains exhausted (Claude 6/6, Codex 6/6).
 

@@ -12,12 +12,13 @@ Codex sessions with handoff.
 
 ## Existing sessions created outside RepoBridge — 2026-10-09
 
-Fixed integrated code: `fee9971c6ed5599a679b4a9193c6ba1940609fdc` (frontend `202630f`,
-backend fix `9a9d6f9`). Final fixed-integration offline suite: **990 passed in 1055.66s (17m35s)**; no failures or skips.
-No live test was run.
-Ruff/format (188 files) and strict mypy (59 files) passed. Full evidence, environment correction,
-rendered findings and remaining acceptance: [EXISTING_SESSIONS_INTEGRATION.md](EXISTING_SESSIONS_INTEGRATION.md).
-E08 below is retained historical backend evidence, not the final integrated result.
+Fixed current code: `a0381264eed8c120ac7be3787d71d7ff76f8ee7b` (frontend `0253b2f`, backend
+fix `9a9d6f9` unchanged). Final fixed-code offline check: **994 passed in 983.79s (16m23s), zero failures and zero skips**.
+Ruff check and format passed (189 files); strict mypy passed (59 source files).
+62 focused tests / 50.40s also passed. No live tests/model calls. Previous 990/961/102 totals are
+historical only. P2 closed within offline scope; **P1 ordering boundary still open**, so whole
+synthetic feature acceptance is not yet passed. Exact evidence and limitations:
+[EXISTING_SESSIONS_INTEGRATION.md](EXISTING_SESSIONS_INTEGRATION.md).
 
 | ID | Check | Level | Result |
 |---|---|---|---|
@@ -29,9 +30,11 @@ E08 below is retained historical backend evidence, not the final integrated resu
 | E06 | Additive schema 3→4 preserves old session; HTTP routes/error envelope/auth and legacy conversation response compatible | T2-W isolated DB/server port 0 | pass |
 | E07 | Installed Codex `generate-json-schema` confirms `thread/list` exact cwd and useStateDbOnly, search/cursor/order and turns pagination; isolated credential-free HOME/CODEX_HOME, no app-server/session started | real binary, schema only | pass (shape only) |
 | E08 | Final affected regression 102 tests / 70.35s (21 external-session cases + 81 existing workbench checks); ruff check/format (185 files), strict mypy (59 files) | static + T1/T2-W | pass |
-| E09 | Opus's new discovery/link UI and integrated interaction | UI-offline | independent stub-backed flow passed; **P1 open:** unknown labelled unsent; P2 narrow composer clipping; not full UI acceptance |
-| E11 | Durable client-ID receipts, failed handshake/timeout/early exit, attempted-but-unknown, exact-ID retry/no replay, restart recovery, late native proof, sent never downgraded | T2-W actual fault stubs | pass (12 final focused cases); UI misclassification tracked in E09 |
+| E09 | Opus's new discovery/link UI and integrated interaction | UI-offline | actual fault-stub paths pass after 0253b2f; **P1 open:** stale event/query can downgrade frontend sent; backend remains sent; not full UI acceptance |
+| E11 | Durable client-ID receipts, failed handshake/timeout/early exit, attempted-but-unknown, exact-ID retry/no replay, restart recovery, late native proof, sent never downgraded | T2-W actual fault stubs | pass in current 994-test full suite; UI ordering failure tracked in E09 |
 | E12 | Atomic external-vs-local unlink errors; native-link return only records confirmation/clears cache; stable reasons and explicit unsupported vs general read failure | T2-W isolated HTTP/native stubs | pass |
+| E13 | 900×640 sidebar expanded, 700px, 1280×900, long model, attachments/draft/unknown card; controls and no horizontal overflow | UI-offline Chrome + isolated native WKWebView | **P2 pass**: measurements and content screenshot observations separately recorded; blank full-window captures excluded |
+| E14 | Missed SSE, lost send response, query errors/missing receipt; stale/duplicate events and queries after sent | UI-offline page/network injection | missing evidence never inferred not_sent; **stale sent regression fails P1**, no automatic resend; not native traffic evidence |
 | E10 | Designated native sessions actually created outside RepoBridge; real official desktop open/history/continuation/return/resume | T3-W/T4-W | **not run**; prior App-created samples do not qualify; prior turn allowance exhausted |
 
 Reproduction and limits: [EXISTING_SESSIONS_RESULT.md](EXISTING_SESSIONS_RESULT.md).
