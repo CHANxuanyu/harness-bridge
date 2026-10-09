@@ -175,7 +175,7 @@ detected after asynchronous resume appear in the existing failed run/state event
 connection. Example error envelope:
 
 ```json
-{"ok":false,"error":{"code":"STATE_CONFLICT","message":"History cursor expired; reload the first page","details":{"reason":"cursor_expired"}}}
+{"ok":false,"error":{"code":"STATE_CONFLICT","message":"历史分页已过期，请从第一页重新加载。","details":{"reason":"cursor_expired"}}}
 ```
 
 ## Verification and acceptance boundary

@@ -1,31 +1,39 @@
 # Status
 
-## Existing-session interface corrections and independent integration — 2026-10-09
+## Existing-session backend fixes and independent integration — 2026-10-09
 
-Frontend is delivered in PR #3: initial `b866e093db3200923ed181f8c98513fcbee3ec87`, confirmed
-follow-up `202630f659d0411ef81a611ccc98bf09bfc4b4aa`. It is no longer waiting for the first API.
-Backend input is `ad585c59fc932280f49833414e8ea5b90ca3ff75` (PR #4). Independent integration
-checkout: `/Users/chan/Downloads/repobridge-integration`, branch `codex/existing-session-integration`.
-The initial combination is `0a16d235ce700e92603461958bce3feca0e37dcf`; backend corrections follow.
+Backend fixes are delivered; full UI acceptance remains open for the P1 frontend recovery issue
+below. Frontend is delivered in PR #3, confirmed SHA
+`202630f659d0411ef81a611ccc98bf09bfc4b4aa` (includes `b866e093db3200923ed181f8c98513fcbee3ec87`);
+it is no longer waiting for the first API. Backend input: `ad585c59fc932280f49833414e8ea5b90ca3ff75`.
+Backend fix: `9a9d6f9c9be4bedb840edbf931d8f39f38c055b9` (PR #4, still stacked on PR #3).
+Fixed integrated code: `fee9971c6ed5599a679b4a9193c6ba1940609fdc`, independent checkout
+`/Users/chan/Downloads/repobridge-integration`, branch `codex/existing-session-integration`.
 
-Corrections: Codex accepted messages have durable client-ID receipts distinguishing queued,
-attempted, sent, definitely not sent and unknown; exact-ID retries cannot resend. Handshake failures
-settle queued messages, and text/attachments survive native-history reload/restart. Unknown delivery
-blocks a new send until native evidence resolves it. No schema change beyond existing revision 4.
-External-held unlink now returns `details.external` inside the removal transaction; real local
-activity retains `busy_session_id`. History errors have stable reasons and Chinese explanations;
-general read failures are not called unsupported. `/desktop/return` explicitly records user
-confirmation for native-link, clears hold/cache and neither resumes nor sends.
+Codex accepted messages now have durable client-ID receipts: queued, attempted, sent, definitely
+not sent and unknown. Text/attachments survive failed handshake and history reload/restart;
+same-ID retries never resend, unknown delivery blocks new sends, and late sent proof is retained.
+External-held unlink returns `details.external` atomically; actual local activity retains
+`busy_session_id`. History failures carry stable reasons and Chinese explanations, with explicit
+unsupported separate from general failure. Native-link `/desktop/return` confirms only the user's
+statement, clears hold/cache, and neither resumes nor sends. No further schema bump.
 
-Related backend regression: 53 tests passed in 63.18s; additional receipt/restart checks follow.
-Final fixed-commit full offline and rendered integration results are recorded separately below/at
-handoff; earlier 950/957 frontend and 102 backend results are not final integration evidence.
-Frontend follow-up identified: `202630f` still infers definitely-unsent from an ended run without
-sent/failed; it needs to consume `delivery.state=unknown` and `/delivery?client_id=` before full UI
-acceptance. See the interface correction in EXISTING_SESSIONS_API. Real history/desktop checks and
-model turns remain out of scope, with no new allowance or real database migration.
+Final fixed-integration offline suite: **990 passed in 1055.66s (17m35s)**; no failures or skips.
+No live test was run.
+Static checks passed: ruff + format (188 files), strict mypy (59 files). Independent rendered
+integration exercised discovery, 151-item paging, dedupe, original-ID continuation, fake desktop
+return/refresh, unlink/relink and actual stub delivery failures. Full details, exact commands and
+limitations: [EXISTING_SESSIONS_INTEGRATION.md](docs/EXISTING_SESSIONS_INTEGRATION.md).
 
-## Existing-session backend implemented; frontend/real acceptance pending — 2026-10-09
+Opus follow-up: frontend `202630f` still calls an ended-run message definitely unsent when the
+backend reports `unknown`; reproduced with a stub exit after native submission. It must consume
+`delivery.state` and `/delivery?client_id=` and retain uncertainty separately. Backend blocks a
+repeat send. Also review composer controls clipping at 900×640 (body 955px), and optionally wire
+explicit unsupported labels to `capability_unsupported`. Frontend files/worktree are untouched.
+Real outside-created sessions and real desktop continuation remain unverified; no private-history
+scan, credentials, model turns, real database migration, release or installed-version replacement.
+
+## Prior backend-only acceptance — 2026-10-09
 
 Worktree `/Users/chan/Downloads/repobridge-backend`, branch `codex/existing-session-backend`,
 base `ef75a625577c1848e1079dd6d487a5cdc3afa166`. Contract-first commit:
@@ -49,8 +57,7 @@ outside RepoBridge in synthetic native stores. Ruff + formatting passed (185 fil
 passed (59 files). Baseline full 942-test evidence is retained, not rerun or relabelled. See
 [acceptance record](docs/EXISTING_SESSIONS_RESULT.md) and VALIDATION_MATRIX for reproducible checks.
 
-Updated: Opus's discovery/link dialog is delivered in `202630f`; independent UI integration is in
-progress. Still pending: scoped real sessions created outside
+Updated: Opus's dialog is delivered in `202630f`; independent integration findings are recorded above. Still pending: scoped real sessions created outside
 RepoBridge and real official-desktop continuity. The W6–W8 App-created samples do not satisfy this
 new real acceptance. Current prior allowance remains exhausted (Claude 6/6, Codex 6/6).
 

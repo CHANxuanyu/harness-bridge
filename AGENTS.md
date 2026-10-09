@@ -13,6 +13,9 @@ repository; those live in `examples/supervisor-instructions.md`. Follow the file
    available but is not the first-version path. Read `docs/CLOUD_EXECUTION_PLAN.md` only for a
    specific historical V0.1 requirement.
 2. Run the offline checks: `scripts/check.sh` (ruff, mypy, pytest without live tests).
+   If reusing a virtualenv installed from another worktree, set an absolute `PYTHONPATH` to the
+   intended checkout's `src`; detached test workers change cwd, so a relative path can test a
+   different checkout and invalidate invocation fingerprints.
 
 ## Hard rules
 
