@@ -1,5 +1,30 @@
 # Status
 
+## Existing-session interface corrections and independent integration — 2026-10-09
+
+Frontend is delivered in PR #3: initial `b866e093db3200923ed181f8c98513fcbee3ec87`, confirmed
+follow-up `202630f659d0411ef81a611ccc98bf09bfc4b4aa`. It is no longer waiting for the first API.
+Backend input is `ad585c59fc932280f49833414e8ea5b90ca3ff75` (PR #4). Independent integration
+checkout: `/Users/chan/Downloads/repobridge-integration`, branch `codex/existing-session-integration`.
+The initial combination is `0a16d235ce700e92603461958bce3feca0e37dcf`; backend corrections follow.
+
+Corrections: Codex accepted messages have durable client-ID receipts distinguishing queued,
+attempted, sent, definitely not sent and unknown; exact-ID retries cannot resend. Handshake failures
+settle queued messages, and text/attachments survive native-history reload/restart. Unknown delivery
+blocks a new send until native evidence resolves it. No schema change beyond existing revision 4.
+External-held unlink now returns `details.external` inside the removal transaction; real local
+activity retains `busy_session_id`. History errors have stable reasons and Chinese explanations;
+general read failures are not called unsupported. `/desktop/return` explicitly records user
+confirmation for native-link, clears hold/cache and neither resumes nor sends.
+
+Related backend regression: 53 tests passed in 63.18s; additional receipt/restart checks follow.
+Final fixed-commit full offline and rendered integration results are recorded separately below/at
+handoff; earlier 950/957 frontend and 102 backend results are not final integration evidence.
+Frontend follow-up identified: `202630f` still infers definitely-unsent from an ended run without
+sent/failed; it needs to consume `delivery.state=unknown` and `/delivery?client_id=` before full UI
+acceptance. See the interface correction in EXISTING_SESSIONS_API. Real history/desktop checks and
+model turns remain out of scope, with no new allowance or real database migration.
+
 ## Existing-session backend implemented; frontend/real acceptance pending — 2026-10-09
 
 Worktree `/Users/chan/Downloads/repobridge-backend`, branch `codex/existing-session-backend`,
@@ -24,7 +49,8 @@ outside RepoBridge in synthetic native stores. Ruff + formatting passed (185 fil
 passed (59 files). Baseline full 942-test evidence is retained, not rerun or relabelled. See
 [acceptance record](docs/EXISTING_SESSIONS_RESULT.md) and VALIDATION_MATRIX for reproducible checks.
 
-Still pending: Opus's discovery/link dialog and UI integration; scoped real sessions created outside
+Updated: Opus's discovery/link dialog is delivered in `202630f`; independent UI integration is in
+progress. Still pending: scoped real sessions created outside
 RepoBridge and real official-desktop continuity. The W6–W8 App-created samples do not satisfy this
 new real acceptance. Current prior allowance remains exhausted (Claude 6/6, Codex 6/6).
 
@@ -34,7 +60,7 @@ Backend branch `codex/existing-session-backend`, independent worktree
 `/Users/chan/Downloads/repobridge-backend`, exact base `ef75a625577c1848e1079dd6d487a5cdc3afa166`.
 Minimal frontend contract is [docs/EXISTING_SESSIONS_API.md](docs/EXISTING_SESSIONS_API.md).
 app.py/native_mac.py remain frontend-owned; shared status docs are integrator-owned.
-Contract first; implementation and scoped synthetic checks follow immediately. No real state opened,
+Historical contract milestone: implementation and scoped checks are delivered above. No real state opened,
 no personal history scanned, no new model allowance. Current W6–W8 evidence is retained.
 
 ## Role split and next feature — 2026-10-09

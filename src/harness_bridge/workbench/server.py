@@ -254,6 +254,8 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                 elif action == "activity":
                     after = int(query.get("after", "0") or 0)
                     self._run(lambda: wb.activity(sid, after))
+                elif action == "delivery":
+                    self._run(lambda: wb.message_delivery(sid, query.get("client_id", "")))
                 elif action == "changes":
                     self._run(lambda: wb.changes(sid))
                 elif action == "diff":

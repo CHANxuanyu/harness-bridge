@@ -246,7 +246,12 @@ def _wait_empty(pgid: int, timeout: float) -> bool:
 
 
 class StructuredError(Exception):
-    pass
+    def __init__(
+        self, message: str, *, reason: str = "native_request_failed", rejected: bool = False
+    ):
+        super().__init__(message)
+        self.reason = reason
+        self.rejected = rejected
 
 
 @dataclass
@@ -261,6 +266,7 @@ class SessionCallbacks:
     # Host-reported settings ({"model"?, "effort"?, "mode"?, "source"}) and the harness catalog.
     on_settings: Callable[[dict[str, Any]], None] = field(default=lambda _s: None)
     on_catalog: Callable[[dict[str, Any]], None] = field(default=lambda _c: None)
+    on_delivery: Callable[[dict[str, Any]], dict[str, Any] | None] = field(default=lambda _d: None)
 
 
 class StructuredSession:
@@ -618,6 +624,7 @@ class ClaudeStreamSession(StructuredSession):
 
 class CodexAppServerSession(StructuredSession):
     harness = CODEX
+    rpc_timeout = 30.0
 
     def __init__(
         self, spec: StructuredSpec, run_dir: Path, conv: Conversation, cb: SessionCallbacks
@@ -633,6 +640,9 @@ class CodexAppServerSession(StructuredSession):
         # Settings to pass when the thread is started or resumed (set by the service).
         self.connect_settings: dict[str, Any] = {}
         self._confirm_after_turn = False
+        self._closed = False
+        self._deliveries: dict[str, dict[str, Any]] = {}
+        self._turn_requests: dict[int, str] = {}
 
     def start(self) -> None:
         self.process = PipeProcess(
@@ -645,10 +655,46 @@ class CodexAppServerSession(StructuredSession):
         threading.Thread(target=self._handshake, name="codex-handshake", daemon=True).start()
 
     def _exit(self, info: ExitInfo) -> None:
+        with self._lock:
+            self._closed = True
+            self._fail_pending("native_process_exited")
         for event, box in list(self._waiters.values()):
-            box["error"] = {"message": "app-server exited"}
+            box["error"] = {"message": "Codex 连接已退出", "reason": "native_process_exited"}
             event.set()
         self.cb.on_exit(info)
+
+    def _delivery(self, client_id: str, state: str, reason: str | None = None) -> None:
+        with self._lock:
+            record = self._deliveries.get(client_id)
+            if record is None or record.get("delivery", {}).get("state") == "sent":
+                return
+            message = {
+                "queued": "等待 Codex 连接完成，尚未发送。",
+                "sending": "已开始提交，等待 Codex 确认。",
+                "sent": "Codex 已确认接收这条消息。",
+                "not_sent": "这条消息明确没有发出；文字和附件已保留，不会自动重发。",
+                "unknown": "这条消息可能已被 Codex 接收，但结果无法确认。"
+                "请先核对原生历史，不要重复发送。",
+            }[state]
+            record = {
+                **record,
+                "status": {"queued": "sending", "sending": "sending", "not_sent": "failed"}.get(
+                    state, state
+                ),
+                "delivery": {"state": state, "reason": reason, "message": message},
+            }
+            # Persist before publishing the state or attempting a native write.
+            record = self.cb.on_delivery(record) or record
+            self._deliveries[client_id] = record
+            self.conv.upsert(record)
+
+    def _fail_pending(self, reason: str) -> None:
+        for cid, record in list(self._deliveries.items()):
+            state = record.get("delivery", {}).get("state")
+            if state in ("queued", "sending"):
+                self._delivery(cid, "not_sent" if state == "queued" else "unknown", reason)
+        self.queue.clear()
+        self.conv.set_turn(None)
 
     def _handshake(self) -> None:
         try:
@@ -707,8 +753,11 @@ class CodexAppServerSession(StructuredSession):
             else:
                 self.cb.on_native_id(self.thread_id, "confirmed")
                 self.load_history()
-        except StructuredError as exc:
+        except (StructuredError, OSError) as exc:
             self.failure = str(exc)
+            with self._lock:
+                self._closed = True
+                self._fail_pending(getattr(exc, "reason", "native_transport_error"))
             if "active writer" in str(exc):
                 # Codex's own single-writer lock: the thread is still open elsewhere (typically
                 # the Codex app). RepoBridge never forces it.
@@ -719,10 +768,12 @@ class CodexAppServerSession(StructuredSession):
             else:
                 self.cb.on_fatal(f"Codex app-server 未能就绪：{exc}")
             return
-        self.ready.set()
-        self.cb.on_ready()
         with self._lock:
+            if self._closed:
+                return
+            self.ready.set()
             queued, self.queue = self.queue, []
+        self.cb.on_ready()
         for turn in queued:
             self._start_turn(turn)
 
@@ -794,7 +845,7 @@ class CodexAppServerSession(StructuredSession):
     # --- JSON-RPC ---------------------------------------------------------------------------
 
     def call(
-        self, method: str, params: Mapping[str, Any] | None, timeout: float = 30
+        self, method: str, params: Mapping[str, Any] | None, timeout: float | None = None
     ) -> dict[str, Any]:
         with self._lock:
             self._next_id += 1
@@ -802,19 +853,30 @@ class CodexAppServerSession(StructuredSession):
             event = threading.Event()
             box: dict[str, Any] = {}
             self._waiters[rid] = (event, box)
+            if method == "turn/start" and params:
+                self._turn_requests[rid] = str(params["clientUserMessageId"])
         assert self.process is not None
         try:
             self.process.write({"id": rid, "method": method, "params": dict(params or {})})
         except OSError as exc:
             self._waiters.pop(rid, None)
-            raise StructuredError(f"{method}: {exc}") from None
-        if not event.wait(timeout):
+            raise StructuredError(f"{method}: {exc}", reason="native_transport_error") from None
+        if not event.wait(self.rpc_timeout if timeout is None else timeout):
             self._waiters.pop(rid, None)
-            raise StructuredError(f"{method} 超时")
+            raise StructuredError(f"{method} 超时", reason="native_timeout")
         self._waiters.pop(rid, None)
         if "error" in box:
             err = box["error"]
-            raise StructuredError(str(err.get("message") if isinstance(err, dict) else err))
+            message = str(err.get("message") if isinstance(err, dict) else err)
+            code = err.get("code") if isinstance(err, dict) else None
+            reason = (err.get("reason") if isinstance(err, dict) else None) or (
+                "native_capability_unsupported"
+                if code == -32601
+                else "native_writer_busy"
+                if "active writer" in message
+                else "native_request_rejected"
+            )
+            raise StructuredError(message, reason=reason, rejected=code is not None)
         result = box.get("result")
         return result if isinstance(result, dict) else {}
 
@@ -841,6 +903,10 @@ class CodexAppServerSession(StructuredSession):
             method = str(msg["method"])
             params = msg.get("params") or {}
             self.translator.notification(method, params)
+            if method in ("item/started", "item/completed"):
+                item = params.get("item") or {}
+                if item.get("type") == "userMessage" and item.get("clientId"):
+                    self._delivery(str(item["clientId"]), "sent")
             if method == "turn/started":
                 self.cb.on_turn_started()
                 if self._confirm_after_turn:
@@ -895,6 +961,14 @@ class CodexAppServerSession(StructuredSession):
             elif method == "turn/diff/updated":
                 self.cb.on_activity({"event": "DiffUpdated"})
         elif "id" in msg:
+            cid = self._turn_requests.pop(msg["id"], None) if isinstance(msg["id"], int) else None
+            if cid:
+                if "error" in msg:
+                    self._delivery(cid, "not_sent", "native_request_rejected")
+                elif isinstance(msg.get("result"), dict) and (msg["result"].get("turn") or {}).get(
+                    "id"
+                ):
+                    self._delivery(cid, "sent")
             waiter = self._waiters.get(msg["id"]) if isinstance(msg["id"], int) else None
             if waiter is not None:
                 event, box = waiter
@@ -946,9 +1020,18 @@ class CodexAppServerSession(StructuredSession):
     ) -> None:
         turn = _CodexTurn(text, client_id, list(inputs or []), dict(overrides or {}))
         with self._lock:
+            if self._closed or self.failure or (self.process and self.process.exited):
+                raise StructuredError(
+                    "Codex 连接未能就绪，消息没有发出。", reason="connection_unavailable"
+                )
             if self.busy:
                 raise StructuredError("上一轮还在进行；可以先停止它")
             self.translator.begin_turn(client_id, text if display is None else display, attachments)
+            self._deliveries[client_id] = {
+                **(self.conv.get(f"user:{client_id}") or {}),
+                "client_id": client_id,
+            }
+            self._delivery(client_id, "queued")
             if not self.ready.is_set():
                 self.queue.append(turn)
                 return
@@ -967,18 +1050,23 @@ class CodexAppServerSession(StructuredSession):
             self._confirm_after_turn = True
 
         def run() -> None:
+            with self._lock:
+                if self._closed:
+                    self._delivery(client_id, "not_sent", "connection_unavailable")
+                    return
+                self._delivery(client_id, "sending")
             try:
                 result = self.call("turn/start", params)
             except StructuredError as exc:
                 if turn.overrides:
                     self.cb.on_settings({"source": "turn/start", "error": str(exc)})
-                self.conv.upsert({"id": f"user:{client_id}", "status": "failed"})
+                self._delivery(client_id, "not_sent" if exc.rejected else "unknown", exc.reason)
                 self.conv.upsert(
                     {
                         "id": f"n:send:{client_id}",
                         "type": "notice",
                         "level": "error",
-                        "text": f"消息没有发送成功：{exc}",
+                        "text": self._deliveries[client_id]["delivery"]["message"],
                     }
                 )
                 self.conv.set_turn(None)
@@ -1185,7 +1273,7 @@ def read_codex_data(
     finally:
         exited = reader.process.terminate(1.0)
         if exited is None or not exited.confirmed:
-            raise StructuredError("Native history reader exit is unconfirmed")
+            raise StructuredError("历史读取进程退出未确认。", reason="native_exit_unconfirmed")
 
 
 def probe_catalog(

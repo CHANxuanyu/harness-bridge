@@ -189,8 +189,9 @@ def test_link_concurrency_restart_unlink_relink_and_environment_binding(
     assert wb.conversation(sid, limit=100)["items"]
     env_key = "CLAUDE_CONFIG_DIR" if harness == CLAUDE else "CODEX_HOME"
     wb.base_env[env_key] = str(fx.base / "other-profile")
-    with pytest.raises(BridgeError, match="environment"):
+    with pytest.raises(BridgeError) as failure:
         wb.start_run(sid, "resume", confirm_external=True)
+    assert failure.value.details["reason"] == "environment_changed"
 
 
 @pytest.mark.parametrize("harness", [CLAUDE, CODEX])
@@ -295,8 +296,9 @@ def test_no_unscoped_fallback_or_empty_on_native_error(fx: WB) -> None:
     seed(fx, CODEX)
     wb = fx.open(WB_STUB_DISCOVERY_UNSUPPORTED="1")
     pid = wb.add_project(str(fx.repo))["project_id"]
-    with pytest.raises(BridgeError, match="unsupported"):
+    with pytest.raises(BridgeError) as failure:
         wb.native_history.discover(pid, CODEX)
+    assert failure.value.details["reason"] == "native_capability_unsupported"
 
 
 def test_claude_invalid_metadata_symlink_and_empty_are_distinct(fx: WB) -> None:
@@ -427,8 +429,9 @@ def test_same_uuid_in_different_storage_environments_does_not_alias(fx: WB) -> N
     second = linked(wb, c["candidate_id"])
     assert first != second
     assert len(wb.store.list_sessions()) == 2
-    with pytest.raises(BridgeError, match="environment"):
+    with pytest.raises(BridgeError) as failure:
         wb.conversation(first)
+    assert failure.value.details["reason"] == "environment_changed"
 
 
 def test_legacy_app_row_is_reused_without_new_native_or_local_session(fx: WB) -> None:

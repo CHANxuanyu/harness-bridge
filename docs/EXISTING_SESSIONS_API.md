@@ -180,6 +180,85 @@ connection. Example error envelope:
 
 ## Verification and acceptance boundary
 
+### Integration correction: message receipts and stable errors (2026-10-09)
+
+Frontend input: `202630f659d0411ef81a611ccc98bf09bfc4b4aa` (includes `b866e09`). The delivered
+frontend already restores definitely-unsent messages by client ID; the additions below also cover
+ambiguous delivery and must be consumed before treating UI acceptance as complete.
+
+**Codex send receipts apply to both ordinary and linked sessions.** `/send` still returns
+`client_id`, and adds `delivery:{state,reason,message}`. HTTP 200 acknowledges local acceptance,
+not native delivery. Each accepted message is persisted in the existing event store before native
+submission, with original text and attachment IDs/names; no new schema version. Existing
+conversation/SSE user items use `id="user:<client_id>"`, add `client_id` and the same `delivery`.
+
+| delivery.state | item.status | Meaning and required UI behavior |
+|---|---|---|
+| `queued` | `sending` | Accepted locally, awaiting handshake; not submitted yet. Keep tracked text/attachments. |
+| `sending` | `sending` | Native submission attempted; wait for a receipt. This is not proof of delivery. |
+| `not_sent` | `failed` | Definitely not submitted (handshake refusal/timeout/early exit), or explicit native request rejection. Restore once or hold next to a newer draft; never resend automatically. |
+| `sent` | `sent` | Native `turn/start` success with turn ID, matching native user item, or matching client ID in native history confirms acceptance. This says nothing about whether the turn later succeeded. Remove any unedited recovery copy. |
+| `unknown` | `unknown` | Submission may have reached Codex, but reply was lost/timed out. Preserve a separate uncertain copy; show the supplied explanation and require checking native history. **Do not label it “没有发出”, restore it as definitely unsent, or resend it.** |
+
+`GET /api/sessions/<id>/delivery?client_id=<id>` returns the durable user-item receipt (same normal
+envelope), including `text`, `attachments`, `run_id`, `delivery`. Use this after an ended run, missed
+SSE/HTTP response, view switch or restart. A missing receipt returns 404 with
+`details.reason="message_not_found"`; absence/error alone is not native delivery proof.
+
+Submitting the same client ID and content returns the existing receipt with `reused:true` and
+never spawns/resends; changed content for that ID returns 409 `client_id_conflict`. A deliberate
+retry of a definitely-unsent message uses a new client ID. While a prior receipt is `unknown`,
+new Codex sends are refused with 409 `delivery_unknown` (and the unresolved client ID) until exact
+native evidence confirms it. Never infer delivery from matching text or from the process ending.
+Read-only refresh can reconcile a native item with the same `clientId`; it does not start a turn.
+Late receipts may change unknown/not_sent to sent; a confirmed sent receipt cannot be downgraded
+by a later timeout/exit. Failed/uncertain local items remain recoverable after native history reload.
+
+Synthetic accepted response:
+
+```json
+{"ok":true,"result":{"client_id":"send-example","delivery":{"state":"queued","reason":null,"message":"等待 Codex 连接完成，尚未发送。"}}}
+```
+
+Synthetic receipt after a refused handshake (attachment bytes stay in the existing App attachment
+store; the response contains references only):
+
+```json
+{"id":"user:send-example","type":"user","client_id":"send-example","text":"修复解析器","attachments":[{"id":"att_example","kind":"file","name":"notes.txt","size":18}],"status":"failed","run_id":"run_example","delivery":{"state":"not_sent","reason":"native_writer_busy","message":"这条消息明确没有发出；文字和附件已保留，不会自动重发。"}}
+```
+
+**Error classification.** Existing status codes and `history.error` string/null stay compatible.
+HTTP errors add `details.reason` and, for history capability decisions, `details.capability_unsupported`.
+Successful preview/conversation responses with a native read failure add `history.reason` and
+`history.capability_unsupported` next to `history.error`. Display Chinese `message`/`history.error`;
+branch on the fields, not English text. A generic `PREFLIGHT_FAILED` is not “unsupported”.
+
+| Reasons | Meaning |
+|---|---|
+| `native_capability_unsupported`, `native_protocol_unsupported`, `storage_layout_unsupported`, `unsupported_source` | Explicit unsupported capability/source/layout, `capability_unsupported=true`. Native method-not-found is recognized from RPC code -32601. |
+| `native_read_failed`, `native_timeout`, `native_process_exited`, `native_transport_error`, `native_exit_unconfirmed`, `harness_unavailable` | Read/connection failure, **not** unsupported; retry/inspect as appropriate. No global scan fallback. |
+| `native_history_missing`, `native_history_invalid`, `native_identity_changed` | Missing history, invalid metadata, or mismatched ID/cwd; no invented empty-success history. |
+| `candidate_expired`, `cursor_expired` | Rediscover or reload the first page. |
+| `external_confirmation_required` | 409 with `details.external`; external use has not been confirmed ended. |
+| `local_writer_busy` | 409 with `details.busy_session_id`; a real local run (including unconfirmed exit) still owns the slot. |
+| `directory_missing`, `environment_changed`, `unlinked`, `resume_required` | Restore the correct directory/environment/association or use resume. |
+| `native_writer_busy`, `native_request_rejected`, `connection_unavailable`, `connection_ended` | Delivery refusal/lifecycle reason. `delivery.state` determines definite failure versus uncertainty. |
+
+An external-held unlink is checked atomically in the same transaction as local activity and removal.
+It returns `details.external`, **not a busy-session pointer to itself**. An actual local run takes
+the local-writer branch. The rule is unchanged: external confirmation is required before unlink.
+
+**`POST …/desktop/return` is the intended confirmation for `via:"native-link"` too.** The user
+explicitly confirms outside use has ended; it records that statement, clears the external hold and
+invalidates the history cache. Result stays `{"external":null}`. The audit payload says
+`source:"user_confirmation",process_exit_observed:false`. It never resumes, sends, kills an
+external process or asserts observed exit. The next resume/send remains a separate explicit action.
+
+Frontend review still required on `202630f`: `checkInflight` currently treats an ended run without
+sent/failed as definitely unsent; it must consult this receipt and retain `unknown` separately.
+`historyFailure` can use `capability_unsupported` now. These are interface integration follow-ups,
+not permission to rewrite the frontend or mutate its worktree.
+
 Use isolated homes/native histories, stub CLIs, temp state and server port 0. Fixtures must be seeded
 outside RepoBridge before link. Assert no new native session/turn/send/replay for list/preview/link;
 exact ID on resume, writer/hold guards, dedupe under concurrent link, restart, unlink/relink,

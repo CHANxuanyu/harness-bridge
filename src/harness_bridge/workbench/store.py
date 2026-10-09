@@ -119,6 +119,11 @@ class WorkdirBusy(Exception):
         self.title = title
 
 
+class ExternalHeld(Exception):
+    def __init__(self, external: dict[str, Any]) -> None:
+        self.external = external
+
+
 class WorkbenchStore:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -450,12 +455,17 @@ class WorkbenchStore:
         with self.tx() as db:
             row = db.execute(
                 "SELECT s.title,s.workdir FROM sessions s WHERE s.session_id=? AND "
-                "(s.external_json IS NOT NULL OR EXISTS (SELECT 1 FROM runs r "
-                "WHERE r.session_id=s.session_id AND r.status IN ('starting','running')))",
+                "EXISTS (SELECT 1 FROM runs r WHERE r.session_id=s.session_id "
+                "AND r.status IN ('starting','running'))",
                 (session_id,),
             ).fetchone()
             if row:
                 raise WorkdirBusy(row["workdir"], session_id, row["title"])
+            held = db.execute(
+                "SELECT external_json FROM sessions WHERE session_id=?", (session_id,)
+            ).fetchone()
+            if held and held["external_json"]:
+                raise ExternalHeld(json.loads(held["external_json"]))
             db.execute("UPDATE native_links SET linked=0 WHERE session_id=?", (session_id,))
             db.execute("UPDATE sessions SET archived=1 WHERE session_id=?", (session_id,))
 
@@ -610,6 +620,58 @@ class WorkbenchStore:
         for row in rows:
             row["payload"] = json.loads(row["payload"])
         return rows
+
+    def message_deliveries(self, session_id: str) -> dict[str, dict[str, Any]]:
+        records: dict[str, dict[str, Any]] = {}
+        for row in self._rows(
+            "SELECT payload, run_id FROM events WHERE session_id=? "
+            "AND kind='message_delivery' ORDER BY seq",
+            (session_id,),
+        ):
+            payload = json.loads(row["payload"])
+            records[payload["client_id"]] = {**payload, "run_id": row["run_id"]}
+        return records
+
+    def record_delivery(
+        self, session_id: str, run_id: str, payload: dict[str, Any], *, ended_only: bool = False
+    ) -> dict[str, Any]:
+        """Append a receipt atomically. A confirmed receipt cannot be downgraded by a late exit."""
+        with self.tx() as db:
+            old = next(
+                (
+                    row
+                    for row in db.execute(
+                        "SELECT * FROM events WHERE session_id=? "
+                        "AND kind='message_delivery' ORDER BY seq DESC",
+                        (session_id,),
+                    )
+                    if json.loads(row["payload"])["client_id"] == payload["client_id"]
+                ),
+                None,
+            )
+            if old:
+                previous = json.loads(old["payload"])
+                state = previous["delivery"]["state"]
+                run = db.execute("SELECT status FROM runs WHERE run_id=?", (run_id,)).fetchone()
+                if state == "sent" or (
+                    ended_only
+                    and (state not in ("queued", "sending") or (run and run["status"] in ACTIVE))
+                ):
+                    return {**dict(old), "payload": previous}
+            stamp = now()
+            cur = db.execute(
+                "INSERT INTO events(session_id, run_id, kind, payload, created_at) "
+                "VALUES (?,?,'message_delivery',?,?)",
+                (session_id, run_id, json.dumps(payload, ensure_ascii=False), stamp),
+            )
+            return {
+                "seq": cur.lastrowid,
+                "session_id": session_id,
+                "run_id": run_id,
+                "kind": "message_delivery",
+                "payload": payload,
+                "created_at": stamp,
+            }
 
     # --- handoffs -------------------------------------------------------------------------------
 
