@@ -2356,7 +2356,11 @@ class Workbench:
                 status, failure = "exited", None
             else:
                 status, failure = "failed", _exit_reason(info)
-                last = tail.strip().splitlines()[-1].strip() if tail.strip() else ""
+                # Only native process output belongs in the exit summary. Conversation notices
+                # can describe provisional delivery uncertainty, later settled by native proof.
+                # Keep those notices in output_tail, but do not freeze them into run.failure.
+                native_tail = strip_ansi_tail(raw_tail).strip()
+                last = native_tail.splitlines()[-1].strip() if native_tail else ""
                 if live.transport == "structured" and last:
                     # The CLI's own last words (e.g. "No conversation found …") explain it best.
                     failure += f"：{last[:300]}"
