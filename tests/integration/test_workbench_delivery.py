@@ -303,3 +303,66 @@ def test_run_failure_does_not_freeze_delivery_uncertainty(fx: WB, native_diagnos
     assert WB.run(wb, sid) == run
     assert wb.message_delivery(sid, "banner-proof")["delivery"]["state"] == "sent"
     assert len(wb.store.list_runs(sid)) == 1 and len(calls(fx, "turn/start")) == 1
+
+
+def test_first_ordinary_codex_unknown_reads_late_proof_without_rebinding(fx: WB) -> None:
+    wb = fx.open(WB_STUB_TURN_DELIVERY="exit")
+    pid = wb.add_project(str(fx.repo))["project_id"]
+    sid = wb.create_session(pid, CODEX, start=False, view_mode="conversation")["session_id"]
+    attachment = wb.add_attachment(sid, name="first.txt", data=b"synthetic first turn")
+    wb.send_message(sid, "first uncertain", client_id="first-proof", attachments=[attachment["id"]])
+    wait_for(lambda: not WB.view(wb, sid)["active"])
+    session = wb.store.get_session(sid)
+    native = session["native_session_id"]
+    assert native and session["turns_observed"] == 0
+    original = wb.message_delivery(sid, "first-proof")
+    assert original["delivery"]["state"] == "unknown"
+    run = WB.run(wb, sid)
+    wb.close()
+    fx.instances.remove(wb)
+    wb = fx.open()
+    # First-turn reply loss must not let the same local slot fork a fresh native thread.
+    assert not WB.view(wb, sid)["can_start_fresh"]
+    with pytest.raises(BridgeError):
+        wb.start_run(sid, "new")
+    with pytest.raises(BridgeError) as blocked:
+        wb.send_message(sid, "not a retry", client_id="blocked")
+    assert blocked.value.details["reason"] == "delivery_unknown"
+    # Missing native materialization is not acceptance; the original receipt remains recoverable.
+    wb.conversation(sid, refresh=True)
+    assert wb.message_delivery(sid, "first-proof")["delivery"]["state"] == "unknown"
+    path = Path(fx.env["WB_STUB_HOME"]) / "codex" / f"{native}.turns.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    user = {
+        "id": "late-user",
+        "type": "userMessage",
+        "clientId": "different-id",
+        "content": [{"type": "text", "text": "first uncertain"}],
+    }
+    rows = [{"id": "late-turn", "status": "completed", "items": [user]}]
+    path.write_text(json.dumps(rows))
+    wb.conversation(sid, refresh=True)
+    assert wb.message_delivery(sid, "first-proof")["delivery"]["state"] == "unknown"
+    user["clientId"] = "first-proof"
+    path.write_text(json.dumps(rows))
+    path.with_suffix("").with_suffix("").write_text("rollout\n")
+    visible = wb.conversation(sid, refresh=True)["items"]
+    assert sum(i["id"] == "user:first-proof" for i in visible) == 1
+    receipt = wb.message_delivery(sid, "first-proof")
+    assert (
+        receipt["delivery"]["state"] == "sent" and receipt["attachments"] == original["attachments"]
+    )
+    assert WB.run(wb, sid) == run and run["status"] == "failed"
+    assert wb.store.get_session(sid)["turns_observed"] == 0  # No invented observed turns.
+    assert WB.view(wb, sid)["can_resume"] and not WB.view(wb, sid)["can_start_fresh"]
+    assert len(calls(fx, "thread/start")) == len(calls(fx, "turn/start")) == 1
+    wb.close()
+    fx.instances.remove(wb)
+    wb = fx.open()
+    assert wb.message_delivery(sid, "first-proof")["delivery"]["state"] == "sent"
+    wb.send_message(sid, "explicit next message", client_id="next-proof")
+    wait_for(lambda: wb.message_delivery(sid, "next-proof")["delivery"]["state"] == "sent")
+    assert wb.store.get_session(sid)["native_session_id"] == native
+    assert len(calls(fx, "thread/start")) == 1
+    assert any(c["params"]["threadId"] == native for c in calls(fx, "thread/resume"))
+    assert len(calls(fx, "turn/start")) == 2
