@@ -669,6 +669,13 @@ function mergeAttachments(list, atts) {
 
 // ---------------------------------------------------------------- composer
 
+// A key that belongs to an input method composition (pinyin, kana…). WebKit — the native window —
+// delivers the Enter or Escape that confirms or cancels a candidate with isComposing=false and
+// keyCode 229, so both count. Text fields never act on such a key.
+function composingKey(e) {
+  return !!(e && (e.isComposing || e.keyCode === 229));
+}
+
 function buildComposer(s) {
   const sid = s.session_id;
   const label = HARNESS[s.harness].label;
@@ -691,7 +698,7 @@ function buildComposer(s) {
   ta.addEventListener('click', () => updateMention(sid));
   ta.addEventListener('blur', () => setTimeout(hidePop, 120));
   ta.addEventListener('keydown', (e) => {
-    if (e.isComposing || e.keyCode === 229) return;
+    if (composingKey(e)) return;
     if (popKey(e, sid)) return;
     const now = findSession(sid);
     const running = !!(now && now.turn);
