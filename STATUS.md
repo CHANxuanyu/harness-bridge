@@ -1,5 +1,26 @@
 # Status
 
+## Real external-session acceptance preparation — 2026-10-10
+
+**PREPARED / NOT_RUN.** The user's fixed candidate remains `76307345d8f036c548128de96c5f230099cc65d8`;
+P1 and both P2 conclusions stay closed, with offline/synthetic acceptance passed.
+[Executable checklist](docs/EXISTING_SESSIONS_LIVE_ACCEPTANCE.md) covers fixed-source export, new
+state/port, startup/stop, sample provenance, scoped no-message reads and same-ID single-writer
+RepoBridge → official desktop → RepoBridge continuation. No production code or API change.
+
+Still needed: user-designated project/cwd + native ID + creation source + current writer for one
+Claude and one Codex outside-created sample, permission for scoped project metadata/target history,
+and a new allowance. Minimum with existing samples: **3 explicit sends per harness, 6 total**, no
+automatic retries; missing sample creation needs additional authorization. This is not a bound on
+internal provider/API requests. Old allowance remains exhausted. IME/clipboard/VoiceOver remain Opus's
+separate work; Claude receipts, ordinary draft reload loss and historical summary limits remain.
+
+Preparation verification only: four shell blocks syntax-checked; embedded Python syntax/imports,
+archive identity/content and launch-argument parsing checked without constructing Workbench or
+starting any CLI/server/model. No repeat of the already-passed 1004-test suite for documentation.
+PR #3 remains draft (observed head `80346bc5c9c4c1c85f87bf6a8e422bdf8372e083`, **not included** in this
+fixed candidate); PR #4 stays draft based on the same frontend branch. No merge to default/release/install.
+
 ## Existing-session independent acceptance — 2026-10-10 (frontend 72a3255)
 
 **P1 closed. Offline/synthetic integration acceptance passed.**
@@ -8,8 +29,8 @@ Merged exact frontend `72a32557cc7f0196655841628d3c2dcf5a81383e` (parent `462cda
 `/Users/chan/Downloads/repobridge-integration`, branch `codex/existing-session-integration`, from
 `9f866e901b623a770b729afd460cef5ffe8acbf7`. **Exact code tested: `1676fdc8b412a565bc2b697d262f29fdc3bb561d`**.
 Backend banner fix `a35a868` and first-turn native-ID protection `1856bd4` are unchanged. PR #4
-remains draft and based on draft PR #3. Only documentation follows this test version; final pushed
-head hashes are recorded in PR #4. No frontend-owned implementation was edited by Codex.
+remains draft and based on draft PR #3. Accepted candidate `76307345d8f036c548128de96c5f230099cc65d8`
+contains only documentation after this test version; later preparation documents are separate. No frontend-owned implementation was edited by Codex.
 
 Final fixed-code offline check: **1004 passed in 1006.77s (16m46s), zero failures and zero skips**. Ruff check and format passed (190 files); strict mypy passed (59 source files).
 Focused delivery/conversation/frontend retention regression: **43 passed / 42.60s**.

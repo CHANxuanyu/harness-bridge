@@ -35,7 +35,7 @@ Actual source imports and absolute PYTHONPATH verified. No live model tests or r
 | E13 | 900×640 sidebar expanded, 700px, 1280×900, long model, attachments/draft/unknown card; controls and no horizontal overflow | UI-offline Chrome + isolated native WKWebView | **P2 pass**: new browser sizes pass on 72a3255; prior long-model/native measurements and content screenshots retain their original scope; blank full-window captures excluded |
 | E14 | Missing/error receipts; lost response/SSE; stale/duplicate events, queries and pages; preservation of other unknowns and session drafts/attachments | UI-offline page/HTTP injection + actual fault stubs | pass on final code; no downgrade, incorrect recovery, cross-session cleanup or automatic send; not real-native disorder evidence |
 | E15 | Run failure summary vs delivery, unknown→sent and reload/restart | T2-W + UI-offline | new banner P2 pass for corrected runs: failed/exit 3/diagnostics unchanged; summary factual, unresolved unknown warned separately; no old failure-string migration |
-| E10 | Designated native sessions actually created outside RepoBridge; real official desktop open/history/continuation/return/resume | T3-W/T4-W | **not run**; prior App-created samples do not qualify; prior turn allowance exhausted |
+| E10 | Designated native sessions actually created outside RepoBridge; real official desktop open/history/continuation/return/resume | T3-W/T4-W | **not run; execution checklist prepared** for fixed candidate 7630734 ([steps/budget](EXISTING_SESSIONS_LIVE_ACCEPTANCE.md)); prior App-created samples do not qualify; prior turn allowance exhausted |
 
 Reproduction and limits: [EXISTING_SESSIONS_RESULT.md](EXISTING_SESSIONS_RESULT.md).
 
