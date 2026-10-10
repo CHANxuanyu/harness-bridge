@@ -1,5 +1,143 @@
 # Handoff
 
+## Current candidate and next acceptance — 2026-10-10 (80346bc)
+
+**Unified fixed candidate and actual tested code: `78253365266eb5f47f0436dddf4b69522def917e`**; exact frontend
+`80346bc5c9c4c1c85f87bf6a8e422bdf8372e083`, merged into integration input `8e1c402b751a0ab2165d3c6d156014a6720fce50`.
+The existing integration worktree/branch is preserved. Live-preparation documents, backend factual
+failure-banner fix and first-submission native-ID guard remain intact. No frontend-owned product
+file was edited by Codex. Old candidate `76307345d8f036c548128de96c5f230099cc65d8` retains its own
+1004-test historical receipt; the new keyboard/dialog results are not backfilled into it.
+
+**Offline/synthetic acceptance passed: 1007 tests / 1007.52s (16m47s), zero failures/skips; ruff check and format (193 files) passed; strict mypy (59 source files) passed.**
+Focused regressions: **75 passed / 55.69s**. Actual-page keyboard/dialog probe: **114 passed, zero
+failed**. Both `isComposing` and WebKit-style `keyCode=229` events were injected into real controls;
+HTTP request counts, focus, field values and resulting state were asserted. Ordinary Enter/Escape/
+arrows still work. Six computed dialog names, entry, Tab/Shift-Tab containment and close/restoration
+pass in Chromium. Existing-menu close returns to the composer, as in the controlled old-page
+comparison; this is browser evidence, not native focus or VoiceOver acceptance.
+
+Pagination's 35 explicit assertions and the sent/not_sent/unknown, response-loss/event-order,
+draft/attachment and ordinary Codex/Claude regressions pass again. P1 and both P2 conclusions stay
+closed within their recorded scope; no new blocker found. Narrow-window browser measurements
+900/700/1280 pass; prior long-label/native-window evidence keeps its original scope.
+[Details and evidence](docs/EXISTING_SESSIONS_INTEGRATION.md) ·
+[Updated real-session checklist](docs/EXISTING_SESSIONS_LIVE_ACCEPTANCE.md).
+
+**Real acceptance remains PREPARED / NOT_RUN.** The user need only designate projects, provenance
+and writer status and permit scoped metadata discovery; the executor can find native IDs and present
+candidates for selection. No manual database lookup is required. Target history reading needs its
+own explicit scope; the auto-preview dialog is not used under metadata-only permission. Real sends
+need a new allowance: minimum 3 per harness / 6 total with existing qualified samples, no automatic
+retry. Old allowance remains exhausted. Native IME, system clipboard, VoiceOver and native focus
+remain NOT_RUN / Opus follow-up. Claude receipt limits, ordinary draft loss on full reload and
+unmigrated historical failure summaries remain. No real harness/private-history/real-state/current
+instance access or model calls this round; no desktop-control request, default merge or release.
+PR #3/#4 stay draft with #4 based on #3's frontend branch. Subsequent receipt edits change Markdown
+only; the fixed candidate above does not move with the documentation branch.
+
+## Historical preparation for candidate 7630734 — 2026-10-10
+
+Historical receipt (superseded by the candidate above): **PREPARED / NOT_RUN**. The then-fixed candidate was `76307345d8f036c548128de96c5f230099cc65d8`;
+P1 and both P2 conclusions stay closed, with offline/synthetic acceptance passed.
+[Executable checklist](docs/EXISTING_SESSIONS_LIVE_ACCEPTANCE.md) covers fixed-source export, new
+state/port, startup/stop, sample provenance, scoped no-message reads and same-ID single-writer
+RepoBridge → official desktop → RepoBridge continuation. No production code or API change.
+
+Still needed: user-designated project/cwd + native ID + creation source + current writer for one
+Claude and one Codex outside-created sample, permission for scoped project metadata/target history,
+and a new allowance. Minimum with existing samples: **3 explicit sends per harness, 6 total**, no
+automatic retries; missing sample creation needs additional authorization. This is not a bound on
+internal provider/API requests. Old allowance remains exhausted. IME/clipboard/VoiceOver remain Opus's
+separate work; Claude receipts, ordinary draft reload loss and historical summary limits remain.
+
+Preparation verification only: four shell blocks syntax-checked; embedded Python syntax/imports,
+archive identity/content and launch-argument parsing checked without constructing Workbench or
+starting any CLI/server/model. No repeat of the already-passed 1004-test suite for documentation.
+PR #3 remains draft (observed head `80346bc5c9c4c1c85f87bf6a8e422bdf8372e083`, **not included** in this
+fixed candidate); PR #4 stays draft based on the same frontend branch. No merge to default/release/install.
+
+## Existing-session offline/synthetic acceptance — 2026-10-10 (72a3255)
+
+**P1 closed. Offline/synthetic integration acceptance passed.**
+
+- Frontend: `72a32557cc7f0196655841628d3c2dcf5a81383e`; exact parent `462cda4d34bfbd5e13a22a79783758b26fde4bf6`.
+- Integration input: `9f866e901b623a770b729afd460cef5ffe8acbf7`.
+- **Exact code tested: `1676fdc8b412a565bc2b697d262f29fdc3bb561d`**, existing `/Users/chan/Downloads/repobridge-integration`, branch `codex/existing-session-integration`.
+- Backend factual-banner fix `a35a868f191f8377444a0cad136cf387906e0bf8` and first-turn ID guard `1856bd44f950ec456d9becf53d4c24f368c0b95d` retained without changes.
+- PR #4 remains draft and stacked on draft PR #3. Accepted candidate `76307345d8f036c548128de96c5f230099cc65d8` contains seven Markdown documents after tested code; later preparation docs do not change the candidate. Frontend checkout and old main directory untouched.
+
+Final fixed-code offline check: **1004 passed in 1006.77s (16m46s), zero failures and zero skips**. Ruff check and format passed (190 files); strict mypy passed (59 source files).
+Focused regressions: 43 passed / 42.60s. Independent pagination: 35 explicit assertions pass on the
+actual integrated source, with isolated HOME/state/native fixtures/ports and stub CLIs. Absolute
+PYTHONPATH/import paths verified; shared virtualenv used read-only. No new production code by Codex.
+
+**Remaining pagination P1 is resolved:** first confirmation through older history clears the target
+card, including an ID skipped by pager dedupe and a session hidden during the request. Existing
+content/order stay intact and the measured reading-anchor shift is 0.078125 px. Other unknown
+messages still block sending. Drafts and attachments stay with their own session. Duplicate pages
+produce one bubble/attachment set and no extra notices, sends or runs. Competing reads are gated;
+zero other history/receipt requests participated during the three older-page windows. Switching
+back triggered one held automatic refresh, which could not perform the cleanup.
+
+Original sent-downgrade cases, lost response/missed SSE, normal not_sent recovery and ordinary/linked
+Codex/Claude paths pass again. Actual first-turn unknown survives service restart and settles only
+from exact native clientId proof. Both P2 conclusions remain: narrow browser regression passed,
+prior isolated native/long-label evidence retained; factual failure banner remains failed with exit
+code/diagnostics after sent. Previously stored failure text is not rewritten.
+
+No remaining frontend blocker from this round. Future real acceptance stays separate: designated
+sessions created outside RepoBridge, official desktop continuation, IME/clipboard/VoiceOver. Claude
+lacks corresponding durable receipts; pre-echo exit evidence remains limited. Full-page reload
+loses ordinary unsent drafts. No new real allowance, state upgrade, current-instance access,
+credential/private-history scan, default merge, release or installed replacement.
+
+[Evidence and reproduction](docs/EXISTING_SESSIONS_INTEGRATION.md) · [Contract](docs/EXISTING_SESSIONS_API.md) · [Isolated startup](docs/EXISTING_SESSIONS_SANDBOX.md).
+Durable local evidence: `/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-72a3255/`. Opus's original `artifacts/qa-older-72a3255/` was read-only input;
+its scripts were copied/adapted to Codex's own fixture roots and strengthened before execution.
+
+## Prior backend delivery — 2026-10-09
+
+Use backend branch `codex/existing-session-backend` in `/Users/chan/Downloads/repobridge-backend`;
+it starts at exact common handoff `ef75a625577c1848e1079dd6d487a5cdc3afa166`. The first pushed commit
+`c20679e3d7e0915756a4901ab1b80a5ef91123c3` delivered the API/ownership contract before implementation.
+The frontend worktree/branch and old main checkout have not been switched or edited.
+
+Pushed implementation: `d638e9aec41ee193db3283efccc3fc029ca13b3f`.
+Draft [backend PR #4](https://github.com/CHANxuanyu/harness-bridge/pull/4) targets the frontend
+handoff branch (stacked on open PR #3), not the default branch. No merge or release performed.
+
+Delivered by Opus in `202630f`: the scoped discovery/preview/link UI against
+[EXISTING_SESSIONS_API.md](docs/EXISTING_SESSIONS_API.md). Keep current /api/state + SSE, session
+detail, conversation, start and desktop routes; new fields/route examples are exact in that document.
+In particular, link's local ID is `result.session.session.session_id`, association history is not
+copied, `turns_observed=0` does not imply an empty native session, and `can_start_fresh=false`.
+An unknown/external writer requires the user's confirmation; never infer idle from unknown.
+
+Backend acceptance: 102 related tests passed, 21 new external-session cases; static checks passed.
+Details and test command: [EXISTING_SESSIONS_RESULT.md](docs/EXISTING_SESSIONS_RESULT.md).
+Schema 3→4 is one additive association table. Test with a **fresh isolated state directory and
+port 0**; do not point this branch at the user's live database. Runtime tools were reused read-only
+from the frontend `.venv`. That earlier focused run used a relative source path; for integrated
+checks including detached workers, use the absolute source path documented above.
+
+Current integration owner remains Codex. The final recovery correction is integrated and independently
+verified above; separately check user-designated outside-created native samples when authorized. Do not use prior App-created acceptance threads, scan other project histories, or
+start model turns under the exhausted W6–W8 allowance. Full real continuation needs a new explicit
+bounded allowance and designated samples. Read-only scoped checks need no model allowance.
+
+Public status docs and AGENTS are Codex-owned; Opus reports via its commits/PR. No merge to default,
+release, automatic frontend cherry-pick, new PRD, or phase-approval cycle is part of this delivery.
+
+## Existing-session backend contract — 2026-10-09
+
+Backend branch `codex/existing-session-backend`, independent worktree
+`/Users/chan/Downloads/repobridge-backend`, exact base `ef75a625577c1848e1079dd6d487a5cdc3afa166`.
+Minimal frontend contract is [docs/EXISTING_SESSIONS_API.md](docs/EXISTING_SESSIONS_API.md).
+app.py/native_mac.py remain frontend-owned; shared status docs are integrator-owned.
+Historical contract milestone: implementation and scoped checks are delivered above. No real state opened,
+no personal history scanned, no new model allowance. Current W6–W8 evidence is retained.
+
 ## Role split from here: Codex owns backend and integration, Opus owns frontend — 2026-10-09
 
 From this handoff point, Codex implements the backend, protocols, storage and tests directly, and

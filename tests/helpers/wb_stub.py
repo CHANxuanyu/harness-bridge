@@ -39,6 +39,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 import tomllib
 import uuid
 from pathlib import Path
@@ -1066,8 +1067,37 @@ class CodexAppServer:
                 req = {"allowedSandboxModes": ["read-only"]}
             self.respond(rid, {"requirements": req})
             return None
+        if method == "thread/list":
+            assert params.get("cwd") and params.get("useStateDbOnly") is True
+            if os.environ.get("WB_STUB_DISCOVERY_UNSUPPORTED"):
+                emit({"id": rid, "error": {"code": -32601, "message": "unsupported scoped list"}})
+                return None
+            if os.environ.get("WB_STUB_DISCOVERY_FAILED"):
+                self.error(rid, "temporary disk error")
+                return None
+            path = HOME / "external-index.json"
+            rows = json.loads(path.read_text()) if path.exists() else []
+            rows = [
+                t
+                for t in rows
+                if t["cwd"] in params["cwd"]
+                and params.get("searchTerm", "").casefold() in t["name"].casefold()
+            ]
+            offset, size = int(params.get("cursor", 0)), params["limit"]
+            self.respond(
+                rid,
+                {
+                    "data": rows[offset : offset + size],
+                    "nextCursor": str(offset + size) if len(rows) > offset + size else None,
+                },
+            )
+            return None
         if method == "thread/read":
-            self.respond(rid, {"thread": self.thread_obj(str(params.get("threadId")))})
+            tid = str(params.get("threadId"))
+            path = HOME / "external-index.json"
+            rows = json.loads(path.read_text()) if path.exists() else []
+            thread = next((t for t in rows if t["id"] == tid), self.thread_obj(tid))
+            self.respond(rid, {"thread": thread})
             return None
         if method == "initialize":
             self.respond(
@@ -1092,6 +1122,9 @@ class CodexAppServer:
             )
             self.note("thread/started", {"thread": self.thread_obj(self.thread)})
         elif method == "thread/resume":
+            time.sleep(float(os.environ.get("WB_STUB_RESUME_DELAY", "0")))
+            if os.environ.get("WB_STUB_RESUME_EXIT"):
+                sys.exit(3)
             tid = params.get("threadId")
             if self.thread == tid:
                 # Already loaded: report the live settings.
@@ -1101,6 +1134,8 @@ class CodexAppServer:
             elif os.environ.get("WB_STUB_CODEX_WRITER_BUSY"):
                 # Codex's own single-writer lock (e.g. the thread is open in the Codex app).
                 self.error(rid, f"thread-store conflict: thread {tid} already has an active writer")
+            elif os.environ.get("WB_STUB_CODEX_WRONG_RESUME_ID"):
+                self.respond(rid, {"thread": self.thread_obj(str(uuid.uuid4()))})
             elif not (HOME / "codex" / str(tid)).exists():
                 self.error(rid, f"no rollout found for thread id {tid}")
             else:
@@ -1130,7 +1165,19 @@ class CodexAppServer:
                     "thread/turns/list is unavailable before first user message",
                 )
             else:
-                self.respond(rid, {"data": json.loads(path.read_text()), "nextCursor": None})
+                rows = json.loads(path.read_text())
+                if params.get("sortDirection") == "desc":
+                    rows.reverse()
+                offset = int(params.get("cursor") or 0)
+                limit = int(params.get("limit") or len(rows) or 1)
+                end = offset + limit
+                self.respond(
+                    rid,
+                    {
+                        "data": rows[offset:end],
+                        "nextCursor": str(end) if end < len(rows) else None,
+                    },
+                )
         elif method == "turn/start":
             return self.turn(rid, params)
         elif method == "turn/interrupt":
@@ -1155,6 +1202,14 @@ class CodexAppServer:
                 self.request(msg)
 
     def turn(self, rid: Any, params: dict[str, Any]) -> int | None:
+        fault = os.environ.get("WB_STUB_TURN_DELIVERY")
+        if fault == "exit":
+            sys.exit(3)
+        if fault == "reject":
+            self.error(rid, "turn rejected by native policy")
+            return None
+        if fault == "delay":
+            time.sleep(0.5)
         text = "".join(i.get("text", "") for i in params.get("input") or [] if isinstance(i, dict))
         images = [i.get("path") for i in params.get("input") or [] if i.get("type") == "localImage"]
         if params.get("model"):

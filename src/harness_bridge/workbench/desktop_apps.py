@@ -93,6 +93,7 @@ def capability(
     apps: Mapping[str, DesktopApp],
     cli_version: str | None,
     platform: str = sys.platform,
+    native_linked: bool = False,
 ) -> dict[str, Any]:
     harness = session["harness"]
     native = session.get("native_session_id")
@@ -117,7 +118,7 @@ def capability(
         out["reason"] = f"没有在“应用程序”文件夹中找到 {label}"
     elif not native or not _UUIDISH.match(str(native)):
         out["reason"] = "还没有原生会话 ID"
-    elif int(session.get("turns_observed") or 0) == 0:
+    elif int(session.get("turns_observed") or 0) == 0 and not native_linked:
         out["reason"] = "还没有对话；先在这里发出第一条消息"
     elif harness == CLAUDE and (parse_version(cli_version) or (0, 0, 0)) < CLAUDE_DESKTOP_MIN:
         out["reason"] = "需要 Claude Code 2.1.285 或更高版本（claude --desktop）"

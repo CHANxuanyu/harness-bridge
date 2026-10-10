@@ -10,6 +10,52 @@ SQLite/loopback HTTP with **stub** harness executables) · UI-offline (browser/w
 harnesses) · T3-W real single native harness session on the user's machine · T4-W real Claude Code +
 Codex sessions with handoff.
 
+## Unified candidate — 2026-10-10 (frontend 80346bc)
+
+New fixed candidate and actual tested code: `78253365266eb5f47f0436dddf4b69522def917e`; exact frontend `80346bc5c9c4c1c85f87bf6a8e422bdf8372e083`.
+**Offline/synthetic acceptance passed: 1007 tests / 1007.52s (16m47s), zero failures/skips; ruff check and format (193 files) passed; strict mypy (59 source files) passed.** Focused: 75 passed / 55.69s. The historical 7630734/1004-test receipt below
+is unchanged. P1 and both P2 remain closed within their existing evidence scopes.
+
+| ID | New verification | Level / result |
+|---|---|---|
+| E16 | Composition keys at actual composer/new/path/rename/filter/search entries; ordinary keys; six dialog names, entry/Tab/close/restoration | UI-offline browser + event injection: 114 assertions pass, 0 failed; not native IME or VoiceOver |
+| E09/E14 | Original-ID existing entry, sent monotonicity, missed response/events, drafts/attachments, older-page cleanup | actual backend/fault stubs + controlled page/HTTP injection: pass; pagination 35 assertions |
+| E11/E12/E15 | Durable delivery/first-ID guard, stable error reasons/external return, factual failed-run banner | retained offline backend suites + browser regression: pass; no actual native history proof claimed |
+| E13 | 900/700/1280 browser geometry on new code | pass; previous long-label/native-window evidence remains historical |
+| E10 | Outside-created native samples and real official desktop round trip | **PREPARED / NOT_RUN**, [new fixed-candidate checklist](EXISTING_SESSIONS_LIVE_ACCEPTANCE.md); scoped metadata discovery can provide IDs for user selection, no manual DB lookup required |
+| E17 | Native IME/system clipboard/VoiceOver/native focus | **NOT_RUN**; Opus follow-up, no desktop-control request this round |
+
+[New evidence, initial probe correction and exact versions](EXISTING_SESSIONS_INTEGRATION.md).
+
+## Historical existing-session receipt — 2026-10-10 (72a3255)
+
+Fixed code: `1676fdc8b412a565bc2b697d262f29fdc3bb561d`; frontend `72a32557cc7f0196655841628d3c2dcf5a81383e`. Backend banner/first-turn fixes unchanged.
+**P1 closed. Offline/synthetic integration acceptance passed.**
+Final fixed-code offline check: **1004 passed in 1006.77s (16m46s), zero failures and zero skips**. Ruff check and format passed (190 files); strict mypy passed (59 source files).
+Focused regression: 43 passed / 42.60s. Independent page probe: 35 explicit assertions passed.
+Actual source imports and absolute PYTHONPATH verified. No live model tests or renewed allowance.
+[Evidence/reproduction](EXISTING_SESSIONS_INTEGRATION.md).
+
+| ID | Check | Level | Result |
+|---|---|---|---|
+| E01 | Scoped Claude metadata and Codex cwd-filtered native list; title search, native/index paging, invalid metadata/symlink refusal; unrelated transcript open explicitly guarded in test | T2-W synthetic outside-created fixtures | pass |
+| E02 | Preview/link perform no start/send/replay; four concurrent adds dedupe; restart/relink retains local/native ID; same UUID in different storage environments stays distinct; legacy registered row reused | T2-W | pass |
+| E03 | Original native ID resumes with zero invented App turns; fresh start/unlinked/environment mismatch/missing directory refused; native writer conflict and wrong resume ID fail without takeover/rebinding | T2-W | pass |
+| E04 | Stable history pages, native page order, updated-tool delta, reset/expired cursor, malformed/empty/unavailable distinction; live connection paging remains valid | T1/T2-W | pass |
+| E05 | Stub official-desktop open → hold → append in the same external native history → return/refresh → resume same ID; relink renews confirmation | T2-W simulated desktop | pass; **not real desktop acceptance** |
+| E06 | Additive schema 3→4 preserves old session; HTTP routes/error envelope/auth and legacy conversation response compatible | T2-W isolated DB/server port 0 | pass |
+| E07 | Installed Codex `generate-json-schema` confirms `thread/list` exact cwd and useStateDbOnly, search/cursor/order and turns pagination; isolated credential-free HOME/CODEX_HOME, no app-server/session started | real binary, schema only | pass (shape only) |
+| E08 | Prior backend-only affected regression 102 tests / 70.35s (21 external-session cases + 81 existing workbench checks); ruff check/format (185 files), strict mypy (59 files) | static + T1/T2-W | pass |
+| E09 | Discovery/link UI and integrated interaction; older-page confirmation clears existing card including deduped IDs/background session | UI-offline | pass; remaining P1 closed on 72a3255; explicit before/after assertions and competing-read gates, not script exit/source-string evidence |
+| E11 | Durable receipts, failed handshake/timeout/exit, unknown, restart, exact native proof, no replay; first ordinary turn with zero observed turns retains ID | T2-W actual fault stubs + page | pass; missing history or mismatched client ID never settles; explicit next message resumes original ID |
+| E12 | Atomic external-vs-local unlink errors; native-link return only records confirmation/clears cache; stable reasons and explicit unsupported vs general read failure | T2-W isolated HTTP/native stubs | pass |
+| E13 | 900×640 sidebar expanded, 700px, 1280×900, long model, attachments/draft/unknown card; controls and no horizontal overflow | UI-offline Chrome + isolated native WKWebView | **P2 pass**: new browser sizes pass on 72a3255; prior long-model/native measurements and content screenshots retain their original scope; blank full-window captures excluded |
+| E14 | Missing/error receipts; lost response/SSE; stale/duplicate events, queries and pages; preservation of other unknowns and session drafts/attachments | UI-offline page/HTTP injection + actual fault stubs | pass on final code; no downgrade, incorrect recovery, cross-session cleanup or automatic send; not real-native disorder evidence |
+| E15 | Run failure summary vs delivery, unknown→sent and reload/restart | T2-W + UI-offline | new banner P2 pass for corrected runs: failed/exit 3/diagnostics unchanged; summary factual, unresolved unknown warned separately; no old failure-string migration |
+| E10 | Designated native sessions actually created outside RepoBridge; real official desktop open/history/continuation/return/resume | T3-W/T4-W | **not run**; original preparation used fixed candidate 7630734; current checklist is for the new candidate above ([steps/budget](EXISTING_SESSIONS_LIVE_ACCEPTANCE.md)); prior App-created samples do not qualify; prior turn allowance exhausted |
+
+Reproduction and limits: [EXISTING_SESSIONS_RESULT.md](EXISTING_SESSIONS_RESULT.md).
+
 ## W6 conversation view / W7 official desktop continuation — 2026-10-08
 
 | ID | Check | Level | Result |

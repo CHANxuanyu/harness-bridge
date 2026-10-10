@@ -2,8 +2,7 @@
 
 These rules are for anyone (human, Codex, Claude Code) **developing Harness Bridge itself**.
 They are not runtime instructions for a supervisor or executor that uses the bridge on another
-repository; those live in `examples/supervisor-instructions.md`. Any agent may edit this
-project's code directly when asked to.
+repository; those live in `examples/supervisor-instructions.md`. Follow the file ownership below when developing this project.
 
 ## Before you change code
 
@@ -14,6 +13,9 @@ project's code directly when asked to.
    available but is not the first-version path. Read `docs/CLOUD_EXECUTION_PLAN.md` only for a
    specific historical V0.1 requirement.
 2. Run the offline checks: `scripts/check.sh` (ruff, mypy, pytest without live tests).
+   If reusing a virtualenv installed from another worktree, set an absolute `PYTHONPATH` to the
+   intended checkout's `src`; detached test workers change cwd, so a relative path can test a
+   different checkout and invalidate invocation fingerprints.
 
 ## Hard rules
 
@@ -62,3 +64,19 @@ project's code directly when asked to.
 - Record non-obvious implementation choices as one line in `docs/DECISIONS.md`.
 - Commits are authored by the repository owner (Xuanyu CHAN); agents do not add themselves as
   authors or co-authors.
+
+## Frontend/backend ownership (2026-10-09)
+
+- Codex implements backend and integration directly: Python except `workbench/app.py` and
+  `workbench/native_mac.py`, native protocols, storage/migrations, HTTP routes, backend tests,
+  scripts/dependencies and AGENTS.md.
+- Opus owns `workbench/static/**`, those two desktop-shell files, screenshots and new UI-only
+  `tests/**/test_workbench_ui_*.py`. Coordinate native-hook/API changes before editing owner files.
+- Codex is sole writer of STATUS.md, HANDOFF.md, docs/VALIDATION_MATRIX.md, docs/DECISIONS.md and
+  docs/PROJECT_PLAN.md. Opus records progress/requests in commits and its PR; Codex consolidates
+  at integration. Do not concurrently edit different sections of these shared files.
+- Start backend work from common handoff ef75a625 in its independent worktree; frontend remains
+  in its existing worktree. No force switches, cleanup or implicit default-branch merge.
+- Existing-session contract: docs/EXISTING_SESSIONS_API.md. Frontend requests are inputs until
+  agreed there. Use temporary state, never upgrade the user's running database. The prior
+  W6–W8 real-turn allowance is exhausted; no implicit renewal.
