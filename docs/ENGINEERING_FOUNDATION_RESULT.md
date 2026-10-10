@@ -3,8 +3,11 @@
 2026-10-10. Cloud Claude Code session, independent task branch, draft PR #5. Evidence level:
 **offline / synthetic** (stub CLIs, synthetic native histories, temporary sandbox roots,
 loopback HTTP, Linux container). Not macOS, WKWebView, IME, clipboard, VoiceOver, official desktop
-or real-session acceptance (all NOT_RUN). The local native acceptance of the fixed candidate
+or real-session acceptance (all NOT_RUN). The local offline/synthetic acceptance of the fixed candidate
 `78253365266eb5f47f0436dddf4b69522def917e` does not transfer to any commit on this branch.
+
+Independent macOS follow-up: [candidate verification](ENGINEERING_FOUNDATION_MACOS.md).
+The historical Cloud results below remain unchanged; native input/accessibility remain NOT_RUN.
 
 ## Identity
 

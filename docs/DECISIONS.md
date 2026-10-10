@@ -329,3 +329,8 @@ Each entry: decision — reason. Newest last.
 - 2026-10-10: Frontend 462cda4 fixes the previous stale-sent repros, but independent older-page injection exposes missing recovery cleanup. Keep P1 open and hand the static-file correction to Opus; green offline checks do not substitute for UI acceptance.
 
 - 2026-10-10: Frontend 72a3255 closes the older-page recovery gap under independent actual-page verification: reconcile complete page confirmation input, including deduplicated IDs and background sessions, while retaining cached content/order and unrelated uncertainty. This closes offline/synthetic P1 only; real-native acceptance and known persistence/accessibility limits remain separate.
+
+- 2026-10-10: PR #5 uses runtime state ownership markers and hierarchical directory flocks for test roots; actual macOS APFS verification does not certify network or other filesystems. Default/custom prod remain compatible, with no schema revision change.
+- 2026-10-10: Register HTTP cleanup as soon as its constructor binds the listener, before Thread.start; shutdown is only valid for a started serving thread. Retain Workbench→HTTP→App lock→test-root lock release order on either App entry.
+- 2026-10-10: Diagnostics stay outside SQLite, whitelisted/local and independent of business outcomes; product events opt in. v2 message correlation uses session plus client ID; v1 re-keyed counts cannot recover old latency/op links. CLI acceptance is not task success.
+- 2026-10-10: PR #5 review stays on a separate candidate branch; do not advance its integration base during review. Report actual Darwin/APFS checks separately from Cloud's failing Linux run; CI and native interaction remain NOT_RUN.

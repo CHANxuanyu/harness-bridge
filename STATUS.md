@@ -1,5 +1,37 @@
 # Status
 
+## PR #5 independent macOS candidate — 2026-10-11
+
+**1066 passed / 0 failed / 0 errors / 0 skipped; pytest 1104.20s; exit 0. Ruff check, format (208 files) and strict mypy (65 source files, Darwin target) each exit 0.** Exact PR input `70a5d73f388ec99ff6370dcf8eacdbb0b47b024f`; Cloud tested code
+`3186dbca86b64866b0ede02d10be201442ae1863`. Separate candidate worktree
+`/Users/chan/Downloads/repobridge-foundation-candidate`, branch `codex/engineering-foundation-reverification`.
+Necessary EF3 repair and actual tested code: **`560056f11858f9f02b01ee3966ba2aaf41d41c54`**.
+Original integration base stays `92ed653eaa965ae5355ed3270555e22058888afc`; PR #3/#4/#5 stay draft.
+This is a review candidate, with no base/default merge or installed replacement.
+
+Independent review exposed a bound HTTP listener leak at server.start failure in both App entries
+(4 failing cases before fix). Cleanup now registers before start and handles a never-started thread
+without blocking; 6 actual-entry failure/restart cases pass. Other EF1–EF4 checks, all cloud-seven
+cases on the real Mac, diagnostic privacy/failure parity and existing page regressions pass.
+Focused original input: 48/48; new regressions: 17 + 1 pass. Older-page behavior: 35 assertions pass.
+[Full receipt, host/environment and evidence](docs/ENGINEERING_FOUNDATION_MACOS.md).
+
+Host: macOS 26.6.2 arm64, local APFS, Python 3.11.16. Absolute candidate PYTHONPATH/imports verified.
+All four invoking gate markers were unset, none removed; injected-marker refusal tests cover both
+harnesses. Cloud's 1041 pass / 7 fail / exit 1 remains historical, including its removed-marker
+condition. The unexplained Linux ZCode cancellation failure is **not closed by a Mac pass**.
+CI remains NOT_RUN; no remote workflow triggered. app.py changes are limited to authorized startup
+cleanup; no static UI/native_mac/window changes. Documentation appended after the final code check
+is listed in the delivered receipt; it does not change the tested source.
+
+Old candidate `78253365266eb5f47f0436dddf4b69522def917e` passed offline/synthetic acceptance, **not
+local native input/accessibility acceptance**. Preserve its historical result. The existing live
+checklist still targets that candidate until a separate promotion decision. Real outside-created
+sessions/official desktop, native IME/clipboard/VoiceOver/focus remain NOT_RUN; Claude receipts,
+ordinary draft reload loss and historical failure summaries remain limited. No model calls,
+private history/credentials, real state/current-instance access, dependency install or release.
+
+
 ## Unified candidate acceptance — 2026-10-10 (frontend 80346bc)
 
 **Unified fixed candidate and actual tested code: `78253365266eb5f47f0436dddf4b69522def917e`**; exact frontend

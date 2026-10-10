@@ -59,13 +59,16 @@ directories containing the real home and unreadable ones). Same root, a symlink 
 parent of a running root and a child of a running root are all refused, in either start order and
 under concurrent starts (one winner); sibling roots share their parents and run side by side.
 There are no lock files to go stale; a crashed process releases its locks. Nothing below the root
-is scanned. Verified on Linux; flock on directory descriptors on macOS is expected but NOT_RUN.
+is scanned. Cloud originally verified Linux. Independent macOS local APFS verification (including process races
+and holder death) is recorded in [the candidate receipt](ENGINEERING_FOUNDATION_MACOS.md); other
+filesystems remain unverified.
 
 **App entry (review EF3).** `repobridge` and `hbridge app` both go through `app.run`, which now
 runs the read-only preflight and takes the test-root lock before the first write, then claims the
 marker, takes the existing single-instance lock (`<state>/workbench/app.lock`, unchanged),
-constructs the Workbench with the handed-over root lock and starts the server. If any step after
-the preflight fails, everything already acquired is released (original shutdown order kept).
+constructs the Workbench with the handed-over root lock and starts the server. The independent candidate adds the EF3-R1 repair: register HTTP cleanup before starting the
+serving thread, and do not wait for shutdown of a thread that never started. Any failure releases
+the resources already acquired, retaining the original shutdown order. See 560056f in the receipt.
 This `app.py` change was authorized for this review round only; no static UI, `native_mac.py`
 or window/input code changed.
 
@@ -91,6 +94,28 @@ sandbox variables), so no real token, API/provider variable or HOME is inherited
 agent markers **are** inherited (review item 4): inside an agent or cloud session the product gate
 refuses native starts and the demo exits 3 with `PREFLIGHT_FAILED`. Runs in this cloud container
 removed those markers from the invoking process explicitly, and are labelled that way.
+
+### Independent candidate startup (synthetic only; no install)
+
+Use the separate candidate worktree, not PR #5's base. Source is the tested 560056f code plus only
+receipt Markdown; verify that before launch. Existing venv binaries require absolute PYTHONPATH:
+
+```sh
+cd /Users/chan/Downloads/repobridge-foundation-candidate
+git diff --exit-code 560056f11858f9f02b01ee3966ba2aaf41d41c54 -- . ':(exclude)*.md'
+export PYTHONPATH=/Users/chan/Downloads/repobridge-foundation-candidate/src
+RB_FOUNDATION_PY=/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9/.venv/bin/python
+RB_FOUNDATION_ROOT=$(mktemp -d /private/tmp/repobridge-foundation-demo.XXXXXX)
+"$RB_FOUNDATION_PY" scripts/repobridge_sandbox.py create "$RB_FOUNDATION_ROOT"
+"$RB_FOUNDATION_PY" scripts/repobridge_sandbox.py launch "$RB_FOUNDATION_ROOT"
+```
+
+Stop only that foreground launcher with Ctrl-C; keep its synthetic evidence. Its localhost auth
+URL is a secret, do not copy it into a PR/log/report. This does not start a native window; explicit
+UI sends go only to its stub CLIs. The launcher preserves cloud/nested markers: if the product
+refuses start/send, retain that result; do not strip them for convenience. No real history, native
+HOME, existing RepoBridge state or installed version is used. The [candidate evidence README](ENGINEERING_FOUNDATION_MACOS.md#page-evidence-and-reproducibility)
+gives the fixed offline/browser replay commands. Native/official-desktop acceptance is separate.
 
 ## 2. Version identity
 
