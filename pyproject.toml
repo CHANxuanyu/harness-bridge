@@ -53,6 +53,9 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.11"
+# The desktop product targets macOS; type-check for it on every host (a Linux runner otherwise
+# reports the macOS-only branches in workbench/native_mac.py as unreachable).
+platform = "darwin"
 strict = true
 warn_unreachable = true
 plugins = ["pydantic.mypy"]
