@@ -1,25 +1,77 @@
 # Offline checks only. Manual trigger by design: no push/PR triggers, no secrets, no model
 # services, read-only token. Running it consumes the account's Actions minutes.
+# Steps mirror scripts/check.sh (ruff, format, mypy, pytest -m "not live") as separate stages so a
+# failure names its stage. See docs/ENGINEERING_FOUNDATION.md for timing evidence and how to
+# enable pull-request checks later.
 name: offline-checks
 
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: >-
+          Runner image. macOS is the product platform. On Linux, six macOS-only desktop tests
+          fail by design (feature gated to darwin); they are reported, not skipped.
+        type: choice
+        options:
+          - macos-14
+          - ubuntu-24.04
+        default: macos-14
 
 permissions:
   contents: read
 
+concurrency:
+  group: offline-checks-${{ github.ref }}-${{ inputs.runner }}
+  cancel-in-progress: true
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
 jobs:
   offline:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    name: offline checks (${{ inputs.runner }})
+    runs-on: ${{ inputs.runner }}
+    # Full suite: 16m47s on the maintainer's Mac (1007 tests), 5m08s on a 4-core Linux
+    # container; the step limits below leave roughly 2x headroom over the slower host.
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          enable-cache: false
       - name: Install (frozen lockfile)
+        timeout-minutes: 10
         run: uv sync --frozen
-      - name: Lint, types, tests (live tests excluded)
-        run: scripts/check.sh -q
+      - name: Build identity (version, exact SHA, dirty flag)
+        run: uv run --frozen hbridge env --json
+      - name: Lint and format
+        timeout-minutes: 5
+        run: |
+          uv run --frozen ruff check .
+          uv run --frozen ruff format --check .
+      - name: Types (strict mypy, darwin target)
+        timeout-minutes: 5
+        run: uv run --frozen mypy src/harness_bridge
+      - name: Tests (live excluded)
+        timeout-minutes: 35
+        run: >-
+          uv run --frozen pytest -m "not live" -q --durations=25
+          --junitxml=pytest-junit.xml -o junit_family=xunit2
       - name: Offline demos
+        timeout-minutes: 5
         run: |
           uv run --frozen hbridge demo --scenario success --cleanup
           uv run --frozen hbridge demo --scenario bug-then-repair --cleanup
+          uv run --frozen python scripts/repobridge_sandbox.py demo
+      - name: Keep the test report of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-junit-${{ inputs.runner }}
+          path: pytest-junit.xml
+          retention-days: 7
+          if-no-files-found: ignore
