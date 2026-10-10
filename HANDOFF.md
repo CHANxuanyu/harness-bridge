@@ -1,5 +1,26 @@
 # Handoff
 
+## Next: execute the prepared real-session checklist only after scoped authorization — 2026-10-10
+
+**PREPARED / NOT_RUN.** The user's fixed candidate remains `76307345d8f036c548128de96c5f230099cc65d8`;
+P1 and both P2 conclusions stay closed, with offline/synthetic acceptance passed.
+[Executable checklist](docs/EXISTING_SESSIONS_LIVE_ACCEPTANCE.md) covers fixed-source export, new
+state/port, startup/stop, sample provenance, scoped no-message reads and same-ID single-writer
+RepoBridge → official desktop → RepoBridge continuation. No production code or API change.
+
+Still needed: user-designated project/cwd + native ID + creation source + current writer for one
+Claude and one Codex outside-created sample, permission for scoped project metadata/target history,
+and a new allowance. Minimum with existing samples: **3 explicit sends per harness, 6 total**, no
+automatic retries; missing sample creation needs additional authorization. This is not a bound on
+internal provider/API requests. Old allowance remains exhausted. IME/clipboard/VoiceOver remain Opus's
+separate work; Claude receipts, ordinary draft reload loss and historical summary limits remain.
+
+Preparation verification only: four shell blocks syntax-checked; embedded Python syntax/imports,
+archive identity/content and launch-argument parsing checked without constructing Workbench or
+starting any CLI/server/model. No repeat of the already-passed 1004-test suite for documentation.
+PR #3 remains draft (observed head `80346bc5c9c4c1c85f87bf6a8e422bdf8372e083`, **not included** in this
+fixed candidate); PR #4 stays draft based on the same frontend branch. No merge to default/release/install.
+
 ## Existing-session offline/synthetic acceptance — 2026-10-10 (72a3255)
 
 **P1 closed. Offline/synthetic integration acceptance passed.**
@@ -8,7 +29,7 @@
 - Integration input: `9f866e901b623a770b729afd460cef5ffe8acbf7`.
 - **Exact code tested: `1676fdc8b412a565bc2b697d262f29fdc3bb561d`**, existing `/Users/chan/Downloads/repobridge-integration`, branch `codex/existing-session-integration`.
 - Backend factual-banner fix `a35a868f191f8377444a0cad136cf387906e0bf8` and first-turn ID guard `1856bd44f950ec456d9becf53d4c24f368c0b95d` retained without changes.
-- PR #4 remains draft and stacked on draft PR #3. Final doc receipt/integration SHAs are in PR #4. Only seven Markdown documents follow tested code; frontend checkout and old main directory untouched.
+- PR #4 remains draft and stacked on draft PR #3. Accepted candidate `76307345d8f036c548128de96c5f230099cc65d8` contains seven Markdown documents after tested code; later preparation docs do not change the candidate. Frontend checkout and old main directory untouched.
 
 Final fixed-code offline check: **1004 passed in 1006.77s (16m46s), zero failures and zero skips**. Ruff check and format passed (190 files); strict mypy passed (59 source files).
 Focused regressions: 43 passed / 42.60s. Independent pagination: 35 explicit assertions pass on the

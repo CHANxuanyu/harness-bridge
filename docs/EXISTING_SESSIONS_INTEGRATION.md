@@ -18,8 +18,9 @@ was changed by Codex this round.
 
 Preserved worktree `/Users/chan/Downloads/repobridge-integration`, branch
 `codex/existing-session-integration`. Merge was conflict-free. Backend PR #4 remains draft, stacked
-on draft PR #3. Final documentation and integration head SHAs are in PR #4; only seven Markdown
-files follow the tested code. Source/tests/assets/scripts/dependencies remain identical. Frontend
+on draft PR #3. The accepted candidate is `76307345d8f036c548128de96c5f230099cc65d8`: only seven
+Markdown files follow the tested code up to that candidate. Later preparation documents do not
+change it. Source/tests/assets/scripts/dependencies remain identical. Frontend
 worktree and old main directory untouched; no default-branch merge/release/install.
 
 Final fixed-code offline check: **1004 passed in 1006.77s (16m46s), zero failures and zero skips**. Ruff check and format passed (190 files); strict mypy passed (59 source files).
@@ -123,6 +124,11 @@ objects at assertion time; no product change or additional turn was involved. No
 was removed, skipped or relabelled to obtain acceptance.
 
 ## Limits and future real acceptance
+
+Real acceptance preparation (2026-10-10): [step-by-step executable checklist](EXISTING_SESSIONS_LIVE_ACCEPTANCE.md),
+fixed candidate `76307345d8f036c548128de96c5f230099cc65d8`. Prepared only: samples, scoped-read permission
+and new allowance are outstanding; minimum 6 explicit sends for two existing samples. Later frontend
+PR commits are not part of this candidate. This does not change the closed P1/P2 or synthetic result.
 
 - Real sessions created outside RepoBridge and official Claude/Codex desktop continuation remain
   **not validated** by these stubs. Prior App-created samples do not substitute. No new real-turn
