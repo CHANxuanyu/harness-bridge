@@ -1,4 +1,112 @@
-# Existing-session independent acceptance — 2026-10-10 (frontend 72a3255)
+# Unified candidate independent acceptance — 2026-10-10 (frontend 80346bc)
+
+**New keyboard/dialog browser checks passed; P1 and both P2 remain closed.** Offline/synthetic acceptance passed: 1007 tests / 1007.52s (16m47s), zero failures/skips; ruff check and format (193 files) passed; strict mypy (59 source files) passed.
+Real/native acceptance is separate and NOT_RUN.
+
+| Role | Exact version |
+|---|---|
+| Integration input, including real-acceptance preparation | `8e1c402b751a0ab2165d3c6d156014a6720fce50` |
+| Frontend PR #3 input | `80346bc5c9c4c1c85f87bf6a8e422bdf8372e083` |
+| **New fixed candidate = actual code tested** | **`78253365266eb5f47f0436dddf4b69522def917e`** |
+| Previous accepted candidate (historical receipt below) | `76307345d8f036c548128de96c5f230099cc65d8` |
+| Retained factual-banner fix | `a35a868f191f8377444a0cad136cf387906e0bf8` |
+| Retained first-submission ID guard | `1856bd44f950ec456d9becf53d4c24f368c0b95d` |
+
+Conflict-free merge in `/Users/chan/Downloads/repobridge-integration`, branch
+`codex/existing-session-integration`. Source, tests and assets stayed fixed during verification.
+Only Markdown receipt/checklist edits follow this test commit; no frontend-owned implementation
+changes by Codex. PR #4 remains draft and stacked on draft PR #3, without a default-branch merge.
+
+## New page behavior and evidence scope
+
+- **114 explicit assertions pass / zero failures** in `keys-dialogs-result.json`. Fresh actual
+  integrated page/backend, isolated synthetic native stores and explicit fake CLIs. The probe
+  dispatches `KeyboardEvent` with `isComposing=true` and separately `keyCode=229`, then measures
+  request counters, values, active element and resulting backend state. This is browser/event
+  injection evidence; it does not run a macOS input method.
+- Composer with attachment, new-session title, project path, rename field, sidebar filter and
+  existing-session search ignore composition Enter/Escape/arrows as applicable. Global composition
+  shortcuts do not open/create dialogs or move focus. Composer plain Enter sends once through the
+  Codex stub; plain Enter creates one session/submits one project path/renames once. Escape cancels
+  rename and clears the ordinary filter; normal arrows edit the caret or move search/list focus.
+  Search typing's ordinary 300ms debounce settles before the key baseline; these checks do not
+  claim composition typing never triggers a debounced search.
+- Six browser computed accessible names are exact: **新建会话、添加项目、添加已有会话、交接到新会话、设置、
+  键盘快捷键**. `ariaSnapshot`, unique referenced headings, modal state, expected initial focus,
+  Tab/Shift-Tab wrap, composition Escape, plain Escape and explicit close buttons were checked.
+  Naming/focus probes never submit a handoff. Dialog screenshots independently show readable
+  headings/content and visible focus at 1280×900; images are observations, not keyboard assertions.
+- Ordinary candidate Enter associates the discovered original ID with zero runs. Reopening the
+  already-linked entry selects the same local session without another link POST or duplicate run.
+- The first probe had **107 pass / 1 failed expectation**: it expected the existing-dialog close to
+  focus the project-menu button. Controlled comparison ran the old candidate's `app.js` as a browser
+  response over the same synthetic backend (not a full old-candidate retest), three trials each.
+  Old and new both store BODY as the prior focus and fall back to the composer. The probe expectation
+  was corrected; the entire probe reran on a fresh fixture and six close-button checks were added.
+  Initial report/log and comparison reports remain in the evidence. No production fix or skip was
+  made to get the passing result.
+
+## Related regression and final repository checks
+
+| Verification | Independent result on the new code |
+|---|---|
+| Focused keyboard/a11y/existing/unsent + backend delivery/conversation/existing suites | 75 passed, 55.69s |
+| Full offline/static/type check | Offline/synthetic acceptance passed: 1007 tests / 1007.52s (16m47s), zero failures/skips; ruff check and format (193 files) passed; strict mypy (59 source files) passed. |
+| Older-page isolation/cleanup | 35 assertions (4 setup + 31 behavior/health) passed; competing reads held/count-checked; no added send/run |
+| Durable delivery/banner (`p1.cjs`) | 15 checks pass; unknown→sent, stale query with history failure, old events/pages and reload never downgrade sent; failed exit 3/diagnostics retained |
+| Busy + late-not-sent | 4 busy checks plus late-confirmation probe pass; restore once; new draft/attachment kept; external return only confirms |
+| Lost response/missed SSE (`network.cjs`) | 5 checks pass; 404/error/absent proof never implies not_sent; ordinary Codex/Claude and attachment echo retained |
+| Event before late/lost HTTP response (`races.cjs`) | 4 cases pass; no re-tracking, duplicate or new-draft loss |
+| Narrow-window P2 regression | 900×640, 700×640, 1280×900: document/body width equals viewport, controls within bounds; new draft + attachment, short stub label |
+
+The repository check uses the existing virtualenv's ruff/format/mypy/pytest commands equivalent to
+`scripts/check.sh`, without install or network dependency resolution. Absolute
+`PYTHONPATH=/Users/chan/Downloads/repobridge-integration/src` and `app.__file__` / `service.__file__`
+confirmed the integrated source. Full tests include the retained first-turn native-ID protection.
+Browser traffic is loopback-only in fresh headless Chrome contexts; optional native window mode
+was not used. Five owned UI servers have exited and all five ports are closed; isolated fixtures
+are retained. No JS page exceptions. Console resource errors were expected injected HTTP
+409/503/500/404/aborted requests; server BrokenPipe/ConnectionReset diagnostics accompanied those
+client disconnects. These are not hidden as a claim of empty logs.
+
+These are **actual backend + fault-stub** results where the stub accepts/refuses/exits, and separately
+**browser event/HTTP injection** for out-of-order delivery/pages/keyboard conditions. Synthetic
+native clientId proof is not real vendor-session evidence. Prior P2 long-model/native-window
+screenshots and the old 1004-test receipt retain their original date/code/scope, not relabeled here.
+
+## Evidence and reproducible isolated run
+
+Durable local evidence: `/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-80346bc`.
+`README.md` gives exact fixture/probe order; `manifest.sha256` fingerprints scripts, JSON assertions,
+logs and PNGs. Temporary output during this run: `/private/tmp/repobridge-recheck-80346bc`.
+Key files: `keys-dialogs-result.json`, `initial-keys-dialogs-result.json`, `focus-existing-*-result.json`,
+`older-out/report.json`, the related `*-result.json`, `focused-check.log`, `final-check.log`,
+`service-stop.json`, `dialog-*.png` and `layout-900.png`. Reports keep before/after behavior rather
+than only source-string checks or exit codes. Runtime auth URLs/cookies and native fixture stores
+are not copied to this evidence package or published.
+
+Fresh synthetic startup uses the retained `sandbox.py` with the same absolute PYTHONPATH and
+explicit stub configuration; see [sandbox instructions](EXISTING_SESSIONS_SANDBOX.md). Future
+real preparation uses [the updated fixed-candidate checklist](EXISTING_SESSIONS_LIVE_ACCEPTANCE.md),
+whose SHA/export/assertions all target `78253365266eb5f47f0436dddf4b69522def917e`. Four shell blocks and
+embedded Python syntax pass; all 307 exported files and the written source/SHA assertions and CLI
+argument parsing were verified without calling app.main/Workbench or creating any state. The user need not inspect native databases: after
+scoped project-metadata permission, the executor lists candidates, verifies native ID/cwd/source,
+and asks the user to select; target preview/history and new send allowance remain explicit.
+The Add Existing dialog auto-previews, so metadata-only discovery uses the existing list API.
+
+## Still not run / unchanged limits
+
+Real outside-created Claude/Codex samples, real official desktop continuation, **native IME, system
+clipboard, VoiceOver and native focus are NOT_RUN**. Opus owns the latter UI acceptance. Claude has
+no matching durable receipt and pre-echo exit evidence remains limited; full page reload loses
+ordinary unsent drafts; persisted historical failure summaries are not migrated. Prior model budget
+is exhausted; no renewal, private-history read, real harness, current-instance/database access,
+desktop-control request, merge to default, publish or installed replacement occurred this round.
+
+---
+
+# Historical independent acceptance — 2026-10-10 (frontend 72a3255)
 
 **P1 closed. Offline/synthetic integration acceptance passed.**
 Both P2 findings stay closed within their recorded scope. Real outside-created native sessions and

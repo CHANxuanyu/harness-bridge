@@ -1,8 +1,44 @@
 # Status
 
-## Real external-session acceptance preparation — 2026-10-10
+## Unified candidate acceptance — 2026-10-10 (frontend 80346bc)
 
-**PREPARED / NOT_RUN.** The user's fixed candidate remains `76307345d8f036c548128de96c5f230099cc65d8`;
+**Unified fixed candidate and actual tested code: `78253365266eb5f47f0436dddf4b69522def917e`**; exact frontend
+`80346bc5c9c4c1c85f87bf6a8e422bdf8372e083`, merged into integration input `8e1c402b751a0ab2165d3c6d156014a6720fce50`.
+The existing integration worktree/branch is preserved. Live-preparation documents, backend factual
+failure-banner fix and first-submission native-ID guard remain intact. No frontend-owned product
+file was edited by Codex. Old candidate `76307345d8f036c548128de96c5f230099cc65d8` retains its own
+1004-test historical receipt; the new keyboard/dialog results are not backfilled into it.
+
+**Offline/synthetic acceptance passed: 1007 tests / 1007.52s (16m47s), zero failures/skips; ruff check and format (193 files) passed; strict mypy (59 source files) passed.**
+Focused regressions: **75 passed / 55.69s**. Actual-page keyboard/dialog probe: **114 passed, zero
+failed**. Both `isComposing` and WebKit-style `keyCode=229` events were injected into real controls;
+HTTP request counts, focus, field values and resulting state were asserted. Ordinary Enter/Escape/
+arrows still work. Six computed dialog names, entry, Tab/Shift-Tab containment and close/restoration
+pass in Chromium. Existing-menu close returns to the composer, as in the controlled old-page
+comparison; this is browser evidence, not native focus or VoiceOver acceptance.
+
+Pagination's 35 explicit assertions and the sent/not_sent/unknown, response-loss/event-order,
+draft/attachment and ordinary Codex/Claude regressions pass again. P1 and both P2 conclusions stay
+closed within their recorded scope; no new blocker found. Narrow-window browser measurements
+900/700/1280 pass; prior long-label/native-window evidence keeps its original scope.
+[Details and evidence](docs/EXISTING_SESSIONS_INTEGRATION.md) ·
+[Updated real-session checklist](docs/EXISTING_SESSIONS_LIVE_ACCEPTANCE.md).
+
+**Real acceptance remains PREPARED / NOT_RUN.** The user need only designate projects, provenance
+and writer status and permit scoped metadata discovery; the executor can find native IDs and present
+candidates for selection. No manual database lookup is required. Target history reading needs its
+own explicit scope; the auto-preview dialog is not used under metadata-only permission. Real sends
+need a new allowance: minimum 3 per harness / 6 total with existing qualified samples, no automatic
+retry. Old allowance remains exhausted. Native IME, system clipboard, VoiceOver and native focus
+remain NOT_RUN / Opus follow-up. Claude receipt limits, ordinary draft loss on full reload and
+unmigrated historical failure summaries remain. No real harness/private-history/real-state/current
+instance access or model calls this round; no desktop-control request, default merge or release.
+PR #3/#4 stay draft with #4 based on #3's frontend branch. Subsequent receipt edits change Markdown
+only; the fixed candidate above does not move with the documentation branch.
+
+## Historical preparation for candidate 7630734 — 2026-10-10
+
+Historical receipt (superseded by the candidate above): **PREPARED / NOT_RUN**. The then-fixed candidate was `76307345d8f036c548128de96c5f230099cc65d8`;
 P1 and both P2 conclusions stay closed, with offline/synthetic acceptance passed.
 [Executable checklist](docs/EXISTING_SESSIONS_LIVE_ACCEPTANCE.md) covers fixed-source export, new
 state/port, startup/stop, sample provenance, scoped no-message reads and same-ID single-writer
@@ -81,7 +117,7 @@ outside RepoBridge in synthetic native stores. Ruff + formatting passed (185 fil
 passed (59 files). Baseline full 942-test evidence is retained, not rerun or relabelled. See
 [acceptance record](docs/EXISTING_SESSIONS_RESULT.md) and VALIDATION_MATRIX for reproducible checks.
 
-Updated: Opus's current dialog/recovery input is `72a3255`; independent integration findings are recorded above. Still pending: scoped real sessions created outside
+Historical update: Opus's dialog/recovery input for that receipt was `72a3255`; independent integration findings are recorded above. Still pending: scoped real sessions created outside
 RepoBridge and real official-desktop continuity. The W6–W8 App-created samples do not satisfy this
 new real acceptance. Current prior allowance remains exhausted (Claude 6/6, Codex 6/6).
 

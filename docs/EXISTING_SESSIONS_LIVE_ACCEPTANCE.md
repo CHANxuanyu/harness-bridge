@@ -1,7 +1,9 @@
 # 真实外部会话与官方桌面接续：执行清单
 
-状态：**PREPARED / NOT_RUN**。固定候选 **`76307345d8f036c548128de96c5f230099cc65d8`**。
-P1 和两项 P2 保持关闭；离线／合成验收通过（1004 tests）。本包准备不等于真实验收或额度授权。
+状态：**PREPARED / NOT_RUN**。固定候选 **`78253365266eb5f47f0436dddf4b69522def917e`**。
+P1 和两项 P2 保持关闭；新组合的独立离线／合成结果见 [集成记录](EXISTING_SESSIONS_INTEGRATION.md)。
+实际测试 SHA 与本候选相同；后续仅追加 Markdown 记录。旧候选 `76307345d8f036c548128de96c5f230099cc65d8`
+保留原来的 1004 项历史通过记录，不包含本轮新增修复。本包准备不等于真实验收或额度授权。
 沿用 [接口契约](EXISTING_SESSIONS_API.md) 与 [验收矩阵 E10](VALIDATION_MATRIX.md)，不改产品范围。
 
 ## 1. 开始前填好样本与授权
@@ -12,7 +14,7 @@ P1 和两项 P2 保持关闭；离线／合成验收通过（1004 tests）。本
 | 必填项 | Claude Code | Codex |
 |---|---|---|
 | 项目绝对路径／实际 cwd | 待用户指定 | 待用户指定 |
-| 原生 session/thread ID（非 RepoBridge ses_ ID） | 待用户提供 | 待用户提供 |
+| 原生 session/thread ID（非 RepoBridge ses_ ID） | 执行者获准发现后核对，用户选择样本 | 执行者获准发现后核对，用户选择样本 |
 | 创建来源、日期及证据 | CLI／官方桌面／其他；待填 | CLI／官方桌面／其他；待填 |
 | 官方原生界面可辨认的历史锚点 | 无敏感内容的已有消息／时间，待填 | 无敏感内容的已有消息／时间，待填 |
 | 当前写入者、如何结束它 | 所在终端／窗口；活动／已结束／未知 | 所在终端／窗口；活动／已结束／未知 |
@@ -20,10 +22,22 @@ P1 和两项 P2 保持关闭；离线／合成验收通过（1004 tests）。本
 | CLI 路径／版本、官方桌面路径／版本 | 执行前只读核对 | 执行前只读核对 |
 | 本次选择的模型／强度／权限 | 用户确认；记录实际回报值 | 用户确认；记录实际回报值 |
 
-另需确认两项：①允许上述**指定项目范围的发现元数据**及指定 ID 的历史读取；②新的发送次数预算。
-现有发现接口按项目枚举元数据，不能声称只读取某一个 ID。若项目内还有未授权私人会话，先停止，
-改由用户指定专用项目／合适样本；不全局搜索、不移动原生记录、不扩大目录范围。
-只预览和继续表内 ID，发现了其他候选也不打开。来源证据和接口 `source` 分别记录；`unknown` 不猜成 CLI／desktop。
+**用户无需手工查原生数据库，也不必预先知道原生 ID。** 先提供项目绝对路径、已知创建来源／当前写入者，
+并授权该指定项目的元数据发现。执行者用现有 `GET /api/history?project_id=…&harness=…`（必要时原 cursor 翻页），
+核对 candidate_id、native_session_id、workdir、title、source、completeness，给出精简候选表让用户选择。
+接口 source=unknown 时保留 unknown，由用户／原生界面提供来源证据，不猜测。只展示获准项目的元数据，不读凭据。
+发现范围是该项目根目录及已登记工作目录；Codex 使用限定 cwd 的原生只读 RPC，Claude 读取对应项目记录的
+身份／标题元数据。底层可能读取原生记录以提取元数据，不等同于取得任意会话正文的读取许可。
+
+样本选定后，明确允许**所选 ID 的预览／历史读取和关联**；真实发送另需下述新预算。只有元数据许可时，
+使用上述列表接口，**不要打开“添加已有会话”对话框**：当前界面会自动预览首个候选。若只授权单个 ID，
+用同实例返回的 candidate_id 调用 `GET /api/history/<candidate_id>` 和 `POST /api/sessions/link`，然后打开
+该已关联会话；不经过可能预览其他候选的列表界面。若要验收整个对话框，应先获准专用测试项目内候选的历史预览。
+这些调用通过候选的已认证本地接口执行，保留 Host/Origin/Cookie 保护；不导出令牌、不手改原生数据库，
+不伪造 candidate_id。重启后候选 ID 过期就重新做同范围发现，native ID 必须相同。
+
+项目包含未授权的元数据／路径，或找不到目标时停止；不全局搜索、不移动原生记录、不扩大目录。
+未选会话不预览／关联／恢复。这个清单只准备流程，本轮没有获得或执行任何真实发现、读取、发送许可。
 
 **最小新预算：已有合格样本时 Claude 3 次 + Codex 3 次 = 6 次显式发送尝试。**
 每家分别用于下表 L1、L3、L5。没有自动重试／返修；发送结果不明也占用该次尝试，停止而不重复发送。
@@ -44,11 +58,11 @@ P1 和两项 P2 保持关闭；离线／合成验收通过（1004 tests）。本
 先在该 Terminal 准备目录（每次新验收只执行一次）：
 
 ```sh
-RB_CANDIDATE=76307345d8f036c548128de96c5f230099cc65d8
+RB_CANDIDATE=78253365266eb5f47f0436dddf4b69522def917e
 RB_REPO=/Users/chan/Downloads/repobridge-integration
 RB_PY=/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9/.venv/bin/python
 umask 077
-RB_ACCEPT_ROOT=$(mktemp -d /private/tmp/repobridge-live-7630734.XXXXXX)
+RB_ACCEPT_ROOT=$(mktemp -d /private/tmp/repobridge-live-7825336.XXXXXX)
 export RB_CANDIDATE RB_PY RB_ACCEPT_ROOT
 export RB_SOURCE="$RB_ACCEPT_ROOT/source" RB_STATE="$RB_ACCEPT_ROOT/state"
 test "$(git -C "$RB_REPO" rev-parse "$RB_CANDIDATE^{commit}")" = "$RB_CANDIDATE" &&
@@ -70,8 +84,8 @@ from harness_bridge.workbench import app, service
 from harness_bridge.workbench.harness import environment_refusal, stripped_billing_env
 root = Path(os.environ['RB_ACCEPT_ROOT']).resolve()
 source, state = Path(os.environ['RB_SOURCE']).resolve(), Path(os.environ['RB_STATE']).resolve()
-sha = '76307345d8f036c548128de96c5f230099cc65d8'
-assert root.parent == Path('/private/tmp') and root.name.startswith('repobridge-live-7630734.')
+sha = '78253365266eb5f47f0436dddf4b69522def917e'
+assert root.parent == Path('/private/tmp') and root.name.startswith('repobridge-live-7825336.')
 assert source == root / 'source' and state == root / 'state' and not state.exists()
 assert (root / 'candidate.sha').read_text().strip() == sha
 assert Path(app.__file__).resolve() == source / 'src/harness_bridge/workbench/app.py'
@@ -100,7 +114,7 @@ PY
 预期：打印的源码位于新目录，状态为 `<新目录>/state`；浏览器打开独立 `127.0.0.1:<端口>`，
 首次项目列表为空。记录端口和 `launch.json`，页面加载后核对两家 CLI 路径／版本及官方应用版本。
 启动只探测 CLI 版本／本地能力，不发送消息；未添加项目时不发现历史。若来源不符、出现旧项目、目录非空，立即停止。
-浏览器是本包的候选控制界面；原生 RepoBridge 窗口的 IME／剪贴板／VoiceOver 另交 Opus，不算本包已验。
+浏览器是本包的候选控制界面；原生 RepoBridge 窗口的 IME／剪贴板／VoiceOver／原生焦点 另交 Opus，不算本包已验。
 不使用 `--no-open`，不抄录 `/auth?token=…`、Cookie 或完整 HAR。
 
 只隔离 **RepoBridge 状态**，不伪造 HOME 或复制登录／原生历史。之后获准的原生 CLI 会使用用户指定的原生环境，
@@ -135,10 +149,10 @@ kill -TERM "$RB_PID"
 
 | 步骤 | 操作 | 预期／最小证据 | 发送预算 | 失败停止条件 |
 |---|---|---|---|---|
-| N0 原生基线 | 用户在指定原生工具确认原 ID、项目、已有消息锚点；记录创建来源和当前写入者。候选仅添加该项目 | 原生 ID、来源证据；候选项目路径完全相同；没有新建会话 | 0 | ID／cwd／来源证据不明；未指定的私人内容会被纳入发现 |
-| N1 发现 | 项目菜单“添加已有会话”，选 harness；按标题搜索，必要时翻页 | 记录 candidate_id/native_session_id/cwd/source/completeness；目标 ID 精确匹配；partial 与空／失败分别记录 | 0 | 目标缺失、跨项目结果、错误被当空；不做全局搜索或手工注入 ID |
-| N2 预览 | 只打开目标，核对既有首尾锚点；有更早页则翻页 | 原 ID 的可见历史、稳定消息 ID／时间／计数；截图仅测试内容 | 0 | 错会话、历史不一致、部分可见隐藏关键锚点；没有更早页则记未覆盖，不填“通过” |
-| N3 关联与去重 | 添加关联；再从发现入口添加同候选；刷新历史 | `native_binding=linked`；native ID 不变；第二次同 ses_ ID、created=false；runs 仍为 []、turns_observed=0；原生端锚点／用户消息数无新增 | 0 | 出现新原生 ID、重复本地关联、历史重放、任何新消息／运行；本地只读缓存不等于复制出新原生会话 |
+| N0 范围与来源 | 用户指定项目，允许该项目的元数据发现；说明已知来源／当前写入者。候选仅添加该项目，无需用户查询数据库 | 许可范围和来源／写入者记录；项目路径完全相同；没有新建会话 | 0 | 项目范围／许可不明；其他未授权项目会被纳入发现 |
+| N1 发现与选样 | 执行者只调用指定项目／harness 的发现列表接口，必要时搜索／翻页；用户选候选，并明确其历史读取范围 | candidate_id/native_session_id/cwd/source/completeness 候选表；选择结果与许可；partial、空、失败区分 | 0 | 跨项目、错误当空、未选样或未授权历史；仅有元数据许可不得用自动预览界面 |
+| N2 预览 | 使用选定 candidate_id 预览；与获准的原生界面核对 ID／首尾锚点／来源；有更早页则翻页 | 原 ID 的可见历史、稳定消息 ID／时间／计数；截图仅测试内容 | 0 | 错会话、历史不一致、部分可见隐藏关键锚点；没有更早页则记未覆盖，不填“通过” |
+| N3 关联与去重 | 添加关联；再关联同候选验证去重；刷新所选历史（单 ID 许可使用接口，整项目预览获准才使用列表界面） | `native_binding=linked`；native ID 不变；第二次同 ses_ ID、created=false；runs 仍为 []、turns_observed=0；原生端锚点／用户消息数无新增 | 0 | 出现新原生 ID、重复本地关联、历史重放、任何新消息／运行；本地只读缓存不等于复制出新原生会话 |
 | L0 释放外部 | 用户结束指定终端／桌面写入者，记录证据；明确确认“外部已结束” | `/desktop/return` 只记确认、清保护、失效缓存；运行数与消息数不增；确认不等于自动检测进程退出 | 0 | 写入者仍活动或未知；不可点确认来试探抢锁 |
 | L1 RepoBridge 接续 | 明确用原生恢复，核对 native ID，再发第 1 条唯一标记 prompt | kind=resume；同 ID；完成一轮、原生历史仅一份标记；Codex receipt=sent；Claude 用原生回显／历史证明 | 1 | 锁拒绝、ID 变化、新建／fork、unknown、权限／登录／配额问题、未完成或超时；不重发 |
 | L2 移交官方桌面 | 待本轮空闲后“在官方客户端继续”，按真实需要确认释放 | RepoBridge 运行 exit_confirmed；external hold 生效。Claude 官方确认含原 ID；Codex 打开该 ID 的 deep link。官方列表／页面历史匹配 | 0 | 未确认退出、仍有本地写入者、打开错会话、只有启动命令而无界面核对；不将打开应用视为通过 |
@@ -147,7 +161,7 @@ kill -TERM "$RB_PID"
 | L5 RepoBridge 再接续 | 明确恢复同 ID，发第 3 条标记 prompt，等完成 | 新 run.kind=resume，同 native ID；三条标记各一次；两个 RepoBridge 发送与一个官方发送均可对照；单写入者证据连续 | 1 | 锁拒绝／unknown／重复／分叉／额外发送；已用次数不重置 |
 | L6 收尾 | 结束候选托管写入者，停止候选服务；只读核对指定原生会话仍存在 | 最终原 ID、三条标记、run 状态／退出码；候选进程／端口已退出；未触及现用状态库 | 0 | 退出不明、后台仍写入；保留现场而不清理／强占 |
 
-标记例：`RB763-<日期>-<C或X>-1/2/3`，每次不同。
+标记例：`RB782-<日期>-<C或X>-1/2/3`，每次不同。
 最小 prompt：`这是接续验收。请只原样回复“<本次标记>”，不要读写文件、运行命令或调用工具。`
 样本选无须工具、无敏感内容的会话；若原生配置要求工具或其他动作，停下记录，不扩大权限。不要自动批准权限卡片。
 每条标记必须在**原生来源的同 ID 历史**核对；助手自述“同一会话”不算身份或单写入证据。
@@ -162,7 +176,7 @@ exit_confirmed、receipt、external）。不导出整库、凭据、启动令牌
 两家 N/L 闭环及身份／写入者证据齐全才把 E10 对应样本标为真实通过；未覆盖的来源、分页、真实异常路径单列。
 任何一步失败只记该步／该 harness 阻断和已用预算；不重开已通过的离线结论，不把部分闭环称为整体通过。
 
-- **Opus 后续范围：** 原生 RepoBridge 的 IME、系统剪贴板、VoiceOver；本包未执行，也不计入 6 次。
+- **Opus 后续范围：** 原生 RepoBridge 的 IME、系统剪贴板、VoiceOver、原生焦点，均 **NOT_RUN**；本包未执行，也不计入 6 次。
 - Claude 无对应持久投递回执，原生回显前退出的证据范围有限。
 - 整页刷新丢失普通未发草稿；历史刷新保留草稿、已接收消息回执恢复是不同能力。
 - 历史持久化失败摘要未迁移；新运行摘要的事实修复保留。
