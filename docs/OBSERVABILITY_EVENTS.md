@@ -1,6 +1,8 @@
 # Observability: fault diagnostics, product events, operation records
 
-Schema version 1 (`src/harness_bridge/observability/schema.py`; `hbridge diag events` prints it).
+Record schema version 2 (`src/harness_bridge/observability/schema.py`; `hbridge diag events` prints it).
+v2 (review round EF4): `msg` aliases `(session ID, client message ID)`, matching the business
+receipt identity; v1 aliased the client message ID alone. v1 lines remain readable (see Summary).
 Everything is local. Nothing is uploaded, no remote endpoint exists, no SDK is used.
 
 ## Defaults and switches
@@ -20,7 +22,7 @@ as route names only). A disabled recorder creates no directory. Directories are 
 ## Record shape (whitelist)
 
 ```json
-{"v":1,"ts":"2026-10-10T17:18:59.774Z","seq":7,"proc":"p_0bbbfef1","stream":"diag",
+{"v":2,"ts":"2026-10-10T17:18:59.774Z","seq":7,"proc":"p_0bbbfef1","stream":"diag",
  "env":"test","ver":"0.1.0.dev2","sha":"92ed653eaa96","level":"info","component":"run",
  "event":"connect.start","op":"op_6fbdb726a364","session":"s_22099216e3","run":"r_7eb4c0e48d",
  "outcome":"spawned","duration_ms":7,
@@ -35,7 +37,8 @@ as route names only). A disabled recorder creates no directory. Directories are 
 | `level`, `component`, `event` | closed sets from the dictionary below |
 | `op` | operation ID `op_` + 12 hex, random per API/service operation — not a native `request_id` |
 | `name` | route family (`session.send`, `history.discover`, …) — never the path or query |
-| `project`/`session`/`run`/`msg` | `HMAC-SHA256(alias.key, kind:local_id)[:10]` with prefix `p_`/`s_`/`r_`/`m_` |
+| `project`/`session`/`run` | `HMAC-SHA256(alias.key, kind:local_id)[:10]` with prefix `p_`/`s_`/`r_` |
+| `msg` | `m_` + the same HMAC over `session_id NUL client_id`: two sessions using one client ID stay distinct; no `msg` without a session |
 | `outcome`, `duration_ms` | per-event enum; integer ms |
 | `code`, `reason`, `error_type` | `BridgeError` code; stable reason from a closed list (else `other`); exception class name |
 | `attrs` | per-event fields below, each typed (enum / bool / count / ms) |
@@ -114,13 +117,17 @@ operation names, dropped records, code versions); product metrics with explicit 
 * `desktop`, `turns_ended_observed`, `task_completion`, `model_usage` as above.
 
 De-duplication: exact duplicate lines (same `proc`+`seq`) are removed; then per event —
-link/desktop by operation, connect/ready/run end by run alias, submissions by message alias and
-outcome, delivery by message alias and target state. When product events are disabled the
+link/desktop by operation, connect/ready/run end by run alias, submissions by
+`(session, msg)` and outcome, delivery by `(session, msg)` and target state. A repeated
+(reused) submit keeps the first submission's start time and operation, so it neither adds a
+submission nor resets the confirmation latency. `samples.record_versions` counts v1/v2 lines;
+v1 messages are re-keyed by `(session, msg)` and reported as `delivery.v1_records` with a note
+that their latency/operation link may have been shared across sessions reusing a client ID. When product events are disabled the
 product section is `{"status":"unavailable","reason":"product_events_disabled"}` — absent, not 0.
 
 ## Diagnostics bundle (`hbridge diag export`)
 
-One local zip (0600, exclusive create) with `manifest.json` (files, sizes, SHA-256, record schema,
+One local zip (0600, exclusive create) with `manifest.json` (files, sizes, SHA-256, record schema and versions present,
 `uploaded: false`, `contains_test_data`, exclusion list), `environment.json` (version, SHA, dirty,
 Python, OS family, env, native_env, schema revisions, settings, read statistics — no paths,
 hostnames or user names), `diagnostics.jsonl` (re-validated diagnostic records in the window),

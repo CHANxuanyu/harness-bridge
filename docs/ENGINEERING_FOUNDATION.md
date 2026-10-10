@@ -21,7 +21,8 @@ exactly as before and the current state directory is not moved, opened or upgrad
 | | prod (default) | dev | test |
 |---|---|---|---|
 | State root | `--state-dir` › `HBRIDGE_STATE_DIR` › `$XDG_STATE_HOME/harness-bridge` (unchanged) | default `…/harness-bridge-dev`; may not resolve to or contain the prod root | must be inside `HBRIDGE_TEST_ROOT` (default `<root>/state`) |
-| DB / logs / lock | `<state>/workbench.sqlite3`, `<state>/observability/`, `<state>/workbench/app.lock` | same layout under the dev root | same layout under the test root, plus `<root>/.hbridge-test-root.lock` |
+| Ownership | never writes a marker; refuses a dev/test-marked directory | directory must be absent, empty or marked `dev` | absent, empty or marked `test` |
+| DB / logs / lock | `<state>/workbench.sqlite3`, `<state>/observability/`, `<state>/workbench/app.lock` | same layout plus `<state>/environment.json` | same, plus kernel `flock`s on the root directory and its parents (no lock file) |
 | Port | `--port`, default 0 (any free loopback port) | same | same (each instance gets its own) |
 | Native CLI HOME/history/login | the user's own | **shared with the user** unless HOME/CODEX_HOME/CLAUDE_CONFIG_DIR are overridden (reported as `native_env: shared|custom`) | HOME and every set CODEX_HOME/CLAUDE_CONFIG_DIR/XDG_* must be inside the root (`native_env: isolated`) |
 | CLI binaries | PATH discovery or explicit | same | explicit stubs inside the root only; discovery forced off |
@@ -31,15 +32,42 @@ exactly as before and the current state directory is not moved, opened or upgrad
 Separating only SQLite is not isolation: in dev the native CLIs still read the developer's own
 history and login. Use the test profile (or set the native home variables) for full separation.
 
-Test-profile refusals happen **before** any directory is created or database opened
-(`PREFLIGHT_FAILED`, reason `environment_refused`): missing/relative root; root that is `/`,
+**State ownership (review EF1).** `HBRIDGE_STATE_DIR` and `--state-dir` still win, but a dev or
+test start may only use a state directory that is absent, empty or carries that environment's
+marker (`<state>/environment.json`, `{"format":"repobridge.state-environment.v1","env":"dev"}`,
+0600). An existing directory without a marker cannot be proven to be dev/test data — it may be a
+custom prod directory inherited through `HBRIDGE_STATE_DIR` — so it is **refused**, through any
+path alias, before anything is opened. prod never writes a marker (legacy directories stay
+byte-for-byte untouched) and refuses a directory marked for dev/test. The marker is written only
+after every check passed, as the first write of a legal start. No scan of the user's disk and no
+hard-coded paths are involved. Directories created by the earlier unmarked revision of this
+branch are refused too; use a fresh directory. Adopting a *copy* of prod data for dev would need
+a future explicit command (copy while the App is closed, then mark the copy); nothing is
+migrated, and real data was not touched in this work.
+
+Refusals happen **before** any directory, lock file or database is created (`PREFLIGHT_FAILED`,
+reason `environment_refused`; the App entry prints `RepoBridge did not start: …` and exits 4):
+unmarked or foreign-marked state (dev/test); missing/relative test root; root that is `/`,
 contains the real home, or overlaps the real prod/dev state, `~/.claude` or `~/.codex` (derived
 from the password database, so an overridden HOME cannot hide them); state, HOME or a native home
 variable outside the root (symlink and bind-mount aliases are resolved: realpath + inode);
-binaries/app dirs/opener outside the root; a second instance on the same root (or a symlink
-alias of it); a root nested inside another running test root. Two test instances on two roots
-run side by side with separate state, logs, locks and ports. The existing App single-instance
-lock (`<state>/workbench/app.lock`) is unchanged.
+binaries/app dirs/opener outside the root; a root already in use.
+
+**Test-root locks (review EF2).** An instance holds an exclusive kernel `flock` on its root
+directory and shared `flock`s on each parent directory that could itself be a root (skipping `/`,
+directories containing the real home and unreadable ones). Same root, a symlink alias of it, a
+parent of a running root and a child of a running root are all refused, in either start order and
+under concurrent starts (one winner); sibling roots share their parents and run side by side.
+There are no lock files to go stale; a crashed process releases its locks. Nothing below the root
+is scanned. Verified on Linux; flock on directory descriptors on macOS is expected but NOT_RUN.
+
+**App entry (review EF3).** `repobridge` and `hbridge app` both go through `app.run`, which now
+runs the read-only preflight and takes the test-root lock before the first write, then claims the
+marker, takes the existing single-instance lock (`<state>/workbench/app.lock`, unchanged),
+constructs the Workbench with the handed-over root lock and starts the server. If any step after
+the preflight fails, everything already acquired is released (original shutdown order kept).
+This `app.py` change was authorized for this review round only; no static UI, `native_mac.py`
+or window/input code changed.
 
 ### Reproducible dev/test entry points
 
@@ -57,10 +85,12 @@ uv run --frozen python scripts/repobridge_sandbox.py launch /tmp/rb-test-a      
 uv run --frozen python scripts/repobridge_sandbox.py demo                       # end-to-end demo
 ```
 
-`launch` runs the unchanged App entry (`--no-open --state-dir … --claude-binary … --codex-binary …
+`launch` runs the App entry (`--no-open --state-dir … --claude-binary … --codex-binary …
 --dev-app-dir … --dev-opener …`) with an allowlisted environment (PATH, locale, TMPDIR plus the
-sandbox variables). No real token, API/provider variable, HOME or cloud/nested marker is
-inherited; the product gates themselves are unchanged for prod/dev.
+sandbox variables), so no real token, API/provider variable or HOME is inherited. The cloud/nested
+agent markers **are** inherited (review item 4): inside an agent or cloud session the product gate
+refuses native starts and the demo exits 3 with `PREFLIGHT_FAILED`. Runs in this cloud container
+removed those markers from the invoking process explicitly, and are labelled that way.
 
 ## 2. Version identity
 
@@ -129,20 +159,23 @@ are identical with diagnostics enabled, disabled or failing (tested).
 ## 5. Offline checks and CI
 
 * `scripts/check.sh` unchanged: ruff, format, strict mypy, `pytest -m "not live"`.
-* `pyproject.toml`: mypy `platform = "darwin"` (product platform). Before this, strict mypy failed
-  on Linux at `workbench/native_mac.py:27` (unreachable under Linux platform narrowing) — also on
-  the untouched base.
+* `pyproject.toml`: mypy `platform = "darwin"` — a target-platform choice for the macOS product.
+  It makes strict mypy check the darwin branches on any host; it does **not** type-check
+  Linux-only paths (for example the `xdg-open` branch). Before this, strict mypy failed on Linux at
+  `workbench/native_mac.py:27` (unreachable under Linux platform narrowing), also at the base. The
+  native platform gates were not changed.
 * `.github/workflows/ci.yml` stays **manual** (`workflow_dispatch`), read-only token, no secrets,
   frozen lockfile. Added: runner choice (`macos-14` default, `ubuntu-24.04`), per-step timeouts
   (install 10, lint 5, types 5, tests 35, demos 5; job 60) from measured durations (16m47s Mac,
   5m08s Linux container), concurrency group with cancel-in-progress, pinned
   `actions/checkout@v4.2.2` and uv `0.11.32`, `persist-credentials: false`, build identity step,
   per-stage failure, `--durations=25`, JUnit report kept 7 days on failure, sandbox demo.
-  Not run from here (no paid pipeline triggered); the YAML was parsed locally.
+  **NOT_RUN**: no remote pipeline was triggered; only the YAML was parsed locally.
 * Known Linux results at the base: 6 desktop tests fail because the desktop handoff is gated to
   macOS (`目前只在 macOS 上提供`), and in this cloud container
-  `test_zcode_stub_flow.py::test_cancel_stops_both_transport_and_peer` fails (a stopped child is
-  still signalable; consistent with container init not reaping). They are reported, not skipped.
+  `test_zcode_stub_flow.py::test_cancel_stops_both_transport_and_peer` fails (`DID NOT RAISE
+  ProcessLookupError`; cause **pending verification** — not established). They are reported, not
+  skipped; `scripts/check.sh` therefore exits 1 on Linux. Full list in the result record.
 
 Enabling PR checks later (suggestion only; not applied, no branch-protection/billing change):
 
