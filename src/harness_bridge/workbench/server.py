@@ -92,7 +92,10 @@ class WorkbenchServer:
 
     def close(self) -> None:
         self.closing.set()
-        self.httpd.shutdown()
+        # shutdown() waits for serve_forever, so it would hang if Thread.start failed.
+        if self._thread is not None and self._thread.is_alive():
+            self.httpd.shutdown()
+            self._thread.join()
         self.httpd.server_close()
 
 

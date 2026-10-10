@@ -94,13 +94,14 @@ def run(args: argparse.Namespace) -> int:
         workbench = Workbench(state_dir, config=plan.config, root_lock=plan.root_lock)
         try:
             server = WorkbenchServer(workbench, port=args.port)
-            server.start()
         except BaseException:
             workbench.close()
             raise
         # Same shutdown order as before: workbench, server, lock (then the test-root lock).
         cleanup.callback(server.close)
         cleanup.callback(workbench.close)
+        # The constructor already bound a socket. Register cleanup before starting its thread.
+        server.start()
         _serve(args, server, workbench)
     return 0
 
