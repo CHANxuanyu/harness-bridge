@@ -237,21 +237,31 @@ class Observability:
 
     # --- bookkeeping for correlation and latency -------------------------------------------------
 
-    def note_message(self, client_id: str) -> None:
+    def message_alias(self, session_id: Any, client_id: Any) -> str | None:
+        """Message identity is (session, client ID), like the business receipts (schema v2)."""
+        if not isinstance(session_id, str) or not session_id:
+            return None
+        if not isinstance(client_id, str) or not client_id:
+            return None
+        return self.alias("m", f"{session_id}\x00{client_id}")
+
+    def note_message(self, session_id: str, client_id: str) -> None:
+        """First submission only: a repeated (reused) submit keeps the original start and op."""
         try:
-            alias = self.alias("m", client_id)
+            alias = self.message_alias(session_id, client_id)
             if alias is None:
                 return
             with self._lock:
-                self._msg_t0.put(alias, time.monotonic())
+                if alias not in self._msg_t0:
+                    self._msg_t0.put(alias, time.monotonic())
                 op = _current_op.get()
-                if op:
+                if op and alias not in self._msg_ops:
                     self._msg_ops.put(alias, op)
         except Exception:
             self.invalid += 1
 
-    def message_latency(self, client_id: str) -> float | None:
-        alias = self.alias("m", client_id)
+    def message_latency(self, session_id: str, client_id: str) -> float | None:
+        alias = self.message_alias(session_id, client_id)
         with self._lock:
             t0 = self._msg_t0.get(alias) if alias else None
         return None if t0 is None else (time.monotonic() - t0) * 1000
@@ -324,7 +334,7 @@ class Observability:
                 targets.append("product")
             if not targets:
                 return
-            run_alias, msg_alias = self.alias("r", run), self.alias("m", msg)
+            run_alias, msg_alias = self.alias("r", run), self.message_alias(session, msg)
             op = op or _current_op.get()
             if op is None:
                 with self._lock:

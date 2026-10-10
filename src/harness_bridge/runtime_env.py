@@ -3,14 +3,20 @@
 ``HBRIDGE_ENV`` selects the profile; unset means ``prod`` with the historical defaults, so the
 existing entry points and the user's current state directory behave exactly as before.
 
-* ``prod``: ``--state-dir`` / ``HBRIDGE_STATE_DIR`` / ``$XDG_STATE_HOME/harness-bridge``.
-* ``dev``: default state ``$XDG_STATE_HOME/harness-bridge-dev``; an explicit state directory may
-  not resolve to the prod default. Only RepoBridge state is separated: the native CLIs still use
-  the developer's own HOME, history and login unless HOME/CODEX_HOME/CLAUDE_CONFIG_DIR are set.
-* ``test``: needs ``HBRIDGE_TEST_ROOT``, an existing sandbox directory. State, the native CLIs'
-  HOME/config/history, explicitly configured stub binaries, desktop-client lookup and the opener
-  must all live inside it; PATH discovery is off. One running instance per root (lock), and a root
-  may not be nested in another running test root or alias a protected directory.
+* ``prod``: ``--state-dir`` / ``HBRIDGE_STATE_DIR`` / ``$XDG_STATE_HOME/harness-bridge``. Never
+  writes an ownership marker; refuses a directory marked for dev/test.
+* ``dev``: default state ``$XDG_STATE_HOME/harness-bridge-dev``. The state directory must be
+  new/empty or carry the dev marker (``environment.json``); an existing unmarked directory — for
+  example a custom prod directory inherited through ``HBRIDGE_STATE_DIR`` — is refused. Only
+  RepoBridge state is separated: the native CLIs still use the developer's own HOME, history and
+  login unless HOME/CODEX_HOME/CLAUDE_CONFIG_DIR are set.
+* ``test``: needs ``HBRIDGE_TEST_ROOT``, an existing sandbox directory. State (new/empty or marked
+  test), the native CLIs' HOME/config/history, explicitly configured stub binaries, desktop-client
+  lookup and the opener must all live inside it; PATH discovery is off. Directory locks allow one
+  running instance per root and no two running roots nested in each other, in either start order.
+
+All checks are read-only (``resolve``/``prepare_start``); the marker is written only after they
+pass (``claim_state_dir``), as the first write of a legal start.
 
 Build identity (package version, exact git SHA, dirty flag) is read once per process. An installed
 wheel has no checkout, so its SHA is reported as ``unknown``, never guessed.
@@ -21,6 +27,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import functools
+import json
 import os
 import platform
 import pwd
@@ -50,7 +57,6 @@ NATIVE_HOME_VARS = (
     "XDG_STATE_HOME",
     "XDG_CACHE_HOME",
 )
-TEST_LOCK = ".hbridge-test-root.lock"
 
 
 def profile_name(env: Mapping[str, str]) -> tuple[str, str]:
@@ -214,9 +220,86 @@ def check_binaries(root: Path, binaries: Mapping[str, str], extra: Mapping[str, 
         raise refuse("test profile: the desktop opener must be inside the test root")
 
 
+# --- state ownership -----------------------------------------------------------------------
+# A dev/test start may only use a state directory that is absent, empty, or carries that
+# environment's marker. An existing directory without a marker cannot be proven to be dev/test
+# data (it may be a prod directory reused through HBRIDGE_STATE_DIR or --state-dir), so it is
+# refused rather than claimed. prod never writes a marker (legacy directories stay untouched)
+# and refuses a directory marked for dev/test. Adopting a copy of prod data needs a future,
+# explicit command; nothing is migrated automatically.
+
+MARKER_FILE = "environment.json"
+MARKER_FORMAT = "repobridge.state-environment.v1"
+_IGNORED_ENTRIES = frozenset({".DS_Store"})
+
+
+def state_owner(state_dir: Path) -> str:
+    """``absent`` | ``empty`` | ``dev`` | ``test`` | ``unmarked`` | ``invalid`` (read-only)."""
+    path = _resolved(state_dir)
+    if not os.path.lexists(path):
+        return "absent"
+    if not path.is_dir():
+        return "invalid"
+    marker = path / MARKER_FILE
+    if os.path.lexists(marker):
+        try:
+            data = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return "invalid"
+        if (
+            isinstance(data, dict)
+            and data.get("format") == MARKER_FORMAT
+            and data.get("env") in ("dev", "test")
+            and not marker.is_symlink()
+        ):
+            return str(data["env"])
+        return "invalid"
+    try:
+        entries = [e for e in os.listdir(path) if e not in _IGNORED_ENTRIES]
+    except OSError:
+        return "invalid"
+    return "unmarked" if entries else "empty"
+
+
+def check_owner(name: str, state_dir: Path) -> str:
+    owner = state_owner(state_dir)
+    if name == "prod":
+        if owner in ("dev", "test"):
+            raise refuse(f"this state directory belongs to the {owner} environment")
+        return owner
+    if owner in ("absent", "empty") or owner == name:
+        return owner
+    if owner in ("dev", "test"):
+        raise refuse(f"this state directory belongs to the {owner} environment")
+    raise refuse(
+        f"existing state directory is not marked for {name}; it may be prod state "
+        "(e.g. inherited HBRIDGE_STATE_DIR). Use a new directory; nothing was opened or changed"
+    )
+
+
+def claim_state_dir(profile: Profile) -> None:
+    """dev/test: create the state directory and its marker. First write of a legal start."""
+    if profile.name not in ("dev", "test"):
+        return
+    path = _resolved(profile.state_dir)
+    check_owner(profile.name, path)
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    marker = path / MARKER_FILE
+    payload = json.dumps({"format": MARKER_FORMAT, "env": profile.name}) + "\n"
+    try:
+        fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        check_owner(profile.name, path)  # a concurrent start of the same environment
+        return
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(payload)
+
+
 def resolve(state_dir: Path, env: Mapping[str, str]) -> Profile:
+    """Read-only validation of profile, paths, ownership and native environment."""
     name, source = profile_name(env)
     root = check_state_dir(name, state_dir, env)
+    check_owner(name, state_dir)
     native = check_native_env(name, root, env)
     return Profile(name, source, state_dir, root, native)
 
@@ -237,34 +320,88 @@ def workbench_profile(state_dir: Path, config: Any, env: Mapping[str, str]) -> t
 
 
 class TestRootLock:
-    """One running instance per test root; refuse when an ancestor test root is in use."""
+    """Exclusive lock on the active test root, shared locks on its possible-root ancestors.
+
+    Kernel ``flock`` on the directories themselves (no lock files): a parent root cannot be
+    locked exclusively while a child holds it shared, a child cannot lock its parent shared
+    while the parent is held exclusively, siblings share their common parents, and a crashed
+    process releases everything. Both start orders and concurrent starts are refused with one
+    winner. Ancestors that cannot be a test root (``/``, directories containing the real home,
+    unreadable ones) are skipped; nothing below the root is scanned.
+    """
+
+    __test__ = False  # not a pytest test class
 
     def __init__(self, root: Path) -> None:
         import fcntl
 
         self._fcntl = fcntl
-        for ancestor in root.parents:
-            marker = ancestor / TEST_LOCK
-            if marker.is_file():
-                with contextlib.suppress(OSError), open(marker, "rb") as probe:
-                    try:
-                        fcntl.flock(probe.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
-                    except OSError:
-                        raise refuse(
-                            "this test root is nested inside another running one"
-                        ) from None
-        self.path = root / TEST_LOCK
-        self._handle = open(self.path, "a+")  # noqa: SIM115 - held for the instance lifetime
+        self.root = _resolved(root)
+        self._fds: list[int] = []
         try:
-            fcntl.flock(self._handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            for ancestor in reversed(self.root.parents):
+                if ancestor == Path("/") or _same_or_inside(real_home(), ancestor):
+                    continue
+                fd = self._open(ancestor, required=False)
+                if fd is not None:
+                    self._flock(fd, fcntl.LOCK_SH, "this test root is nested inside a running one")
+            fd = self._open(self.root, required=True)
+            assert fd is not None
+            self._flock(
+                fd,
+                fcntl.LOCK_EX,
+                "another test instance is using this test root or a root nested inside it",
+            )
+        except BaseException:
+            self.release()
+            raise
+
+    def _open(self, path: Path, *, required: bool) -> int | None:
+        try:
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         except OSError:
-            self._handle.close()
-            raise refuse("another test instance is already using this test root") from None
+            if required:
+                raise refuse("cannot open the test root for locking") from None
+            return None  # unreadable: no instance of this user can lock it as a root either
+        self._fds.append(fd)
+        return fd
+
+    def _flock(self, fd: int, mode: int, busy: str) -> None:
+        try:
+            self._fcntl.flock(fd, mode | self._fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise refuse(busy) from None
+        except OSError:
+            raise refuse("the test root's file system does not support reliable locks") from None
 
     def release(self) -> None:
-        with contextlib.suppress(OSError, ValueError):
-            self._fcntl.flock(self._handle.fileno(), self._fcntl.LOCK_UN)
-            self._handle.close()
+        fds, self._fds = self._fds, []
+        for fd in fds:
+            with contextlib.suppress(OSError):
+                os.close(fd)  # closing the descriptor releases its flock
+
+
+@dataclass
+class StartPlan:
+    """A validated start: checks done and the test-root lock held, nothing written yet."""
+
+    profile: Profile
+    config: Any
+    root_lock: TestRootLock | None
+
+    def claim(self) -> None:
+        claim_state_dir(self.profile)
+
+    def release(self) -> None:
+        if self.root_lock is not None:
+            self.root_lock.release()
+
+
+def prepare_start(state_dir: Path, config: Any, env: Mapping[str, str]) -> StartPlan:
+    """App preflight: validate everything and take the test-root lock before any file write."""
+    profile, checked = workbench_profile(state_dir, config, env)
+    lock = TestRootLock(profile.test_root) if profile.test_root is not None else None
+    return StartPlan(profile, checked, lock)
 
 
 # --- build identity ---------------------------------------------------------------------------
@@ -358,18 +495,21 @@ def describe(state_dir: Path | None, env: Mapping[str, str] | None = None) -> di
     from harness_bridge.workbench.store import SCHEMA_REVISION
 
     out: dict[str, Any] = {"build": build_info(), "expected_schema_revision": SCHEMA_REVISION}
+    target: Path | None = None
     try:
         name, source = profile_name(env)
         out.update(env=name, env_source=source)
         target = state_dir or default_state_dir(env)
+        out["state_dir"] = str(target)
         profile = resolve(target, env)
         out.update(
-            state_dir=str(target),
             native_env=profile.native_env,
             isolation="ok",
             schema_revision=schema_revision(target / "workbench.sqlite3"),
         )
     except BridgeError as err:
         out.update(isolation="refused", refusal=err.message)
+    if target is not None:
+        out["state_owner"] = state_owner(target)
     out["argv0"] = Path(sys.argv[0]).name if sys.argv else None
     return out

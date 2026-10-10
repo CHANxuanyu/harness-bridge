@@ -188,6 +188,7 @@ class Workbench:
         config: WorkbenchConfig | None = None,
         base_env: Mapping[str, str] | None = None,
         stop_grace: float = 3.0,
+        root_lock: runtime_env.TestRootLock | None = None,
     ) -> None:
         self.state_dir = state_dir
         self.base_env = dict(os.environ if base_env is None else base_env)
@@ -196,8 +197,13 @@ class Workbench:
             state_dir, config or WorkbenchConfig(), self.base_env
         )
         root = self.profile.test_root
-        self._root_lock = runtime_env.TestRootLock(root) if root is not None else None
+        if root is not None and root_lock is not None and root_lock.root != root:
+            raise runtime_env.refuse("the provided test-root lock is for another root")
+        # A lock handed over by the App entry (``prepare_start``) stays owned by the caller.
+        owned = root is not None and root_lock is None
+        self._root_lock = runtime_env.TestRootLock(root) if owned and root else None
         try:
+            runtime_env.claim_state_dir(self.profile)
             self.root = state_dir / "workbench"
             (self.root / "runs").mkdir(parents=True, exist_ok=True)
             (self.root / "handoffs").mkdir(parents=True, exist_ok=True)
@@ -1151,7 +1157,7 @@ class Workbench:
                     from_state=before,
                     to_state=after,
                     evidence=evidence,
-                    latency_ms=self.obs.message_latency(str(record.get("client_id"))),
+                    latency_ms=self.obs.message_latency(session_id, str(record.get("client_id"))),
                 )
         except Exception:
             self.obs.invalid += 1
@@ -1788,7 +1794,7 @@ class Workbench:
         attachments: list[str] | None = None,
     ) -> dict[str, Any]:
         client_id = client_id or uuid.uuid4().hex[:16]
-        self.obs.note_message(client_id)
+        self.obs.note_message(session_id, client_id)
         started = time.monotonic()
         observed: dict[str, Any] = {
             "session": session_id,

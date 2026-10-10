@@ -90,10 +90,11 @@ def test_recorder_defaults_aliases_and_settings(tmp_path: Path) -> None:
 
 def test_record_writes_only_whitelisted_correlated_lines(tmp_path: Path) -> None:
     obs = Observability(tmp_path, env_name="test", env={"HBRIDGE_PRODUCT_EVENTS": "1"})
-    with obs.operation("session.send", session="ses_000000000001") as op:
-        obs.note_message("client-1")
-        obs.record("message.submit", msg="client-1", outcome="accepted", harness="codex")
-    obs.record("delivery.state", msg="client-1", to_state="sent", latency_ms=5)
+    sid = "ses_000000000001"
+    with obs.operation("session.send", session=sid) as op:
+        obs.note_message(sid, "client-1")
+        obs.record("message.submit", session=sid, msg="client-1", outcome="accepted")
+    obs.record("delivery.state", session=sid, msg="client-1", to_state="sent", latency_ms=5)
     obs.record("op.end", name="state", level="debug")  # below the default level
     obs.record("no.such.event")
     assert obs.flush()
@@ -104,7 +105,30 @@ def test_record_writes_only_whitelisted_correlated_lines(tmp_path: Path) -> None
     assert [r["event"] for r in product] == ["message.submit", "delivery.state"]
     assert {r["op"] for r in diag} == {op.op}  # late delivery joined via message alias
     assert all("client-1" not in json.dumps(r) for r in diag + product)
+    assert all(r["v"] == 2 for r in diag + product)
     assert obs.invalid == 1
+
+
+def test_message_identity_is_session_scoped_and_first_submit_wins(tmp_path: Path) -> None:
+    obs = Observability(tmp_path, env_name="test", env={})
+    a, b = "ses_00000000000a", "ses_00000000000b"
+    assert obs.message_alias(a, "same") != obs.message_alias(b, "same")
+    assert obs.message_alias(None, "same") is None
+    with obs.operation("session.send") as first:
+        obs.note_message(a, "same")
+    time.sleep(0.3)
+    with obs.operation("session.send"):
+        obs.note_message(a, "same")  # reused submit: keeps the first start and operation
+        obs.note_message(b, "same")
+    latency_a = obs.message_latency(a, "same")
+    latency_b = obs.message_latency(b, "same")
+    assert latency_a is not None and latency_b is not None
+    assert latency_a >= 300 > latency_b
+    obs.record("delivery.state", session=a, msg="same", to_state="sent")
+    assert obs.flush()
+    obs.close()
+    rows = lines(tmp_path / "observability" / "diagnostics", "diag")
+    assert rows[-1]["op"] == first.op
 
 
 def test_sink_rotation_retention_and_permissions(tmp_path: Path) -> None:

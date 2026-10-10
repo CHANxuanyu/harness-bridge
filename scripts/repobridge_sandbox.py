@@ -8,6 +8,9 @@ A sandbox root holds everything one ``HBRIDGE_ENV=test`` instance uses: state, t
 HOME/CODEX_HOME/CLAUDE_CONFIG_DIR, stub ``claude``/``codex`` (copied from tests/helpers/wb_stub.py),
 a fake Applications folder and a recording opener. The environment is built from an allowlist
 (PATH, locale, TMPDIR), so no real token, API/provider variable or HOME reaches the instance.
+The cloud/nested agent markers are inherited unchanged, so the product gate refuses native
+starts inside an agent or cloud session exactly as it does for any other instance; run the demo
+from a normal terminal (or state explicitly that the markers were removed for that run).
 Nothing here starts a real CLI, opens a desktop app, calls a model or leaves loopback.
 """
 
@@ -73,7 +76,10 @@ class Sandbox:
         return {"claude-code": str(self.bin / "claude"), "codex": str(self.bin / "codex")}
 
     def env(self, **extra: str) -> dict[str, str]:
-        env = {k: os.environ[k] for k in PASS_THROUGH if os.environ.get(k)}
+        from harness_bridge.config import CLOUD_ENV_MARKERS, NESTED_ENV_MARKERS
+
+        keep = (*PASS_THROUGH, *CLOUD_ENV_MARKERS, *NESTED_ENV_MARKERS)  # gate markers stay
+        env = {k: os.environ[k] for k in keep if os.environ.get(k)}
         env.update(
             HBRIDGE_ENV="test",
             HBRIDGE_TEST_ROOT=str(self.root),
@@ -271,12 +277,21 @@ def scan_for_leaks(paths: list[Path], needles: dict[str, str]) -> dict[str, list
 def demo(root: Path | None = None, *, keep: bool = False) -> dict[str, Any]:
     """Link → unknown → exact client-ID proof → sent → stop → export + summary."""
     sys.path.insert(0, str(REPO / "src"))
+    scratch = Path(tempfile.mkdtemp(prefix="rb-demo-")) if root is None else None
+    try:
+        return _demo(scratch, root, keep)
+    except BaseException:
+        if scratch is not None and not keep:
+            shutil.rmtree(scratch, ignore_errors=True)
+        raise
+
+
+def _demo(scratch: Path | None, root: Path | None, keep: bool) -> dict[str, Any]:
     from harness_bridge.observability import report
     from harness_bridge.workbench.harness import WorkbenchConfig
     from harness_bridge.workbench.server import WorkbenchServer
     from harness_bridge.workbench.service import Workbench
 
-    scratch = Path(tempfile.mkdtemp(prefix="rb-demo-")) if root is None else None
     box = create(root or (scratch / "sandbox"))  # type: ignore[operator]
     native = seed_codex(box)
     env = box.env(WB_STUB_TURN_DELIVERY="exit", HBRIDGE_PRODUCT_EVENTS="1")
@@ -421,7 +436,12 @@ def main(argv: list[str] | None = None) -> int:
         with contextlib.suppress(KeyboardInterrupt):
             return subprocess.call(launch_argv(box, args.port), env=env)
         return 130
-    result = demo(args.root, keep=args.keep)
+    try:
+        result = demo(args.root, keep=args.keep)
+    except RuntimeError as exc:
+        # e.g. PREFLIGHT_FAILED: an inherited cloud/nested agent marker keeps the gate closed.
+        print(f"demo did not complete: {exc}", file=sys.stderr)
+        return 3
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0 if result["passed"] else 1
 

@@ -115,6 +115,18 @@ def _dedupe(records: list[dict[str, Any]], key: Any) -> tuple[list[dict[str, Any
     return out, dropped
 
 
+MessageKey = tuple[str, str]
+
+
+def message_key(record: Mapping[str, Any]) -> MessageKey | None:
+    """(session alias, message alias). v2 message aliases already include the session; v1
+    aliases were per client ID only, so the session alias is what keeps v1 messages apart."""
+    session, msg = record.get("session"), record.get("msg")
+    if not isinstance(session, str) or not isinstance(msg, str):
+        return None
+    return session, msg
+
+
 def product_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     by_event: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in records:
@@ -180,20 +192,22 @@ def product_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         "run_end_status": dict(Counter(str(_attrs(r).get("status")) for r in ends)),
     }
 
-    submits, n = _dedupe(by_event["message.submit"], lambda r: (r.get("msg"), r.get("outcome")))
+    submits, n = _dedupe(by_event["message.submit"], lambda r: (message_key(r), r.get("outcome")))
     removed += n
     transitions, n = _dedupe(
-        by_event["delivery.state"], lambda r: (r.get("msg"), _attrs(r).get("to_state"))
+        by_event["delivery.state"], lambda r: (message_key(r), _attrs(r).get("to_state"))
     )
     removed += n
-    accepted: dict[str, dict[str, Any]] = {
-        str(r["msg"]): r for r in submits if r.get("outcome") == "accepted" and r.get("msg")
-    }
-    states: dict[str, list[str]] = defaultdict(list)
-    sent_latency: dict[str, int | None] = {}
+    accepted: dict[MessageKey, dict[str, Any]] = {}
+    for record in submits:
+        key = message_key(record)
+        if record.get("outcome") == "accepted" and key is not None:
+            accepted[key] = record
+    states: dict[MessageKey, list[str]] = defaultdict(list)
+    sent_latency: dict[MessageKey, int | None] = {}
     for record in transitions:
-        msg, to = record.get("msg"), _attrs(record).get("to_state")
-        if not msg or not isinstance(to, str):
+        msg, to = message_key(record), _attrs(record).get("to_state")
+        if msg is None or not isinstance(to, str):
             continue
         states[msg].append(to)
         if to == "sent":
@@ -217,9 +231,13 @@ def product_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         per_harness[str(_attrs(submit).get("harness"))][state] += 1
     latencies = [v for m, v in sent_latency.items() if m in accepted and v is not None]
     sent_total = final["sent"]
-    delivery = {
+    notes = [
+        "sent = the native CLI accepted the message; it is not task success",
+        "no_receipt: harness without a durable receipt (Claude Code) or receipt outside window",
+    ]
+    delivery: dict[str, Any] = {
         "submitted": len(accepted),
-        "denominator": "distinct accepted submissions (client message aliases)",
+        "denominator": "distinct accepted submissions, keyed by (session, client message)",
         "final_state": {
             "sent": final["sent"],
             "not_sent": final["not_sent"],
@@ -238,11 +256,15 @@ def product_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
             "missing_note": "confirmed after restart or without an in-process submit time",
         },
         "transitions_without_submit_in_window": len(set(states) - set(accepted)),
-        "notes": [
-            "sent = the native CLI accepted the message; it is not task success",
-            "no_receipt: harness without a durable receipt (Claude Code) or receipt outside window",
-        ],
+        "notes": notes,
     }
+    v1 = sum(1 for r in submits + transitions if r.get("v") == 1)
+    if v1:
+        delivery["v1_records"] = v1
+        notes.append(
+            "v1 records: identity re-keyed by (session, msg); their latency and operation link "
+            "may be shared by different sessions that reused the same client message ID"
+        )
     opens, n = _dedupe(by_event["desktop.open"], ident)
     removed += n
     returns, n = _dedupe(by_event["desktop.return"], ident)
@@ -323,6 +345,7 @@ def summarize(
         "samples": {
             "diagnostic_records": len(diag),
             "product_records": len(product),
+            "record_versions": dict(Counter(str(r.get("v")) for r in diag + product)),
             "read_stats": stats,
         },
         "product_events_enabled": settings["product_events"],
@@ -452,6 +475,7 @@ def export_bundle(
         "created_at": timestamp(),
         "uploaded": False,
         "record_schema_version": schema.SCHEMA_VERSION,
+        "record_versions_present": sorted({int(r["v"]) for r in diag}),
         "redaction": "whitelist schema: only enums, counts, durations, stable codes and keyed "
         "local aliases; every record re-validated during export",
         "files": [

@@ -15,7 +15,10 @@ from typing import Any
 
 from harness_bridge.errors import _CODES
 
-SCHEMA_VERSION = 1
+# v2: ``msg`` aliases (session ID, client message ID) instead of the client ID alone.
+# v1 records stay readable; summaries key messages by (session, msg) for both versions.
+SCHEMA_VERSION = 2
+READABLE_VERSIONS = frozenset({1, 2})
 MAX_RECORD_BYTES = 2048
 MAX_LIST = 8
 MAX_MS = 100_000_000  # ~27 h
@@ -422,7 +425,7 @@ COMMON: dict[str, Validator] = {
 }
 # Filled by the recorder only.
 ENVELOPE: dict[str, Validator] = {
-    "v": lambda v: v if v == SCHEMA_VERSION else _DROP,
+    "v": lambda v: v if v in READABLE_VERSIONS and not isinstance(v, bool) else _DROP,
     "ts": pattern(_TS),
     "seq": count,
     "proc": pattern(_PROC),

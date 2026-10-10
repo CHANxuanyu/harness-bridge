@@ -7,8 +7,10 @@ simulates the macOS capability gate (platform="darwin") and only records the ope
 
 from __future__ import annotations
 
+import fcntl
 import functools
 import json
+import os
 import plistlib
 import socket
 import sqlite3
@@ -29,15 +31,18 @@ from scripts.repobridge_sandbox import (
     wait_for,
 )
 
-from harness_bridge import cli
+from harness_bridge import cli, runtime_env
 from harness_bridge.errors import BridgeError
 from harness_bridge.observability import report
+from harness_bridge.workbench import app as app_module
 from harness_bridge.workbench import desktop_apps
+from harness_bridge.workbench import server as server_module
 from harness_bridge.workbench import service as service_module
 from harness_bridge.workbench.harness import CODEX, WorkbenchConfig
 from harness_bridge.workbench.server import WorkbenchServer
 from harness_bridge.workbench.service import Workbench
 from tests.integration.test_workbench_server import loopback  # noqa: F401
+from tests.unit.test_runtime_env import legacy_prod_state, snapshot
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "harness_bridge"
 BASE_TABLES = {
@@ -165,11 +170,11 @@ def test_two_test_instances_are_isolated_and_path_conflicts_refused(tmp_path: Pa
         wa.add_project(str(a.repo))
         assert [p["root_path"] for p in wb.store.list_projects()] == []
         assert wa.store.path.parent == a.state and wb.store.path.parent == b.state
-        with pytest.raises(BridgeError, match="already using"):
+        with pytest.raises(BridgeError, match="using this test root"):
             open_wb(a)
         alias = tmp_path / "alias"
         alias.symlink_to(a.root)
-        with pytest.raises(BridgeError, match="already using"):
+        with pytest.raises(BridgeError, match="using this test root"):
             open_wb(Sandbox(alias))
         cross = tmp_path / "c-state"
         for state in (a.state, cross):
@@ -281,6 +286,7 @@ def test_disabled_or_failing_sinks_do_not_change_business_results(
         outcome = unknown_then_proof(box, HBRIDGE_DIAGNOSTICS="0", HBRIDGE_PRODUCT_EVENTS="0")
         assert not (box.state / "observability").exists()
     else:
+        open_wb(box, HBRIDGE_DIAGNOSTICS="0", HBRIDGE_PRODUCT_EVENTS="0").close()  # claim
         (box.state / "observability").write_text("a file where the directory should be")
         outcome = unknown_then_proof(box, HBRIDGE_PRODUCT_EVENTS="1")
         assert (box.state / "observability").is_file()
@@ -470,3 +476,182 @@ def test_recorder_construction_failure_does_not_block_start(
     finally:
         wb.close()
     assert not (box.state / "observability").exists()
+
+
+ENTRIES = {
+    "repobridge": lambda argv: app_module.main(argv),
+    "hbridge app": lambda argv: cli.main(["app", *argv]),
+}
+
+
+def app_argv(box: Sandbox, state: Path) -> list[str]:
+    return [
+        "--no-open",
+        "--port",
+        "0",
+        "--state-dir",
+        str(state),
+        "--claude-binary",
+        str(box.bin / "claude"),
+        "--codex-binary",
+        str(box.bin / "codex"),
+        "--dev-app-dir",
+        str(box.apps),
+        "--dev-opener",
+        str(box.bin / "open"),
+    ]
+
+
+def use_env(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> None:
+    for key in (
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+        "XDG_CACHE_HOME",
+        "HBRIDGE_STATE_DIR",
+        "HBRIDGE_ENV",
+        "HBRIDGE_TEST_ROOT",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+
+
+@pytest.mark.parametrize("entry", list(ENTRIES))
+def test_app_entries_refuse_before_any_directory_lock_or_database(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    entry: str,
+) -> None:
+    def never(*_a: Any, **_k: Any) -> None:
+        raise AssertionError("startup went past the environment preflight")
+
+    monkeypatch.setattr(server_module, "WorkbenchServer", never)
+    monkeypatch.setattr(service_module, "Workbench", never)
+    start = ENTRIES[entry]
+    box = create(tmp_path / "sandbox")
+    use_env(monkeypatch, box.env())
+    outside = tmp_path / "outside-state"
+    assert start(app_argv(box, outside)) == 4
+    assert not outside.exists()
+    # A custom prod directory reused through inherited HBRIDGE_STATE_DIR, --state-dir or alias.
+    custom = legacy_prod_state(tmp_path / "custom-prod")
+    alias = tmp_path / "alias"
+    alias.symlink_to(custom)
+    before = snapshot(custom)
+    use_env(monkeypatch, {"HBRIDGE_ENV": "dev", "HBRIDGE_STATE_DIR": str(custom)})
+    assert start(["--no-open", "--port", "0"]) == 4
+    use_env(monkeypatch, {"HBRIDGE_ENV": "dev"})
+    for state in (custom, alias):
+        assert start(["--no-open", "--port", "0", "--state-dir", str(state)]) == 4
+    assert snapshot(custom) == before and not (custom / "workbench" / "app.lock").exists()
+    # A legal configuration whose test root is held by another running instance.
+    use_env(monkeypatch, box.env())
+    held = runtime_env.TestRootLock(box.root)
+    fresh = box.root / "state-2"
+    try:
+        assert start(app_argv(box, fresh)) == 4
+    finally:
+        held.release()
+    assert not fresh.exists()
+    assert list(box.state.iterdir()) == []  # the sandbox's own state was never touched
+    assert capsys.readouterr().err.count("RepoBridge did not start") == 5
+    assert turn_starts(box) == 0
+
+
+@pytest.mark.parametrize("entry", list(ENTRIES))
+def test_app_entries_start_cleanly_and_release_everything_after_a_midway_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, entry: str
+) -> None:
+    start = ENTRIES[entry]
+    box = create(tmp_path / "sandbox")
+    use_env(monkeypatch, box.env())
+    served: list[str] = []
+    monkeypatch.setattr(app_module, "_wait_for_signal", lambda: served.append("served"))
+    assert start(app_argv(box, box.state)) == 0
+    assert served == ["served"] and runtime_env.state_owner(box.state) == "test"
+    runtime_env.TestRootLock(box.root).release()  # released after a clean stop
+
+    def boom(*_a: Any, **_k: Any) -> None:
+        raise OSError("synthetic bind failure")
+
+    monkeypatch.setattr(server_module, "WorkbenchServer", boom)
+    with pytest.raises(OSError, match="synthetic bind failure"):
+        start(app_argv(box, box.state))
+    runtime_env.TestRootLock(box.root).release()  # test-root lock released
+    fd = os.open(box.state / "workbench" / "app.lock", os.O_RDWR)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # App single-instance lock released
+    finally:
+        os.close(fd)
+    assert [r["event"] for r in diag(box)].count("app.stop") == 2  # Workbench closed each time
+    assert turn_starts(box) == 0
+
+
+def test_same_client_id_in_two_sessions_stays_separate_end_to_end(tmp_path: Path) -> None:
+    box = create(tmp_path / "sandbox")
+    native_a, native_b = seed_codex(box, title="A"), seed_codex(box, title="B")
+    wb = open_wb(box, HBRIDGE_PRODUCT_EVENTS="1")
+    try:
+        sid_a, sid_b = link(wb, box, native_a), link(wb, box, native_b)
+        wb.send_message(sid_a, "same text", client_id="same-id", confirm_external=True)
+        wait_for(lambda: wb.message_delivery(sid_a, "same-id")["delivery"]["state"] == "sent")
+        wait_for(lambda: wb._live.get(sid_a) is not None and wb._live[sid_a].phase == "waiting")
+        wb.stop(sid_a)
+        wait_for(lambda: sid_a not in wb._live)
+    finally:
+        wb.close(timeout=5)
+    wb = open_wb(box, WB_STUB_TURN_DELIVERY="exit", HBRIDGE_PRODUCT_EVENTS="1")
+    try:
+        wb.send_message(sid_b, "same text", client_id="same-id", confirm_external=True)
+        wait_for(lambda: wb.message_delivery(sid_b, "same-id")["delivery"]["state"] == "unknown")
+        wait_for(lambda: sid_b not in wb._live)
+        assert wb.send_message(sid_b, "same text", client_id="same-id")["reused"]
+        for _ in range(2):
+            for sid in (sid_a, sid_b):
+                wb.conversation(sid, refresh=True)
+        assert wb.message_delivery(sid_a, "same-id")["delivery"]["state"] == "sent"
+        assert wb.message_delivery(sid_b, "same-id")["delivery"]["state"] == "unknown"
+    finally:
+        wb.close(timeout=5)
+    assert turn_starts(box) == 2
+    records = product(box)
+    submits = [r for r in records if r["event"] == "message.submit"]
+    assert len({r["msg"] for r in submits}) == 2
+    assert all(r["v"] == 2 for r in records)
+    delivery = report.summarize(box.state, envs={"test"})["product"]["delivery"]
+    assert delivery["submitted"] == 2
+    assert delivery["final_state"]["sent"] == 1 and delivery["final_state"]["unknown"] == 1
+    assert delivery["unknown_later_confirmed_sent"] == 0
+    assert delivery["reused_submissions"] == 1
+
+
+@pytest.mark.parametrize("marker", ["CLAUDE_CODE_REMOTE", "CLAUDECODE"])
+def test_cloud_and_nested_markers_still_refuse_native_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, marker: str
+) -> None:
+    """Deterministic stub fixture: with a marker present, no run, resume or turn starts."""
+    monkeypatch.setenv(marker, "1")
+    box = create(tmp_path / "sandbox")
+    assert box.env()[marker] == "1"  # the sandbox inherits gate markers
+    native = seed_codex(box)
+    wb = open_wb(box)
+    try:
+        sid = link(wb, box, native)
+        with pytest.raises(BridgeError) as started:
+            wb.start_run(sid, "resume", confirm_external=True)
+        with pytest.raises(BridgeError) as sent:
+            wb.send_message(sid, "hello", client_id="gate", confirm_external=True)
+        assert started.value.code == sent.value.code == "PREFLIGHT_FAILED"
+        assert wb.store.list_runs(sid) == []
+    finally:
+        wb.close(timeout=5)
+    log = box.stub_home / "codex-rpc.log"
+    methods = (
+        [json.loads(x)["method"] for x in log.read_text().splitlines()] if log.exists() else []
+    )
+    assert "thread/resume" not in methods and "turn/start" not in methods
+    refused = [r for r in diag(box) if r["event"] == "connect.start"]
+    assert len(refused) == 2
+    assert all(r["outcome"] == "refused" and r["attrs"]["step"] == "preflight" for r in refused)
