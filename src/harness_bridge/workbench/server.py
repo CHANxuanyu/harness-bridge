@@ -190,17 +190,37 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                 raise BridgeError("INVALID_INPUT", "JSON object expected")
             return value
 
-        def _run(self, fn: Callable[[], Any]) -> None:
-            try:
-                result = fn()
-            except BridgeError as err:
-                self._json(
-                    _STATUS.get(err.code, HTTPStatus.BAD_REQUEST),
-                    {"ok": False, "error": err.to_dict()},
-                )
-                return
-            except Exception as exc:
-                self._error(HTTPStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", type(exc).__name__)
+        def _run(self, fn: Callable[[], Any], facts: Callable[[Any], None] | None = None) -> None:
+            # One correlated diagnostic record per API operation: route family name, local
+            # session alias, outcome, duration, stable error code. Never the URL, query,
+            # headers, cookie, body or error message (``/auth`` never reaches here).
+            name, sid, level = getattr(self, "_op", None) or ("unknown", None, "debug")
+            failure: tuple[int, dict[str, Any]] | None = None
+            with wb.obs.operation(name, session=sid, level=level) as op:
+                try:
+                    result = fn()
+                except BridgeError as err:
+                    status = _STATUS.get(err.code, HTTPStatus.BAD_REQUEST)
+                    op.fail(err, int(status))
+                    failure = (status, {"ok": False, "error": err.to_dict()})
+                except Exception as exc:
+                    op.fail(exc, int(HTTPStatus.INTERNAL_SERVER_ERROR))
+                    failure = (
+                        HTTPStatus.INTERNAL_SERVER_ERROR,
+                        {
+                            "ok": False,
+                            "error": {"code": "INTERNAL_ERROR", "message": type(exc).__name__},
+                        },
+                    )
+                else:
+                    op.http_status = int(HTTPStatus.OK)
+                    if facts is not None:
+                        try:
+                            facts(result)
+                        except Exception:
+                            wb.obs.invalid += 1
+            if failure is not None:
+                self._json(*failure)
                 return
             self._json(HTTPStatus.OK, {"ok": True, "result": result})
 
@@ -218,6 +238,7 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                 return
             query = {k: v[0] for k, v in parse_qs(url.query).items()}
             path = url.path
+            self._op = _op_for("GET", path)
             if path == "/":
                 self._static("index.html")
             elif path.startswith("/static/"):
@@ -234,7 +255,8 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                         limit=query.get("limit", "20"),
                         q=query.get("q", ""),
                         cursor=query.get("cursor"),
-                    )
+                    ),
+                    facts=lambda r: _discover_facts(wb, query.get("harness"), "cursor" in query, r),
                 )
             elif re.fullmatch(r"/api/history/nat_[0-9a-f]{24}", path):
                 self._run(
@@ -243,7 +265,8 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                         limit=query.get("limit", "50"),
                         before=query.get("before"),
                         since=query.get("since"),
-                    )
+                    ),
+                    facts=lambda r: _history_facts(wb, "preview", r),
                 )
             elif m := _SESSION_PATH.match(path):
                 sid, action = m.group(1), m.group(2)
@@ -269,7 +292,8 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
                             limit=query.get("limit"),
                             before=query.get("before"),
                             since=query.get("since"),
-                        )
+                        ),
+                        facts=lambda r: _history_facts(wb, "conversation", r, session=sid),
                     )
                 elif action == "files":
                     self._run(lambda: wb.search_files(sid, query.get("q", "")[:200]))
@@ -282,6 +306,7 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
             if not self._guard(True):
                 return
             path = urlsplit(self.path).path
+            self._op = _op_for("POST", path)
             try:
                 body = self._body(MAX_UPLOAD if path.endswith("/attachments") else MAX_BODY)
             except BridgeError as err:
@@ -495,6 +520,96 @@ def _make_handler(server: WorkbenchServer) -> type[BaseHTTPRequestHandler]:
             self.wfile.flush()
 
     return Handler
+
+
+# Route family → operation name. Frequent reads and terminal keystrokes are debug-level.
+_GET_SESSION_OPS = {
+    None: "session.detail",
+    "output": "session.output",
+    "activity": "session.activity",
+    "delivery": "session.delivery",
+    "changes": "session.changes",
+    "diff": "session.diff",
+    "conversation": "session.conversation",
+    "files": "session.files",
+}
+_POST_OPS = {
+    "/api/prefs": "prefs.set",
+    "/api/native/title": "native.title",
+    "/api/native/appearance": "native.appearance",
+    "/api/native/pick-folder": "native.pick_folder",
+    "/api/native/open-url": "native.open_url",
+    "/api/native/pick-files": "native.pick_files",
+    "/api/dev/snapshot": "dev.snapshot",
+    "/api/dev/reload": "dev.reload",
+    "/api/dev/resize": "dev.resize",
+    "/api/harnesses/refresh": "harnesses.refresh",
+    "/api/projects": "project.add",
+    "/api/sessions/link": "session.link",
+    "/api/sessions": "session.create",
+}
+_QUIET = {"session.input", "session.resize", "dev.snapshot", "dev.reload", "dev.resize"}
+
+
+def _op_for(method: str, path: str) -> tuple[str, str | None, str]:
+    """(operation name, local session id or None, level) — derived only from the route shape."""
+    name, sid = "unknown", None
+    if method == "GET":
+        if path == "/api/state":
+            name = "state"
+        elif path == "/api/history":
+            name = "history.discover"
+        elif re.fullmatch(r"/api/history/nat_[0-9a-f]{24}", path):
+            name = "history.preview"
+        elif m := _SESSION_PATH.match(path):
+            sid = m.group(1)
+            name = _GET_SESSION_OPS.get(m.group(2), "unknown")
+        info = name in ("history.discover", "history.preview")
+        return name, sid, "info" if info else "debug"
+    if path in _POST_OPS:
+        name = _POST_OPS[path]
+    elif _CATALOG_PATH.match(path):
+        name = "catalog.refresh"
+    elif m := _PROJECT_PATH.match(path):
+        name = {"archive": "project.archive", "reveal": "project.reveal"}.get(m.group(2), "unknown")
+    elif m := _SESSION_PATH.match(path):
+        sid = m.group(1)
+        action = (m.group(2) or "").replace("/", "_")
+        name = "session." + action if action else "unknown"
+    return name, sid, "debug" if name in _QUIET else "info"
+
+
+def _discover_facts(wb: Workbench, harness: Any, paged: bool, result: Any) -> None:
+    completeness = result.get("completeness") or {}
+    wb.obs.record(
+        "history.discover",
+        outcome="ok",
+        harness=harness,
+        items=len(result.get("items") or []),
+        completeness=completeness.get("state"),
+        reasons=list(completeness.get("reasons") or []),
+        paged=paged,
+    )
+
+
+def _history_facts(wb: Workbench, source: str, result: Any, session: str | None = None) -> None:
+    page = result.get("page") or {}
+    state = page.get("state")
+    reasons = list((page.get("completeness") or {}).get("reasons") or [])
+    reasons += list(result.get("partial_reasons") or [])
+    level = {"unavailable": "warning", "partial": "info"}.get(str(state))
+    if source == "conversation" and level is None:
+        level = "debug"
+    wb.obs.record(
+        "history.read",
+        level=level,
+        session=session,
+        outcome="ok",
+        source=source,
+        page_state=state,
+        items=len(result.get("items") or []),
+        reasons=reasons,
+    )
 
 
 def _str(body: dict[str, Any], key: str) -> str:

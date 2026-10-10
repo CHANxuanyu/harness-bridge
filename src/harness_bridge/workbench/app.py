@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import os
 import signal
 import sys
 import threading
@@ -50,52 +51,78 @@ def add_arguments(parser: argparse.ArgumentParser, *, state_dir: bool = True) ->
 
 
 def run(args: argparse.Namespace) -> int:
+    from harness_bridge import runtime_env
     from harness_bridge.config import default_state_dir
+    from harness_bridge.errors import BridgeError
     from harness_bridge.workbench.harness import CLAUDE, CODEX, WorkbenchConfig
     from harness_bridge.workbench.server import WorkbenchServer
     from harness_bridge.workbench.service import Workbench
 
-    raw_state = getattr(args, "state_dir", None)
-    state_dir = Path(raw_state).expanduser() if raw_state else default_state_dir()
-    lock = _single_instance(state_dir)
-    if lock is None:
-        print(
-            f"RepoBridge is already running for {state_dir}; use its window "
-            "(or quit it first). Two Apps on one state would fight over the same sessions.",
-            file=sys.stderr,
-        )
-        return 1
     binaries = {k: v for k, v in ((CLAUDE, args.claude_binary), (CODEX, args.codex_binary)) if v}
     extra: dict[str, Any] = {}
     if getattr(args, "dev_app_dir", None):
         extra["app_dirs"] = tuple(args.dev_app_dir)
     if getattr(args, "dev_opener", None):
         extra["opener"] = args.dev_opener
-    workbench = Workbench(state_dir, config=WorkbenchConfig(binaries=binaries, **extra))
-    server = WorkbenchServer(workbench, port=args.port)
-    server.start()
-    dev_dir = Path(args.dev_snapshot_dir).expanduser() if args.dev_snapshot_dir else None
+    raw_state = getattr(args, "state_dir", None)
     try:
-        if args.no_open:
-            print(server.auth_url, flush=True)
-            _wait_for_signal()
-        elif args.browser or not _have_webview():
-            if not args.browser:
-                print(
-                    "pywebview is not installed; opening the default browser instead "
-                    "(install with: uv sync --extra desktop)",
-                    file=sys.stderr,
-                )
-            webbrowser.open(server.auth_url)
-            print(f"RepoBridge is running at {server.base_url} (Ctrl+C to quit)", flush=True)
-            _wait_for_signal()
-        else:
-            _run_window(server.auth_url, server.base_url, workbench, dev_dir)
-    finally:
-        workbench.close()
-        server.close()
-        lock.close()
+        # Environment and path checks (and the test-root lock) before anything is written:
+        # a refused start leaves no directory, lock file, database or process behind.
+        state_dir = Path(raw_state).expanduser() if raw_state else default_state_dir()
+        plan = runtime_env.prepare_start(
+            state_dir, WorkbenchConfig(binaries=binaries, **extra), dict(os.environ)
+        )
+    except BridgeError as err:
+        print(f"RepoBridge did not start: {err.message}", file=sys.stderr)
+        return err.exit_status
+    with contextlib.ExitStack() as cleanup:
+        cleanup.callback(plan.release)
+        try:
+            plan.claim()
+        except BridgeError as err:
+            print(f"RepoBridge did not start: {err.message}", file=sys.stderr)
+            return err.exit_status
+        lock = _single_instance(state_dir)
+        if lock is None:
+            print(
+                f"RepoBridge is already running for {state_dir}; use its window "
+                "(or quit it first). Two Apps on one state would fight over the same sessions.",
+                file=sys.stderr,
+            )
+            return 1
+        cleanup.callback(lock.close)
+        workbench = Workbench(state_dir, config=plan.config, root_lock=plan.root_lock)
+        try:
+            server = WorkbenchServer(workbench, port=args.port)
+            server.start()
+        except BaseException:
+            workbench.close()
+            raise
+        # Same shutdown order as before: workbench, server, lock (then the test-root lock).
+        cleanup.callback(server.close)
+        cleanup.callback(workbench.close)
+        _serve(args, server, workbench)
     return 0
+
+
+def _serve(args: argparse.Namespace, server: Any, workbench: Any) -> None:
+    """Run until the window closes or a signal arrives (cleanup is the caller's)."""
+    dev_dir = Path(args.dev_snapshot_dir).expanduser() if args.dev_snapshot_dir else None
+    if args.no_open:
+        print(server.auth_url, flush=True)
+        _wait_for_signal()
+    elif args.browser or not _have_webview():
+        if not args.browser:
+            print(
+                "pywebview is not installed; opening the default browser instead "
+                "(install with: uv sync --extra desktop)",
+                file=sys.stderr,
+            )
+        webbrowser.open(server.auth_url)
+        print(f"RepoBridge is running at {server.base_url} (Ctrl+C to quit)", flush=True)
+        _wait_for_signal()
+    else:
+        _run_window(server.auth_url, server.base_url, workbench, dev_dir)
 
 
 def _single_instance(state_dir: Path) -> Any:
