@@ -1952,7 +1952,8 @@ function beginRename(s) {
     focusTerminal(s.session_id);
   };
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); finish(true); }
+    if (composingKey(e)) return; // confirming or cancelling a candidate is not the rename's Enter/Escape
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
   });
   input.addEventListener('blur', () => finish(true));
@@ -2481,8 +2482,15 @@ function confirmPopover(anchor, { title, text, confirm, danger, onConfirm }) {
 
 const FOCUSABLE = 'input:not([type="hidden"]):not(:disabled), textarea:not(:disabled), select:not(:disabled), button:not(:disabled):not([hidden]), [tabindex="0"]';
 
+let dialogSeq = 0;
 function dialog(content, { wide = false, cls = '', onClose } = {}) {
   const box = h('div', { class: `dialog ${wide ? 'wide' : ''} ${cls}`, role: 'dialog', 'aria-modal': 'true', tabindex: '-1' }, content);
+  // Named by its own heading, so VoiceOver announces "添加项目, dialog" rather than a bare dialog.
+  const heading = box.querySelector('h2');
+  if (heading) {
+    heading.id = heading.id || `dialog-title-${++dialogSeq}`;
+    box.setAttribute('aria-labelledby', heading.id);
+  }
   const wrap = h('div', { class: 'dialog-wrap' }, box);
   let close = () => {};
   wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
@@ -2600,7 +2608,7 @@ function openNewSession(projectId, harness) {
     close();
     select({ type: 'session', id: s.session_id });
   }, create));
-  title.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) create.click(); });
+  title.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !composingKey(e)) create.click(); });
   close = dialog([
     h('h2', {}, '新建会话'),
     h('p', { class: 'sub' }, '每个会话固定使用一种 harness，在项目文件夹中运行它的原生 CLI。界面可以随时在“对话”和“终端”之间切换。'),
@@ -2635,7 +2643,7 @@ function openAddProject() {
     } catch (e) { err.textContent = e.message; err.hidden = false; path.focus(); }
   }, add);
   add.addEventListener('click', submit);
-  path.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) submit(); });
+  path.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !composingKey(e)) submit(); });
   close = dialog([
     h('h2', {}, '添加项目'),
     h('p', { class: 'sub' }, '选择一个本地文件夹；Git 仓库请选择仓库的顶层文件夹。RepoBridge 不会修改其中的文件。'),
@@ -2772,7 +2780,7 @@ function fail(err) {
 // ---------------------------------------------------------------- keyboard
 
 window.addEventListener('keydown', (e) => {
-  if (e.isComposing || e.keyCode === 229) return;
+  if (composingKey(e)) return;
   if (layerOpen()) {
     const top = layers[layers.length - 1].el;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeTop(); }
@@ -2853,7 +2861,7 @@ $('#new-session').addEventListener('click', () => openNewSession());
 $('#add-project').addEventListener('click', openAddProject);
 $('#open-settings').addEventListener('click', openSettings);
 $('#filter').addEventListener('input', (e) => { S.filter = e.target.value; renderSidebar(); });
-$('#filter').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.value = ''; S.filter = ''; renderSidebar(); } });
+$('#filter').addEventListener('keydown', (e) => { if (e.key === 'Escape' && !composingKey(e)) { e.target.value = ''; S.filter = ''; renderSidebar(); } });
 makeResizer($('#sidebar-resizer'), 'sidebar');
 makeResizer($('#inspector-resizer'), 'inspector');
 new ResizeObserver(() => scheduleFit()).observe($('#stage'));

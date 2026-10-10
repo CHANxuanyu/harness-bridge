@@ -578,8 +578,9 @@ function openAddExisting({ projectId, harness, query, pick, prefer } = {}) {
     searchTimer = setTimeout(() => { st.q = search.value.trim(); discover(); }, 300);
   });
   search.addEventListener('keydown', (e) => {
+    if (composingKey(e)) return; // arrows and Enter pick a candidate while composing
     if (e.key === 'ArrowDown') { e.preventDefault(); const el = list.querySelector('.ex-row.selected') || list.querySelector('.ex-row'); if (el) el.focus(); }
-    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); clearTimeout(searchTimer); st.q = search.value.trim(); discover(); }
+    if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchTimer); st.q = search.value.trim(); discover(); }
   });
   projectSelect.addEventListener('change', () => { st.pid = projectSelect.value; st.previews.clear(); st.sel = null; discover(); });
   reload.addEventListener('click', () => { st.previews.clear(); discover(); });
