@@ -23,10 +23,27 @@ project's code directly when asked to.
 - Default runtime mode is `mock`. Never weaken the live gate (`hbridge run --mode live
   --allow-model-usage` + local config opt-in + no API/provider env + not a cloud/nested
   session). Never add `--bare` or `--dangerously-skip-permissions` to executor invocations.
-- The workbench starts native **interactive** CLIs only on an explicit user action, never adds
-  `-p`, `--bare`, `--dangerously-skip-permissions` or `--dangerously-bypass-approvals-and-sandbox`,
-  never reads/stores login tokens, strips API/provider env vars (reporting names only), and refuses
-  real sessions when the App itself runs inside another agent session or a cloud agent environment.
+- The workbench starts native CLIs only on an explicit user action. Terminal view: the interactive
+  CLI. Conversation view: only the harness's own structured protocol — Claude Code
+  `-p --input-format stream-json --output-format stream-json --permission-prompt-tool stdio`
+  (the SDK control protocol, permission answers from the user) and `codex app-server`. Never add
+  `--bare`, `--dangerously-skip-permissions`, `--dangerously-bypass-approvals-and-sandbox`,
+  `bypassPermissions` or Codex full access (`never` + `danger-full-access`). Model, effort and
+  permission mode are passed only when the user explicitly chose them in the App, only with the
+  harness's own requests/flags (Claude: `set_model`, `apply_flag_settings` `effortLevel`,
+  `set_permission_mode`, or `--model/--effort/--permission-mode` for the terminal; Codex:
+  `thread/start`/`thread/resume`/`turn/start` parameters, or `-m/-c/-a/-s`), validated against the
+  catalog the CLI itself reported (never a hard-coded list), and shown as in force only after the
+  harness reports it back; a refused choice stays refused (no silent substitute, no send with
+  another model). Never send a message or answer a permission/question the user did not; never
+  read/store login tokens or answer an auth-token refresh; strip API/provider env vars (reporting
+  names only); refuse real sessions when the App itself runs inside another agent session or a
+  cloud agent environment.
+- The conversation view is built only from native structured messages and native history (Codex
+  `thread/turns/list`, the Claude Code session transcript). Never parse terminal output into chat.
+  Changing view releases the connection at an idle point and reconnects with the native resume;
+  never two writers, never a silent fork. Official desktop continuation uses only
+  `claude --desktop --resume <id>` and `codex://threads/<id>`; never edit vendor storage.
 - Tests must not make network requests (loopback to a test-owned server is allowed), read real
   `~/.claude`/`~/.codex` auth data, or spawn a real `claude`/`codex` binary (use stub harnesses).
   `tests/live` is excluded by default and needs explicit, local, per-run authorization from the user.

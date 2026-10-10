@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import os
+import plistlib
 import signal
 import subprocess
 import sys
@@ -55,14 +56,44 @@ class WB:
             wrapper.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{STUB}" {name} "$@"\n')
             wrapper.chmod(0o755)
             self.binaries[kind] = str(wrapper)
-        self.env = {**os.environ, "WB_STUB_HOME": str(base / "stub-home")}
+        stub_home = base / "stub-home"
+        self.env = {
+            **os.environ,
+            "WB_STUB_HOME": str(stub_home),
+            "CLAUDE_CONFIG_DIR": str(stub_home / "claude-config"),
+        }
         self.state = base / "state"
         self.instances: list[Workbench] = []
+        # Desktop clients are looked up only here, and "opening" one only records its argv.
+        self.apps = base / "Applications"
+        self.apps.mkdir()
+        self.opened = base / "opened.log"
+        self.opener = base / "stub-open"
+        self.opener.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{self.opened}"\n')
+        self.opener.chmod(0o755)
+
+    def config(self) -> WorkbenchConfig:
+        return WorkbenchConfig(
+            binaries=self.binaries,
+            discover=False,
+            app_dirs=(str(self.apps),),
+            opener=str(self.opener),
+        )
+
+    def install_app(self, name: str, bundle: str, scheme: str) -> None:
+        contents = self.apps / f"{name}.app" / "Contents"
+        contents.mkdir(parents=True)
+        info = {
+            "CFBundleIdentifier": bundle,
+            "CFBundleShortVersionString": "1.0-stub",
+            "CFBundleURLTypes": [{"CFBundleURLSchemes": [scheme]}],
+        }
+        (contents / "Info.plist").write_bytes(plistlib.dumps(info))
 
     def open(self, **env_extra: str) -> Workbench:
         wb = Workbench(
             self.state,
-            config=WorkbenchConfig(binaries=self.binaries, discover=False),
+            config=self.config(),
             base_env={**self.env, **env_extra},
             stop_grace=1.0,
         )

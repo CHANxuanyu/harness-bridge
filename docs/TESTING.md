@@ -16,8 +16,17 @@ uv run python scripts/demo_offline.py
 | T5 | comparative evaluation | NOT_RUN (format only) |
 
 Workbench levels (plan v2.0): **T2-W** uses `tests/helpers/wb_stub.py` as stub `claude`/`codex`
-executables (interactive tty, hooks via `--settings`, Codex notify, OSC 9) with real PTYs,
-subprocesses, git, SQLite and a test-owned 127.0.0.1 server. **UI-offline** drives the same UI with
+executables (interactive tty, hooks via `--settings`, Codex notify, OSC 9; since W6 also the
+structured protocols: Claude `-p` stream-json with the SDK control protocol, `claude --desktop
+--resume`, `codex app-server` JSON-RPC, and native-style history files) with real PTYs,
+subprocesses, git, SQLite and a test-owned 127.0.0.1 server. Desktop-app tests use fake `.app`
+bundles in a temporary folder and a recording opener (`WorkbenchConfig.app_dirs` / `opener`), never
+LaunchServices or the real apps. Since W8 the stubs also keep model / effort / permission-mode state,
+change it only through the documented requests (Claude control requests; Codex thread/turn
+parameters), report it back like the real CLIs, and log every control request / RPC
+(`claude-controls.log`, `codex-rpc.log` under `WB_STUB_HOME`) so tests assert what was actually sent
+(`tests/integration/test_workbench_settings.py`, `tests/unit/test_workbench_controls.py`).
+**UI-offline** drives the same UI with
 stub CLIs. **T3-W/T4-W** (real native sessions in the App) need the user's machine outside an
 agent session; see `docs/WORKBENCH.md`.
 

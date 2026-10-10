@@ -1,5 +1,131 @@
 # Status
 
+## Role split and next feature — 2026-10-09
+
+**Roles.**
+
+- Codex implements backend, protocols, storage and tests directly, and integrates.
+- Claude Code (Opus 5.5) owns the frontend, desktop interaction, visuals and UI testing, and verifies
+  the integrated interface.
+- Handoff point, file ownership and open items: HANDOFF.md, “Role split from here”.
+- Code baseline: `2f26d23` (full offline check passed).
+
+**Next feature.** Add an existing native Claude Code / Codex session created outside RepoBridge, then:
+
+- discover, preview, link, read history, continue;
+- continue in the official client;
+- return, read what was added there, and continue again.
+
+It links the same native session: no copy, no fork, no replayed messages. Native history stays
+authoritative; RepoBridge keeps only the link, needed caches and UI preferences. Report CLI-created,
+Desktop-created and cloud/other sources separately.
+
+## W8 model / effort / permission-mode controls, attachments and native forms — 2026-10-08
+
+**Controls (W8).** Under the conversation input: permission mode, model and reasoning effort
+selectors. Options come only from the catalog the installed CLI reports (Claude Code `initialize`:
+models with their effort levels and auto-mode support, commands; Codex `model/list` with per-model
+reasoning efforts and image support, filtered by `configRequirements/read`), fetched by a short-lived
+process that starts no session and no turn when nothing is connected. Choices are applied with each
+harness's own mechanism — Claude Code control requests `set_model`, `apply_flag_settings
+{effortLevel}`, `set_permission_mode` (idle, or before the next message); Codex `thread/start` /
+`thread/resume` parameters and `turn/start` overrides (Codex has no separate "set" request, so a
+choice travels with the next message) — and shown as **confirmed only when the harness reports it
+back** (`get_settings`, the echoed mode, `system/init`, the API's own per-turn model; Codex
+`thread/read` and the loaded thread's `thread/resume`). States: selected → applying → confirmed /
+failed. A refusal shows the CLI's reason and keeps the previous value in force; dependent changes roll
+back; a choice refused while connecting blocks that send (draft kept). Terminal launches pass explicit
+choices as the CLIs' own flags (shown as "passed, not confirmable"). Not offered: Claude
+`bypassPermissions`, Codex full access.
+
+**Input (W8).** Images (pasted, dropped or picked with the native open panel) go as Claude image
+blocks / Codex `localImage`; other files as Claude's own `@"path"` mention / a Codex path list; `@`
+searches project files; `/` lists Claude Code's own commands. Codex `requestUserInput` questions and
+MCP forms (form and URL modes) are answered in the conversation instead of being refused; secret
+answers are not stored.
+
+Defects found while using it and fixed: clicks swallowed when the selectors re-rendered; a refused
+model's reason overwritten by the read-back; an effort reset surviving a refused model change; the
+read-back overwriting a confirmed mode with the settings-file default; a send going out with the old
+model after a refusal at connect; a guessed effort shown before Codex reported one; two ticks in the
+Codex model menu; a `.pill` class collision; `[object HTMLDivElement]` in Details (deep-flattening
+children also fixes the technical-details rows); misleading "not in effect" wording; attachment paths
+in history; native snapshots missing popups (animations frozen while the display sleeps).
+
+Checks: workbench tests 81 (23 new); Codex behaviour checked against the real 0.162 app-server with
+a local fake model endpoint (no account, no network); Claude Code control-protocol definitions read
+from the 2.1.291 binary; native-window screenshots `docs/screenshots/w8-*.jpg` (synthetic project,
+stub CLIs). Support categories (implemented-not-yet-real-verified / native-but-not-implemented /
+not-supported-or-not-offered) are listed in docs/WORKBENCH.md.
+
+**Real acceptance (2026-10-08, approved batch, synthetic repo `~/rb-acceptance/demo`, your logins;
+Claude Code 6/6 turns, Codex 6/6 turns, nothing added).** Passed: real model catalogs (Claude 12
+models, Codex 7, each with its own effort levels); model/effort/mode chosen in the UI and confirmed by
+the CLIs themselves (Claude `get_settings` / `system/init` / per-turn API model; Codex
+`thread/start` / `thread/read` / `thread/resume`, and Codex's own rollout records match every turn);
+Claude acceptEdits vs. a real permission card denied; Codex workspace-write vs. read-only; images on
+both; Claude `@notes.md` expanded by the CLI; view switch both ways with the chosen flags and
+re-confirmation; App restart; open in Claude Desktop / Codex App with the right history, listed in
+both apps, one turn continued in each, history refreshed in RepoBridge; Claude resumed natively after.
+Recorded, not passed: no Codex approval card (this machine's Codex uses `approvals_reviewer =
+auto_review`); Codex refuses a RepoBridge re-connect while the thread stays open in the Codex App
+(its own single-writer lock — reported, not forced). Found and fixed during the run: the toolbar
+view toggle had been disabled since W6; Codex mode wording; the Codex writer-lock message; Claude
+Desktop wrappers in history. Not verified: account-refused models (none in the catalogs), Codex
+questions/MCP forms, file attachments, clipboard/Finder/native picker, the pywebview window with real
+sessions, terminal input (both TUIs stopped at their own first-run prompts, left for you).
+
+## W6 conversation view + W7 official desktop continuation — 2026-10-08
+
+**Conversation view (W6).** Every session can now be used in a *terminal* view (the native
+interactive CLI, unchanged) or a *conversation* view built only on the harness's own structured
+protocol: Claude Code `-p --input-format/--output-format stream-json --permission-prompt-tool stdio`
+(the Agent SDK control protocol) and `codex app-server` (JSON-RPC, checked against the schema the
+installed 0.162.0-alpha.2 generates). It shows user/assistant messages, streamed Markdown and code,
+collapsible thinking/tool calls (input, output, errors, exit codes, files → diff), real permission
+cards (allow / deny / the CLI's own "remember" suggestion, Edit shown as −/+), stop-this-turn, retry
+and failure notes, and history read from native stores (Codex `thread/turns/list`; the Claude Code
+session transcript). The view is chosen per session (default remembered); switching while connected
+waits for an idle point, releases the process with confirmed exit and reconnects with the native
+resume — same native ID, nothing sent, never two writers.
+
+**Official desktop continuation (W7).** Session menu / Details › “Open in Claude Desktop / Codex”
+uses only `claude --desktop --resume <id>` (PTY, official acknowledgement required) and
+`codex://threads/<id>`. RepoBridge releases its own connection first and then holds the session
+(“opened in X”) until the user confirms the other side is done; `/desktop` typed in the Claude TUI is
+detected. History can be refreshed from the native store after continuing elsewhere. Executor-era
+desktop evidence is not counted for workbench sessions.
+
+Defects found while using it in a test instance and fixed: `[hidden]` overridden by button display
+(stale “new messages” button); absolute/truncated paths in tool titles; diff not opening from a tool
+(absolute vs relative path); Edit permission shown as raw JSON and an unexplained “remember” option;
+user-declined tools shown as failed; permission-card class colliding with the activity timeline;
+failed native resume without its reason; narrow toolbar squeezing the title; dev snapshots stale when
+the window is covered; a test instance able to open the real desktop apps (now fake bundles +
+recording opener in dev mode).
+
+Checks: workbench tests 58 (22 new); full offline suite 917 passed / 18m04s (details in HANDOFF); real
+`codex app-server` interface shape probed without credentials or turns; native-window screenshots in
+`docs/screenshots/conv-*.jpg` (synthetic data, stub CLIs, fake app bundles).
+
+**Not verified (needs your authorization or your own run):** real Claude Code / Codex turns in the
+conversation view; a real view switch; real desktop open of the right history, presence in the
+official sidebar/list, continuing there and continuity back in RepoBridge; real IME, clipboard,
+VoiceOver. Policy note (DECISIONS 133): Anthropic's Agent SDK docs say third-party products may not
+offer claude.ai login/rate limits without approval; RepoBridge runs your own CLI with its own login
+locally, but distributing it to others needs that approval or terminal-only Claude sessions.
+
+Authorization request for real acceptance (one bounded run, synthetic repo `~/rb-acceptance/demo`,
+dedicated state dir, your existing logins, App started by you from a normal terminal):
+Claude Code ≤ 6 short turns and Codex ≤ 6 short turns (reply, one guarded file edit allowed, one
+denied, one stopped turn, one turn continued in the official desktop app, one turn back in
+RepoBridge); 2 view switches per harness (no messages); 1 open in Claude Desktop and 1 in Codex;
+screenshots/clicks via computer use on RepoBridge, Claude and ChatGPT(Codex) only. The test sessions
+will remain in your native histories (named “RepoBridge 验收 …”); nothing is deleted or rewritten.
+
+GitHub: development branch `claude/repobridge-product-direction-8e26f9`, draft
+[PR #3](https://github.com/CHANxuanyu/harness-bridge/pull/3) into `claude/new-repo-plan-dn1eac`.
+
 ## W5 workbench experience and interface redesign — 2026-10-08
 
 The workbench was used end to end in its own test instance (synthetic projects, stub CLIs) and

@@ -270,3 +270,131 @@ def test_create_unstarted_archive_and_project_branch(served: tuple[WB, Client]) 
     assert view["archived"] == 1, "archived sessions stay in the snapshot, flagged"
     client.api("POST", f"/api/sessions/{sid}/unarchive", {})
     assert client.api("GET", "/api/state")["projects"][0]["sessions"][0]["archived"] == 0
+
+
+def test_conversation_routes_stream_events_and_validation(served: tuple[WB, Client]) -> None:
+    fx, client = served
+    client.login()
+    project = client.api("POST", "/api/projects", {"path": str(fx.repo)})
+    session = client.api(
+        "POST",
+        "/api/sessions",
+        {"project_id": project["project_id"], "harness": CLAUDE, "view_mode": "conversation"},
+    )
+    sid = session["session_id"]
+    assert session["view_mode"] == "conversation"
+    conn = http.client.HTTPConnection("127.0.0.1", client.server.port, timeout=10)
+    assert client.cookie is not None
+    conn.request(
+        "GET",
+        "/api/stream",
+        headers={"Host": f"127.0.0.1:{client.server.port}", "Cookie": client.cookie},
+    )
+    res = conn.getresponse()
+    conv_events: list[dict[str, Any]] = []
+
+    def pump(until: Any, timeout: float = 15) -> None:
+        deadline = time.monotonic() + timeout
+        event = None
+        while time.monotonic() < deadline:
+            line = res.fp.readline().decode().rstrip("\n")
+            if line.startswith("event: "):
+                event = line[7:]
+            elif line.startswith("data: ") and event == "conv":
+                conv_events.append(json.loads(line[6:]))
+                if until():
+                    return
+        raise AssertionError("conv events not seen")
+
+    client.api("POST", f"/api/sessions/{sid}/send", {"text": "hello", "client_id": "c-1"})
+    pump(lambda: any(e.get("op") == "delta" for e in conv_events))
+    pump(lambda: any(e.get("op") == "turn" and e["turn"] is None for e in conv_events))
+    assert all(e["session_id"] == sid for e in conv_events)
+    conv = client.api("GET", f"/api/sessions/{sid}/conversation")
+    assert conv["live"] and [i["id"] for i in conv["items"] if i["type"] == "user"] == ["user:c-1"]
+
+    client.api("POST", f"/api/sessions/{sid}/send", {"text": "edit h.txt"})
+    perm = wait_for(
+        lambda: [
+            i
+            for i in client.api("GET", f"/api/sessions/{sid}/conversation")["items"]
+            if i["type"] == "permission" and i["status"] == "pending"
+        ]
+    )[0]
+    status, _, body = client.request(
+        "POST",
+        f"/api/sessions/{sid}/permission",
+        {"request_id": perm["request_id"], "decision": "allow", "answers": {"q": {"x": 1}}},
+    )
+    assert status == 400
+    client.api(
+        "POST",
+        f"/api/sessions/{sid}/permission",
+        {"request_id": perm["request_id"], "decision": "allow"},
+    )
+    wait_for(lambda: (fx.repo / "h.txt").exists())
+    status, _, body = client.request("POST", f"/api/sessions/{sid}/view", {"view_mode": "sideways"})
+    assert status == 400
+    status, _, body = client.request("POST", f"/api/sessions/{sid}/desktop/open", {})
+    assert status == 412 and "没有在" in json.loads(body)["error"]["message"]
+    status, _, body = client.request("POST", f"/api/sessions/{sid}/send", {"text": "  "})
+    assert status == 400
+    conn.close()
+
+
+def test_open_link_route_accepts_only_web_links(served: tuple[WB, Client]) -> None:
+    _, client = served
+    client.login()
+    for url in ("javascript:alert(1)", "file:///etc/passwd", "codex://threads/x", "https://a b"):
+        status, _, _ = client.request("POST", "/api/native/open-url", {"url": url})
+        assert status == 400, url
+    # A valid link still needs the native window (absent in tests): nothing is opened.
+    status, _, _ = client.request("POST", "/api/native/open-url", {"url": "https://example.com/x"})
+    assert status == 404
+
+
+def test_settings_attachment_file_and_catalog_routes(served: tuple[WB, Client]) -> None:
+    fx, client = served
+    client.login()
+    project = client.api("POST", "/api/projects", {"path": str(fx.repo)})
+    session = client.api(
+        "POST",
+        "/api/sessions",
+        {"project_id": project["project_id"], "harness": CLAUDE, "view_mode": "conversation"},
+    )
+    sid = session["session_id"]
+    wait_for(lambda: client.api("GET", "/api/state")["catalogs"][CLAUDE]["status"] == "ok")
+    view = client.api("POST", f"/api/sessions/{sid}/settings", {"model": "stub-sonnet"})
+    assert view["chosen"] == {"model": "stub-sonnet"}
+    status, _, _ = client.request("POST", f"/api/sessions/{sid}/settings", {"model": 3})
+    assert status == 400
+    status, _, body = client.request("POST", f"/api/sessions/{sid}/settings", {"effort": "max"})
+    assert status == 400 and "思考强度" in json.loads(body)["error"]["message"]
+
+    data = base64.b64encode(b"hello file\n").decode()
+    att = client.api("POST", f"/api/sessions/{sid}/attachments", {"name": "a.txt", "data": data})
+    assert att["kind"] == "file" and att["name"] == "a.txt" and "path" not in att
+    status, _, _ = client.request(
+        "POST", f"/api/sessions/{sid}/attachments", {"name": "a.txt", "data": "%%%"}
+    )
+    assert status == 400
+    # Uploads may exceed the normal 1 MB body limit; other routes may not.
+    big = base64.b64encode(b"x" * (2 << 20)).decode()
+    att = client.api("POST", f"/api/sessions/{sid}/attachments", {"name": "b.log", "data": big})
+    assert att["size"] == 2 << 20
+    try:
+        status, _, _ = client.request("POST", f"/api/sessions/{sid}/rename", {"title": big})
+    except (ConnectionResetError, BrokenPipeError):
+        status = 400  # refused before the body was read
+    assert status == 400
+
+    files = client.api("GET", f"/api/sessions/{sid}/files?q=read")
+    assert files[0]["path"] == "README.md"
+    assert client.api("POST", "/api/catalog/codex/refresh", {}) == {"probing": True}
+    status, _, _ = client.request("POST", "/api/catalog/other/refresh", {})
+    assert status == 404
+    status, _, _ = client.request(
+        "POST", f"/api/sessions/{sid}/send", {"text": "x", "attachments": "nope"}
+    )
+    assert status == 400
+    wait_for(lambda: client.api("GET", "/api/state")["catalogs"]["codex"]["status"] == "ok")

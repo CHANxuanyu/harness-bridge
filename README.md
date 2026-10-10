@@ -8,6 +8,14 @@
 > billing stay with each CLI. See the [product form](docs/PRODUCT_FORM.md) and
 > [project plan](docs/PROJECT_PLAN.md). The Advisor/Executor kernel described below remains
 > available with its evidence, but it is no longer the first-version path.
+>
+> Each session can be used in a **terminal view** (the native interactive CLI) or a **conversation
+> view** built on the harness's own structured protocol (Claude Code stream-json, Codex app-server),
+> switching on the same native session, and can be opened in the official **Claude Desktop / Codex**
+> app to continue there. In the conversation view you pick the **model, reasoning effort and
+> permission mode** from the CLI's own catalog (applied with the CLI's own requests and shown as in
+> force only once the CLI confirms them), attach images and files, reference project files with `@`,
+> and answer the CLI's questions and MCP forms.
 
 ```bash
 uv sync --frozen --extra desktop                  # optional native window (pywebview)
@@ -20,9 +28,13 @@ Run these in a checkout that contains commit `aa9a404` or later; older branches 
 Start it from a normal terminal (not from inside another agent session). Usage, interface, implementation
 and evidence levels: [docs/WORKBENCH.md](docs/WORKBENCH.md).
 
-![RepoBridge workbench, dark appearance](docs/screenshots/after-dark-main.jpg)
- Real Claude Code / Codex sessions in the App
-have not yet been accepted on this machine; offline checks use stub CLIs.
+![RepoBridge conversation view, dark appearance](docs/screenshots/conv-dark-conversation-permission.jpg)
+
+![Model picker under the conversation input](docs/screenshots/w8-light-model-picker.jpg)
+
+Real Claude Code / Codex sessions in the conversation view, the model/effort/mode controls with real
+accounts and real desktop-app continuation have not yet been accepted on this machine; offline checks
+use stub CLIs (see the support matrix in WORKBENCH.md).
 
 > **Experimental local candidate:** runtime 0.1.0.dev2, Advisor plugin alpha.6, Apache-2.0.
 > Real Claude/Codex parallel work, exact-session repair and integrated local delivery passed.

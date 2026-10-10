@@ -1,7 +1,8 @@
 """Native harness discovery, launch argv and session environment.
 
-Only interactive native CLIs are launched. Side channels are record-only: Claude Code hooks from a
+Terminal view: the interactive native CLIs. Side channels are record-only: Claude Code hooks from a
 per-run ``--settings`` file and Codex per-invocation ``-c notify`` / ``tui.notifications`` (OSC 9).
+Conversation view: the harnesses' own structured protocols (see ``structured.py``).
 Nothing here reads login state, and API/provider variables are removed from the session env so a
 subscription session is never silently switched to API billing.
 """
@@ -51,6 +52,8 @@ DEFAULT_LOCATIONS: dict[str, tuple[str, ...]] = {
     ),
 }
 EXTRA_PATH_DIRS = (str(_HOME / ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin")
+# Where official desktop clients (Claude Desktop, Codex) are looked up; tests point elsewhere.
+DEFAULT_APP_DIRS = ("/Applications", str(_HOME / "Applications"))
 
 # Terminal identity inherited from whatever launched the App would mislead the native TUI.
 _TERMINAL_IDENTITY_ENV = (
@@ -126,6 +129,8 @@ class WorkbenchConfig:
     discover: bool = True
     locations: Mapping[str, tuple[str, ...]] = field(default_factory=lambda: DEFAULT_LOCATIONS)
     python: str = sys.executable
+    app_dirs: tuple[str, ...] = DEFAULT_APP_DIRS
+    opener: str = "/usr/bin/open"
 
 
 def environment_refusal(env: Mapping[str, str]) -> str | None:
@@ -254,9 +259,11 @@ def build_launch(
     run_dir: Path,
     config: WorkbenchConfig,
     base_env: Mapping[str, str],
+    settings: Mapping[str, Any] | None = None,
 ) -> LaunchSpec:
     if mode not in ("new", "resume"):
         raise ValueError(mode)
+    chosen = dict(settings or {})
     if mode == "resume" and not native_session_id:
         raise ValueError("resume requires a native session id")
     env, stripped = session_env(base_env)
@@ -275,6 +282,7 @@ def build_launch(
             sid = native_session_id  # type: ignore[assignment]
             argv = [binary, "--resume", sid, "--settings", str(settings_path)]
             binding = "resume_requested"
+        argv += claude_setting_flags(chosen)
     elif kind == CODEX:
         # --no-daemon keeps the session in this process tree: App-owned stop, the stripped env
         # and per-invocation overrides apply, instead of a shared background app-server.
@@ -289,6 +297,7 @@ def build_launch(
             "-c",
             'tui.notification_condition="always"',
         ]
+        overrides += codex_setting_flags(chosen)
         if mode == "new":
             sid = None
             argv = [binary, "-C", workdir, *overrides]
@@ -303,6 +312,38 @@ def build_launch(
         argv += ["--", initial_prompt]
     wrapped = [config.python, "-I", "-S", "-B", "-c", _CTTY_EXEC, *argv]
     return LaunchSpec(wrapped, env, workdir, sid, binding, stripped, files)
+
+
+# Only values the user explicitly chose in RepoBridge are passed; no choice means the CLI's own
+# configuration decides. Modes that remove all approval are never passed (see controls.py).
+_CLAUDE_FLAG_MODES = ("default", "acceptEdits", "plan", "auto", "dontAsk")
+_CODEX_FLAG_MODES = {
+    "read-only": ("on-request", "read-only"),
+    "workspace": ("on-request", "workspace-write"),
+}
+
+
+def claude_setting_flags(chosen: Mapping[str, Any]) -> list[str]:
+    flags: list[str] = []
+    if isinstance(chosen.get("model"), str) and chosen["model"]:
+        flags += ["--model", chosen["model"]]
+    if isinstance(chosen.get("effort"), str) and chosen["effort"]:
+        flags += ["--effort", chosen["effort"]]
+    if chosen.get("mode") in _CLAUDE_FLAG_MODES:
+        flags += ["--permission-mode", str(chosen["mode"])]
+    return flags
+
+
+def codex_setting_flags(chosen: Mapping[str, Any]) -> list[str]:
+    flags: list[str] = []
+    if isinstance(chosen.get("model"), str) and chosen["model"]:
+        flags += ["-m", chosen["model"]]
+    if isinstance(chosen.get("effort"), str) and chosen["effort"]:
+        flags += ["-c", "model_reasoning_effort=" + json.dumps(chosen["effort"])]
+    mode = _CODEX_FLAG_MODES.get(str(chosen.get("mode") or ""))
+    if mode is not None:
+        flags += ["-a", mode[0], "-s", mode[1]]
+    return flags
 
 
 def native_argv(spec: LaunchSpec) -> list[str]:

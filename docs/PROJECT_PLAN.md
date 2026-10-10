@@ -1,6 +1,6 @@
 # RepoBridge 项目计划书
 
-**版本：2.0 · 日期：2026-10-08 · 作者：Xuanyu CHAN · 状态：W1–W3 与 W5 界面重设计已实现并通过离线/原生窗口检查；W4 本机真实验收待执行**
+**版本：2.2 · 日期：2026-10-08 · 作者：Xuanyu CHAN · 状态：W1–W3、W5 已实现；W6 对话视图与视图切换、W7 官方桌面接续、W8 模型/思考强度/权限模式控件与附件、原生提问表单已实现并通过离线/原生窗口检查；W4、W6–W8 的本机真实验收待执行**
 
 本版本由用户的方向调整决定：**RepoBridge 是以项目为中心的轻量本地桌面工作台，让同时拥有多个
 coding plan 的用户在一个界面里使用 Codex、Claude Code 等原生 CLI。** 产品摘要见
@@ -57,7 +57,7 @@ v1.5 及以前（下文附录 A）以 “Advisor 会话领导跨 harness Executo
 | 层 | 决定 | 理由 |
 |---|---|---|
 | 内核 | 现有 `harness_bridge` 包内新增 `workbench` 子包，Python 3.11 标准库为主 | 复用进程组/后代观察、环境变量检查、安全 Git 调用、state 目录与测试设施；单一语言 |
-| 原生会话 | 在 App 自有 PTY 中运行各家 **交互式** CLI（`claude`、`codex`） | 原生对话、权限提示、登录与计费完全由 CLI 负责；不重写聊天、不依赖 SDK 控制协议或 `-p` |
+| 原生会话 | 终端视图：在 App 自有 PTY 中运行各家 **交互式** CLI（`claude`、`codex`）。对话视图（W6 起）：同一 CLI 的官方结构化协议——Claude Code `-p` stream-json + SDK 控制协议、`codex app-server` | 原生对话、权限判断、登录与计费完全由 CLI 负责；对话视图只渲染原生结构化消息，不解析终端画面；权限答复只来自用户 |
 | 窗口 | `pywebview`（macOS 下为 WKWebView）作为可选依赖 `desktop`；未安装时 `--browser` 打开同一界面 | 轻量原生窗口；无需 Electron/Rust；界面在浏览器中也可调试 |
 | 前端 | 无构建步骤的 HTML/CSS/JS + 内置 xterm.js 6.0.0 与 fit 插件（MIT，随包分发） | 真实终端渲染；没有 npm 构建链和 CDN 运行时依赖 |
 | 本地通信 | 标准库 `ThreadingHTTPServer`，仅监听 127.0.0.1；随机令牌换取 HttpOnly cookie，校验 Host/Origin；SSE 推送、POST 输入 | 不引入 Web 框架；防止其他网页或本机其他来源驱动进程 |
@@ -110,8 +110,14 @@ v1.5 及以前（下文附录 A）以 “Advisor 会话领导跨 harness Executo
 - 会话环境继承用户环境，但移除 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等 API/provider 变量（沿用
   `config.API_PROVIDER_ENV` / `CODEX_PROVIDER_ENV`），只记录和显示变量名。
 - App 不读取 `~/.claude`、`~/.codex` 的认证文件，不调用登录接口；未登录时由原生 CLI 自己引导登录。
+  对话视图显示历史时只读 RepoBridge 创建的会话：Claude Code 该会话自己的记录文件、Codex 经 app-server 的
+  `thread/turns/list`；Codex 要求刷新登录令牌的请求一律拒绝。
 - App 检测到自身运行在另一 agent 会话（`CLAUDECODE`）或云 agent 环境中时，拒绝启动真实会话。
-- 从不添加 `--dangerously-skip-permissions`、`--dangerously-bypass-approvals-and-sandbox`、`--bare`、`-p`。
+- 从不添加 `--dangerously-skip-permissions`、`--dangerously-bypass-approvals-and-sandbox`、`--bare`，
+  不提供 Claude `bypassPermissions` 与 Codex 完全访问。模型、思考强度、权限模式只在用户于 App 中明确选择后，
+  用 CLI 自己的请求或参数传入，并以 CLI 的回报为准（W8，DECISIONS 139–142）。`-p` 只用于对话视图的
+  stream-json 连接（W6，DECISIONS 132–133）和不建会话的目录探测，且对话连接必须带
+  `--permission-prompt-tool stdio`，让权限请求回到用户手中。
 - 本地服务只监听 127.0.0.1，令牌 + Host/Origin 校验；不对外提供远程控制。
 - 旁路 hooks/notify 只追加本地事件文件，不输出内容、不影响 CLI 决策；内容截断保存。
 
@@ -127,9 +133,12 @@ v1.5 及以前（下文附录 A）以 “Advisor 会话领导跨 harness Executo
 | W3 人工交接 | 交接说明生成与编辑、同项目新会话、交接链记录与展示 | 离线测试覆盖 A → B 跨 harness 交接、写入约束、说明不写入仓库 |
 | W4 本机真实验收与打包 | 两个 harness 的真实会话、恢复、交接；可选 `.app` 打包 | 用户本机执行或明确授权的有界验收；如实记录 |
 | W5 体验与界面 | 以 Claude Desktop Code 工作区的组织方式 + macOS HIG 的视觉与交互重做工作台；浅色/深色；缺陷修复 | 原生窗口真实截图 + 浏览器操作检查 + 回归测试；不改变会话/写入/认证边界 |
+| W6 对话视图与视图切换 | 保留终端视图；新增基于原生结构化协议的对话视图（Claude Code stream-json 控制协议、Codex app-server）：流式 Markdown、工具/结果/错误折叠、真实权限允许/拒绝、停止这一轮、原生历史回看、变更与 diff；“对话 / 终端”按会话切换并记住默认；切换在空闲点释放旧连接并经原生恢复接续同一会话 | 替身协议的离线集成测试 + 真实二进制的无模型接口核对 + 原生窗口截图；真实对话由用户授权后验收 |
+| W8 模型、思考强度、权限模式与输入能力 | 对话输入框下方的模型 / 思考强度 / 权限模式选择器：选项来自 CLI 自己的目录（Claude `initialize`、Codex `model/list` + 组织要求），用各自原生请求应用（Claude 控制请求、Codex 线程/轮次参数），区分已选择 / 正在应用 / 已确认 / 失败，失败不静默替换；终端视图作为启动参数传入；图片与文件附件、`@` 项目文件引用、Claude 命令列表；Codex 提问卡片与 MCP 表单 | 替身协议的离线集成测试 + Claude 二进制内协议定义核对 + 真实 Codex app-server 与本地假模型端点的行为核对 + 原生窗口截图；真实账号下由用户授权的同一批验收（每家最多 6 个短轮次） |
+| W7 官方桌面接续 | 原生身份与历史持久化；“在 Claude Desktop / Codex 中打开”（`claude --desktop --resume`、`codex://threads/<id>`）；打开前释放本地连接；打开后的外部占用保护与回到 RepoBridge 的确认；历史刷新 | 离线测试覆盖释放、保护、重开与接续；打开指定历史、官方列表可见、桌面继续、回来后的连续性分别做真实观察 |
 
 实施记录：W1–W3 的代码、运行方式与证据见 [WORKBENCH.md](WORKBENCH.md)；W4 步骤也在其中。
-| 以后 | worktree 并行会话、只读会话、ZCode 等 harness、结构化对话视图、可选的多 agent 能力 | 单独计划 |
+| 以后 | worktree 并行会话、只读会话、ZCode 等 harness、对话视图的附件/图片输入与交互式提问、可选的多 agent 能力 | 单独计划 |
 
 ## 8. 首版验收清单
 
@@ -147,6 +156,20 @@ v1.5 及以前（下文附录 A）以 “Advisor 会话领导跨 harness Executo
 | W10 | 认证与计费 | 不读取/保存令牌、不注入 API key；API/provider 变量不传递并显示名称；嵌套/云环境拒绝 |
 | W11 | 本地服务安全 | 无令牌、错误 Host/Origin 的请求被拒绝；只监听回环地址 |
 | W12 | 离线证据 | stub harness 覆盖 W02–W11 的机制；测试不调用真实模型或读取真实认证 |
+| W13 | Claude Code 对话视图 | 真实发送、流式回复、工具与结果、权限允许/拒绝、停止这一轮、历史来自会话记录文件；不加跳过权限/模型/`--bare` 参数 |
+| W14 | Codex 对话视图 | 经 app-server 建立/恢复线程、命名、轮次、命令与文件审批、错误与重试说明；历史经 `thread/turns/list` |
+| W15 | 视图切换 | 同一原生会话 ID；只在空闲点；不发送消息；任何时刻至多一个写入者；失败如实说明 |
+| W16 | 身份与历史持久化 | 重开 App 后视图、原生 ID、历史读取、外部打开保护保持 |
+| W17 | 在官方桌面打开 | Claude Desktop / Codex 打开**指定**会话；区分“命令被接受”和“看到正确历史” |
+| W18 | 官方列表中的发现 | 分别记录在官方侧栏/列表中能否找到；不为制造记录额外发送消息、不改写厂商存储 |
+| W19 | 桌面继续后的连续性 | 在官方桌面继续一轮后，回到 RepoBridge 刷新/恢复能看到并接续同一会话 |
+| W20 | 外部占用保护 | 打开到官方桌面后，RepoBridge 发送/恢复前要求确认那边已结束；不声称能控制外部进程 |
+| W23 | 模型选择 | 选项来自 CLI 目录；选择经原生请求应用；仅在 CLI 回报后显示“已确认”；被拒时显示 CLI 原因且原值继续生效；不以询问模型来验证 |
+| W24 | 思考强度 | 按当前模型与 harness 的实际档位；换模型后重新校验并提示；Codex 线程强度与新模型不兼容时明确改用新模型默认 |
+| W25 | 权限模式 | 保留各家语义（Claude 模式 / Codex 审批+沙箱），按模型与组织要求限制；不提供跳过全部权限 / 完全访问；不修改正在运行的一轮 |
+| W26 | 设置的连续性 | 换视图、恢复、重开后重新应用并重新确认；终端视图以启动参数传入并标为未经确认 |
+| W27 | 附件与引用 | 图片按原生输入发送（按内容识别、大小上限、模型能力）；文件按 CLI 自己的引用方式；`@` 项目文件；历史中以标签显示 |
+| W28 | 原生提问与表单 | Claude AskUserQuestion、Codex requestUserInput、MCP 表单/链接确认可回答；保密回答不保存；无法显示的形状可见地拒绝 |
 
 证据分级：T1 单元；T2-W 离线集成（真实 PTY、子进程、Git、SQLite、回环 HTTP，模拟的 harness 可执行文件）；
 UI-offline 界面检查（stub harness）；T3-W 本机真实单 harness 会话；T4-W 本机真实双 harness + 交接。
@@ -160,6 +183,11 @@ UI-offline 界面检查（stub harness）；T3-W 本机真实单 harness 会话�
 | 关闭 App 结束会话 | 首版明确告知；关闭窗口前确认；以原生恢复继续 |
 | WKWebView 键位/输入法差异 | 以 xterm.js 处理；浏览器模式作为备用 |
 | 多个 state 目录各自运行 App | 单写入约束只在同一 state 内保证；文档说明 |
+| Claude 对话视图走 Agent SDK 控制协议 | Anthropic 文档写明第三方产品未经批准不得提供 claude.ai 登录/额度；本机运行用户自己的 CLI 与登录、不注入凭据，但对外分发前须获批准或让 Claude 会话只用终端视图（始终可用）（DECISIONS 133） |
+| `-p` 未来可能默认 `--bare`（不再读 OAuth） | 那时对话视图会以登录失败的方式显式出错（不会悄悄改用 API key，因为 RepoBridge 去掉了 API 变量）；终端视图不受影响 |
+| app-server 属 experimental，接口随版本变化 | 按本机版本生成的 schema 实现；未知通知忽略、未知条目可见显示、未知服务端请求可见拒绝 |
+| 官方桌面是否列出由 CLI / app-server 创建的会话 | 未知，需真实观察；以官方“打开指定会话”的入口为主，不改写厂商存储 |
+| 外部客户端是否仍在执行 | RepoBridge 无法观察；以“已在 X 中打开”的保护状态和用户确认代替假装控制 |
 
 ---
 

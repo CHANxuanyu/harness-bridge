@@ -92,6 +92,33 @@ def set_appearance(window: Any, mode: str) -> None:
     _on_main(lambda: window.native.setAppearance_(appearance))
 
 
+_ACTIVITY: list[Any] = []
+
+
+def keep_rendering_when_covered(window: Any) -> None:
+    """Development snapshots only: a fully covered window lets WebKit suspend the page, so a
+    capture would show stale pixels. Opt this window out of occlusion-based suspension (WebKit
+    SPI, ignored when absent) and out of App Nap while the dev App runs."""
+    import Foundation
+    from webview.platforms.cocoa import BrowserView
+
+    def apply() -> None:
+        view = BrowserView.instances[window.uid].webview
+        selector = "_setWindowOcclusionDetectionEnabled:"
+        if view.respondsToSelector_(selector):
+            view.performSelector_withObject_(selector, False)
+
+    _on_main(apply)
+    if not _ACTIVITY:
+        info = Foundation.NSProcessInfo.processInfo()
+        _ACTIVITY.append(
+            info.beginActivityWithOptions_reason_(
+                Foundation.NSActivityUserInitiatedAllowingIdleSystemSleep,
+                "RepoBridge development snapshots",
+            )
+        )
+
+
 def snapshot(window: Any, directory: Path, name: str, timeout: float = 15.0) -> dict[str, Any]:
     """Write ``name.png`` (WKWebView content, full resolution) and, when macOS allows an app to
     capture its own window, ``name-window.png`` (including the title bar)."""

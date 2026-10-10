@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_REVISION = 1
+SCHEMA_REVISION = 3
 ACTIVE = ("starting", "running")
 ENDED = ("exited", "failed", "stopped", "interrupted")
 
@@ -42,7 +42,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     turns_observed INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
+    archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+    view_mode TEXT NOT NULL DEFAULT 'terminal' CHECK (view_mode IN ('terminal', 'conversation')),
+    external_json TEXT,
+    settings_json TEXT
 );
 CREATE INDEX IF NOT EXISTS sessions_by_project ON sessions(project_id, created_at);
 CREATE TABLE IF NOT EXISTS runs (
@@ -67,6 +70,7 @@ CREATE TABLE IF NOT EXISTS runs (
     output_tail TEXT,
     started_at TEXT NOT NULL,
     ended_at TEXT,
+    transport TEXT NOT NULL DEFAULT 'pty' CHECK (transport IN ('pty', 'structured')),
     UNIQUE (session_id, seq)
 );
 CREATE INDEX IF NOT EXISTS runs_by_workdir ON runs(workdir, status);
@@ -121,11 +125,39 @@ class WorkbenchStore:
                 "INSERT INTO meta(key, value) VALUES ('schema_revision', ?)",
                 (str(SCHEMA_REVISION),),
             )
-        elif int(row["value"]) != SCHEMA_REVISION:
-            raise RuntimeError(
-                f"workbench schema revision {row['value']} is not supported "
-                f"(expected {SCHEMA_REVISION})"
+        else:
+            revision = int(row["value"])
+            if revision == 1:
+                self._migrate_1_to_2()
+                revision = 2
+            if revision == 2:
+                self._migrate_2_to_3()
+                revision = 3
+            if revision != SCHEMA_REVISION:
+                raise RuntimeError(
+                    f"workbench schema revision {row['value']} is not supported "
+                    f"(expected {SCHEMA_REVISION})"
+                )
+
+    def _migrate_1_to_2(self) -> None:
+        # Additive only: existing sessions keep the terminal view and their PTY runs.
+        with self.tx() as db:
+            db.execute(
+                "ALTER TABLE sessions ADD COLUMN view_mode TEXT NOT NULL DEFAULT 'terminal' "
+                "CHECK (view_mode IN ('terminal', 'conversation'))"
             )
+            db.execute("ALTER TABLE sessions ADD COLUMN external_json TEXT")
+            db.execute(
+                "ALTER TABLE runs ADD COLUMN transport TEXT NOT NULL DEFAULT 'pty' "
+                "CHECK (transport IN ('pty', 'structured'))"
+            )
+            db.execute("UPDATE meta SET value='2' WHERE key='schema_revision'")
+
+    def _migrate_2_to_3(self) -> None:
+        # Additive only: sessions without explicit choices keep the harness's own defaults.
+        with self.tx() as db:
+            db.execute("ALTER TABLE sessions ADD COLUMN settings_json TEXT")
+            db.execute("UPDATE meta SET value='3' WHERE key='schema_revision'")
 
     def close(self) -> None:
         with self._lock:
@@ -197,6 +229,7 @@ class WorkbenchStore:
         native_session_id: str | None,
         native_binding: str,
         handoff_from: str | None = None,
+        view_mode: str = "terminal",
     ) -> dict[str, Any]:
         stamp = now()
         session = {
@@ -212,14 +245,17 @@ class WorkbenchStore:
             "created_at": stamp,
             "updated_at": stamp,
             "archived": 0,
+            "view_mode": view_mode,
+            "external_json": None,
+            "settings_json": None,
         }
         with self.tx() as db:
             db.execute(
                 "INSERT INTO sessions(session_id, project_id, harness, title, workdir, "
                 "native_session_id, native_binding, handoff_from, created_at, updated_at, "
-                "archived) VALUES (:session_id, :project_id, :harness, :title, :workdir, "
-                ":native_session_id, :native_binding, :handoff_from, :created_at, :updated_at, "
-                ":archived)",
+                "archived, view_mode) VALUES (:session_id, :project_id, :harness, :title, "
+                ":workdir, :native_session_id, :native_binding, :handoff_from, :created_at, "
+                ":updated_at, :archived, :view_mode)",
                 session,
             )
         return session
@@ -251,6 +287,26 @@ class WorkbenchStore:
                 "WHERE session_id=?",
                 (now(), session_id),
             )
+
+    def set_view_mode(self, session_id: str, mode: str) -> None:
+        with self.tx() as db:
+            db.execute(
+                "UPDATE sessions SET view_mode=?, updated_at=? WHERE session_id=?",
+                (mode, now(), session_id),
+            )
+
+    def set_external(self, session_id: str, external: dict[str, Any] | None) -> None:
+        text = None if external is None else json.dumps(external, ensure_ascii=False)
+        with self.tx() as db:
+            db.execute(
+                "UPDATE sessions SET external_json=?, updated_at=? WHERE session_id=?",
+                (text, now(), session_id),
+            )
+
+    def set_settings(self, session_id: str, settings: dict[str, Any] | None) -> None:
+        text = None if settings is None else json.dumps(settings, ensure_ascii=False)
+        with self.tx() as db:
+            db.execute("UPDATE sessions SET settings_json=? WHERE session_id=?", (text, session_id))
 
     def rename_session(self, session_id: str, title: str) -> None:
         with self.tx() as db:
@@ -290,6 +346,7 @@ class WorkbenchStore:
         workdir: str,
         argv: list[str],
         stripped_env: list[str],
+        transport: str = "pty",
     ) -> dict[str, Any]:
         """Admit a writer for ``workdir`` or raise WorkdirBusy, atomically."""
         with self.tx() as db:
@@ -313,11 +370,13 @@ class WorkbenchStore:
                 "argv_json": json.dumps(argv, ensure_ascii=False),
                 "stripped_env_json": json.dumps(stripped_env),
                 "started_at": now(),
+                "transport": transport,
             }
             db.execute(
                 "INSERT INTO runs(run_id, session_id, seq, kind, workdir, status, argv_json, "
-                "stripped_env_json, started_at) VALUES (:run_id, :session_id, :seq, :kind, "
-                ":workdir, :status, :argv_json, :stripped_env_json, :started_at)",
+                "stripped_env_json, started_at, transport) VALUES (:run_id, :session_id, :seq, "
+                ":kind, :workdir, :status, :argv_json, :stripped_env_json, :started_at, "
+                ":transport)",
                 run,
             )
             db.execute(
