@@ -10,7 +10,24 @@ SQLite/loopback HTTP with **stub** harness executables) · UI-offline (browser/w
 harnesses) · T3-W real single native harness session on the user's machine · T4-W real Claude Code +
 Codex sessions with handoff.
 
-## Existing sessions created outside RepoBridge — 2026-10-10 (72a3255)
+## Unified candidate — 2026-10-10 (frontend 80346bc)
+
+New fixed candidate and actual tested code: `78253365266eb5f47f0436dddf4b69522def917e`; exact frontend `80346bc5c9c4c1c85f87bf6a8e422bdf8372e083`.
+**Offline/synthetic acceptance passed: 1007 tests / 1007.52s (16m47s), zero failures/skips; ruff check and format (193 files) passed; strict mypy (59 source files) passed.** Focused: 75 passed / 55.69s. The historical 7630734/1004-test receipt below
+is unchanged. P1 and both P2 remain closed within their existing evidence scopes.
+
+| ID | New verification | Level / result |
+|---|---|---|
+| E16 | Composition keys at actual composer/new/path/rename/filter/search entries; ordinary keys; six dialog names, entry/Tab/close/restoration | UI-offline browser + event injection: 114 assertions pass, 0 failed; not native IME or VoiceOver |
+| E09/E14 | Original-ID existing entry, sent monotonicity, missed response/events, drafts/attachments, older-page cleanup | actual backend/fault stubs + controlled page/HTTP injection: pass; pagination 35 assertions |
+| E11/E12/E15 | Durable delivery/first-ID guard, stable error reasons/external return, factual failed-run banner | retained offline backend suites + browser regression: pass; no actual native history proof claimed |
+| E13 | 900/700/1280 browser geometry on new code | pass; previous long-label/native-window evidence remains historical |
+| E10 | Outside-created native samples and real official desktop round trip | **PREPARED / NOT_RUN**, [new fixed-candidate checklist](EXISTING_SESSIONS_LIVE_ACCEPTANCE.md); scoped metadata discovery can provide IDs for user selection, no manual DB lookup required |
+| E17 | Native IME/system clipboard/VoiceOver/native focus | **NOT_RUN**; Opus follow-up, no desktop-control request this round |
+
+[New evidence, initial probe correction and exact versions](EXISTING_SESSIONS_INTEGRATION.md).
+
+## Historical existing-session receipt — 2026-10-10 (72a3255)
 
 Fixed code: `1676fdc8b412a565bc2b697d262f29fdc3bb561d`; frontend `72a32557cc7f0196655841628d3c2dcf5a81383e`. Backend banner/first-turn fixes unchanged.
 **P1 closed. Offline/synthetic integration acceptance passed.**
@@ -35,7 +52,7 @@ Actual source imports and absolute PYTHONPATH verified. No live model tests or r
 | E13 | 900×640 sidebar expanded, 700px, 1280×900, long model, attachments/draft/unknown card; controls and no horizontal overflow | UI-offline Chrome + isolated native WKWebView | **P2 pass**: new browser sizes pass on 72a3255; prior long-model/native measurements and content screenshots retain their original scope; blank full-window captures excluded |
 | E14 | Missing/error receipts; lost response/SSE; stale/duplicate events, queries and pages; preservation of other unknowns and session drafts/attachments | UI-offline page/HTTP injection + actual fault stubs | pass on final code; no downgrade, incorrect recovery, cross-session cleanup or automatic send; not real-native disorder evidence |
 | E15 | Run failure summary vs delivery, unknown→sent and reload/restart | T2-W + UI-offline | new banner P2 pass for corrected runs: failed/exit 3/diagnostics unchanged; summary factual, unresolved unknown warned separately; no old failure-string migration |
-| E10 | Designated native sessions actually created outside RepoBridge; real official desktop open/history/continuation/return/resume | T3-W/T4-W | **not run; execution checklist prepared** for fixed candidate 7630734 ([steps/budget](EXISTING_SESSIONS_LIVE_ACCEPTANCE.md)); prior App-created samples do not qualify; prior turn allowance exhausted |
+| E10 | Designated native sessions actually created outside RepoBridge; real official desktop open/history/continuation/return/resume | T3-W/T4-W | **not run**; original preparation used fixed candidate 7630734; current checklist is for the new candidate above ([steps/budget](EXISTING_SESSIONS_LIVE_ACCEPTANCE.md)); prior App-created samples do not qualify; prior turn allowance exhausted |
 
 Reproduction and limits: [EXISTING_SESSIONS_RESULT.md](EXISTING_SESSIONS_RESULT.md).
 

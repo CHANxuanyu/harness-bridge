@@ -11,13 +11,13 @@ listens only on loopback with port 0. No real native histories, credentials or m
 cd /Users/chan/Downloads/repobridge-integration
 export PYTHONPATH=/Users/chan/Downloads/repobridge-integration/src
 HB_QA_PY=/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-product-direction-8e26f9/.venv/bin/python
-HB_QA_DIR=/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-72a3255
+HB_QA_DIR=/Users/chan/Documents/Codex/2026-10-06/harness-bridge-agent-local-glm-macos/repobridge-qa-80346bc
 "$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --scenario normal
 ```
 
 Requires the existing development virtualenv shown above (pywebview only for optional `--native`). It is read-only;
 no install or dependency change is needed. Source under test is
-`1676fdc8b412a565bc2b697d262f29fdc3bb561d`; later documentation-only integration commits have the same
+`78253365266eb5f47f0436dddf4b69522def917e`; later documentation-only integration commits have the same
 code. Before a later revalidation, record `git rev-parse HEAD` and check the source tree, rather than
 assuming the moving branch still matches this receipt.
 
@@ -33,15 +33,15 @@ command creates a fresh independent fixture. They do not consume or renew any re
 ```sh
 # Link the outside Codex candidate, confirm outside ended, attach a file and send.
 # Writer refusal happens on native resume: not_sent, retain text/attachment once.
-"$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --scenario busy --native
+"$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --scenario busy
 
 # Ordinary or linked Codex: stub exits after accepting the turn/start request, before replying.
 # The result must be unknown, with editable draft and no recovery/re-send action.
-"$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --scenario unknown --native
+"$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --scenario unknown
 
 # Open Add Existing, choose Codex: explicit unsupported versus ordinary read failure.
-"$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --scenario unsupported --native
-"$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --scenario readfail --native
+"$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --scenario unsupported
+"$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --scenario readfail
 ```
 
 The terminal prints the new fixture directory and loopback address. Omit `--native` for an HTTP-only
@@ -63,7 +63,7 @@ PY
 For a persistence check, stop the old instance before reopening the **same** printed fixture:
 
 ```sh
-"$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --root /private/tmp/repobridge-recheck-PRINTED_SUFFIX --scenario normal --native
+"$HB_QA_PY" "$HB_QA_DIR/sandbox.py" --root /private/tmp/repobridge-recheck-PRINTED_SUFFIX --scenario normal
 ```
 
 Do not open two writers against the same fixture. `--root` refuses directories not made by this
@@ -72,12 +72,14 @@ removes the injected CLI failure; it does not erase an unknown receipt or author
 Refresh results reads only. Add exact-clientId native evidence only to the designated **synthetic**
 fixture when reproducing settlement; never edit a real vendor history file.
 
-Browser probes retained here include `p1.cjs`, `busy.cjs`, `network.cjs`, `races.cjs`,
-`late-not-sent.cjs`, `older.cjs`, `restart-setup.cjs`, `restart-check.cjs`,
+Browser probes retained here include `keys-dialogs.cjs`, `focus-existing.cjs`, `p1.cjs`, `busy.cjs`, `network.cjs`, `races.cjs`,
+`late-not-sent.cjs`, `older.cjs`,
 `layout.cjs` and `common.cjs`. They depend on particular fixture state and prior result JSON;
-use the reproduction order in EXISTING_SESSIONS_INTEGRATION.md, not as a one-command general suite.
-`common.cjs` writes to `/private/tmp/repobridge-recheck-72a3255`; copy the retained scripts there
-first. The sandbox commands above work independently and always create safe fresh fixtures.
+use the exact reproduction order in the current evidence directory's `README.md`, not as a one-command general suite.
+The original probes wrote to `/private/tmp/repobridge-recheck-80346bc`. For replay, follow that
+README to copy scripts into a fresh directory and update their output prefix; keep the saved
+evidence unchanged. The sandbox commands above independently create fresh synthetic fixtures.
+Current 80346bc checks are browser-only; native focus/IME/clipboard/VoiceOver remain NOT_RUN.
 New browser layout regression uses the short stub model label. Previous long-label and native
 WKWebView evidence remains in `repobridge-qa-0253b2f`; it was not rerun as native this round.
 
@@ -94,5 +96,5 @@ HB_QA_BIN=/Users/chan/Downloads/harness-bridge/.claude/worktrees/repobridge-prod
 ```
 
 These are the four checks in `scripts/check.sh`, using existing binaries directly to avoid changing
-another worktree's environment. Final fixed-code offline check: **1004 passed in 1006.77s (16m46s), zero failures and zero skips**. Ruff check and format passed (190 files); strict mypy passed (59 source files). Do not re-run after a
+another worktree's environment. Offline/synthetic acceptance passed: 1007 tests / 1007.52s (16m47s), zero failures/skips; ruff check and format (193 files) passed; strict mypy (59 source files) passed. Do not re-run after a
 pure documentation addition unless code changed or new evidence requires it.
