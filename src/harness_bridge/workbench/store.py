@@ -181,6 +181,10 @@ class WorkbenchStore:
             db.execute("ALTER TABLE sessions ADD COLUMN settings_json TEXT")
             db.execute("UPDATE meta SET value='3' WHERE key='schema_revision'")
 
+    def schema_revision(self) -> int | None:
+        row = self._row("SELECT value FROM meta WHERE key='schema_revision'")
+        return int(row["value"]) if row else None
+
     def close(self) -> None:
         with self._lock:
             self._db.close()

@@ -57,11 +57,10 @@ NESTED_ENV_MARKERS = ("CLAUDECODE",)
 
 
 def default_state_dir(env: dict[str, str] | None = None) -> Path:
-    env = dict(os.environ) if env is None else env
-    if env.get("HBRIDGE_STATE_DIR"):
-        return Path(env["HBRIDGE_STATE_DIR"]).expanduser()
-    base = env.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
-    return Path(base) / "harness-bridge"
+    """Unchanged for prod (``HBRIDGE_ENV`` unset); dev/test defaults: see ``runtime_env``."""
+    from harness_bridge.runtime_env import default_state_dir as profile_default
+
+    return profile_default(dict(os.environ) if env is None else env)
 
 
 @dataclass(frozen=True)

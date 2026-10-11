@@ -10,6 +10,26 @@ SQLite/loopback HTTP with **stub** harness executables) · UI-offline (browser/w
 harnesses) · T3-W real single native harness session on the user's machine · T4-W real Claude Code +
 Codex sessions with handoff.
 
+## PR #5 independent foundation candidate — 2026-10-11
+
+Input 70a5d73; necessary repair / actual tested code **560056f11858f9f02b01ee3966ba2aaf41d41c54**.
+**1066 passed / 0 failed / 0 errors / 0 skipped; pytest 1104.20s; exit 0. Ruff check, format (208 files) and strict mypy (65 source files, Darwin target) each exit 0.** [Full evidence and reproduction](ENGINEERING_FOUNDATION_MACOS.md).
+
+| Check | Result / scope |
+|---|---|
+| EF1 ownership/legacy compatibility | PASS: synthetic schema 4, inherited/explicit/alias refused unchanged; dev/test ownership; default/custom prod actual entries |
+| EF2 lock hierarchy/races/death release | PASS: actual macOS local internal APFS; 8 nested + 8 same-root races, siblings, owned holder termination; other filesystems NOT_RUN |
+| EF3 actual entries before writes and midway cleanup | PASS after 560056f; original 70a5 leaks bound listeners on start failure, independently reproduced (4 fail / 2 pass) |
+| EF4 same client ID across sessions | PASS HTTP+stubs: A sent/B unknown, independent aliases/ops/latency, no inflated submissions, v1 limit retained/v2 export consistent |
+| Diagnostics privacy/fault isolation | PASS synthetic secret scan, init/full queue/write errors, disabled/broken sink parity; product events default off, local exports only |
+| Execution gate | PASS all four markers × two harnesses; inherited markers retained, start/send refused, no run/resume/turn; discovery queries may start a CLI |
+| Existing P1/P2/business | PASS fresh backend/page regressions and 35 paging assertions; no native-window rerun; previous long-model/native evidence retains old scope |
+| Cloud seven on Mac | 7/7 PASS against actual Darwin; cloud Linux ZCode cancellation cause remains unresolved, not closed |
+| CI / real-native scenarios | NOT_RUN: workflow, real external/official desktop, native IME/clipboard/VoiceOver/focus |
+
+Older candidate 7825336 retains its separate offline/synthetic receipt below; not inherited as PR #5
+proof. No integration base/default merge, PR close, live-state upgrade, install or publish.
+
 ## Unified candidate — 2026-10-10 (frontend 80346bc)
 
 New fixed candidate and actual tested code: `78253365266eb5f47f0436dddf4b69522def917e`; exact frontend `80346bc5c9c4c1c85f87bf6a8e422bdf8372e083`.

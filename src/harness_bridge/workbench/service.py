@@ -32,7 +32,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NoReturn
 
+from harness_bridge import runtime_env
 from harness_bridge.errors import BridgeError
+from harness_bridge.observability import Observability
+from harness_bridge.observability.recorder import error_fields
 from harness_bridge.workbench import changes, controls, desktop_apps, handoff
 from harness_bridge.workbench.conversation import Conversation
 from harness_bridge.workbench.harness import (
@@ -63,7 +66,12 @@ from harness_bridge.workbench.pty_host import (
     read_log_tail,
     strip_ansi_tail,
 )
-from harness_bridge.workbench.store import ExternalHeld, WorkbenchStore, WorkdirBusy
+from harness_bridge.workbench.store import (
+    SCHEMA_REVISION,
+    ExternalHeld,
+    WorkbenchStore,
+    WorkdirBusy,
+)
 from harness_bridge.workbench.store import now as _now
 from harness_bridge.workbench.structured import (
     ClaudeStreamSession,
@@ -103,6 +111,18 @@ AUTHORITATIVE = {
         "effort": ("thread/start", "thread/resume", "thread/read"),
         "mode": ("thread/start", "thread/resume"),
     },
+}
+
+# Diagnostic step for a refused connect/resume, by stable reason.
+_CONNECT_STEPS = {
+    "directory_missing": "directory",
+    "external_confirmation_required": "external_confirmation",
+    "local_writer_busy": "admission",
+    "unlinked": "link_check",
+    "environment_changed": "link_check",
+    "unsupported_source": "link_check",
+    "native_identity_changed": "link_check",
+    "project_archived": "link_check",
 }
 
 
@@ -168,14 +188,37 @@ class Workbench:
         config: WorkbenchConfig | None = None,
         base_env: Mapping[str, str] | None = None,
         stop_grace: float = 3.0,
+        root_lock: runtime_env.TestRootLock | None = None,
     ) -> None:
         self.state_dir = state_dir
-        self.root = state_dir / "workbench"
-        (self.root / "runs").mkdir(parents=True, exist_ok=True)
-        (self.root / "handoffs").mkdir(parents=True, exist_ok=True)
-        (self.root / "history").mkdir(parents=True, exist_ok=True)
-        (self.root / "attachments").mkdir(parents=True, exist_ok=True)
-        self.store = WorkbenchStore(state_dir / "workbench.sqlite3")
+        self.base_env = dict(os.environ if base_env is None else base_env)
+        # Environment boundary first: a refused dev/test start creates and opens nothing.
+        self.profile, self.config = runtime_env.workbench_profile(
+            state_dir, config or WorkbenchConfig(), self.base_env
+        )
+        root = self.profile.test_root
+        if root is not None and root_lock is not None and root_lock.root != root:
+            raise runtime_env.refuse("the provided test-root lock is for another root")
+        # A lock handed over by the App entry (``prepare_start``) stays owned by the caller.
+        owned = root is not None and root_lock is None
+        self._root_lock = runtime_env.TestRootLock(root) if owned and root else None
+        try:
+            runtime_env.claim_state_dir(self.profile)
+            self.root = state_dir / "workbench"
+            (self.root / "runs").mkdir(parents=True, exist_ok=True)
+            (self.root / "handoffs").mkdir(parents=True, exist_ok=True)
+            (self.root / "history").mkdir(parents=True, exist_ok=True)
+            (self.root / "attachments").mkdir(parents=True, exist_ok=True)
+            self.store = WorkbenchStore(state_dir / "workbench.sqlite3")
+        except BaseException:
+            if self._root_lock is not None:
+                self._root_lock.release()
+            raise
+        try:
+            self.obs = Observability(state_dir, env_name=self.profile.name, env=self.base_env)
+        except Exception:  # diagnostics must never stop the App from starting
+            off = {"HBRIDGE_DIAGNOSTICS": "0", "HBRIDGE_PRODUCT_EVENTS": "0"}
+            self.obs = Observability(state_dir, env_name=self.profile.name, env=off)
         self.prefs = Prefs(self.root / "prefs.json")
         # Native window hooks (title, appearance, folder picker), set by ``hbridge app`` when a
         # pywebview window exists. Called from request threads; never from page JavaScript eval.
@@ -184,8 +227,6 @@ class Workbench:
         self.dev_snapshot: Callable[[str], dict[str, Any]] | None = None
         self.dev_reload: Callable[[str], None] | None = None
         self.dev_resize: Callable[[int, int], None] | None = None
-        self.config = config or WorkbenchConfig()
-        self.base_env = dict(os.environ if base_env is None else base_env)
         self.stop_grace = stop_grace
         self._lock = threading.RLock()
         self._live: dict[str, LiveRun] = {}
@@ -202,6 +243,21 @@ class Workbench:
         self._dirty = threading.Event()
         self._closing = threading.Event()
         self.reconcile()
+        build = self.obs.build
+        self.obs.record(
+            "app.start",
+            env_source=self.profile.source,
+            native_env=self.profile.native_env,
+            code_source=build["code_source"],
+            code_dirty=build["code_dirty"],
+            schema=self.store.schema_revision(),
+            schema_expected=SCHEMA_REVISION,
+            python=build["python"],
+            os=build["os"],
+            diagnostics=self.obs.diagnostics_enabled,
+            product_events=self.obs.product_enabled,
+            alias_stable=self.obs.alias_stable,
+        )
         self._notifier = threading.Thread(target=self._notify_loop, name="wb-notify", daemon=True)
         self._notifier.start()
 
@@ -487,6 +543,24 @@ class Workbench:
         }
 
     def link_session(self, candidate_id: str, view_mode: str = "conversation") -> dict[str, Any]:
+        try:
+            result = self._link_session(candidate_id, view_mode)
+        except BridgeError as err:
+            self.obs.record("session.link", outcome="refused", **error_fields(err))
+            raise
+        detail = result["session"]["session"]
+        self.obs.record(
+            "session.link",
+            project=detail.get("project_id"),
+            session=detail.get("session_id"),
+            outcome="created"
+            if result["created"]
+            else ("relinked" if result["relinked"] else "duplicate"),
+            harness=detail.get("harness"),
+        )
+        return result
+
+    def _link_session(self, candidate_id: str, view_mode: str) -> dict[str, Any]:
         if view_mode not in VIEWS:
             raise BridgeError("INVALID_INPUT", "Invalid view mode")
         meta = self.native_history.candidate(candidate_id)
@@ -512,6 +586,30 @@ class Workbench:
         return {"session": self.session_detail(sid), "created": created, "relinked": relinked}
 
     def unlink_session(self, session_id: str) -> dict[str, Any]:
+        try:
+            result = self._unlink_session(session_id)
+        except BridgeError as err:
+            self.obs.record(
+                "session.unlink",
+                session=session_id,
+                outcome="refused",
+                harness=self._harness_of(session_id),
+                **error_fields(err),
+            )
+            raise
+        self.obs.record(
+            "session.unlink", session=session_id, outcome="ok", harness=self._harness_of(session_id)
+        )
+        return result
+
+    def _harness_of(self, session_id: str) -> str | None:
+        try:
+            session = self.store.get_session(session_id)
+        except Exception:
+            return None
+        return session["harness"] if session else None
+
+    def _unlink_session(self, session_id: str) -> dict[str, Any]:
         self._session(session_id)
         link = self.store.native_link(session_id)
         if link is None:
@@ -611,8 +709,69 @@ class Workbench:
     def start_run(
         self, session_id: str, kind: str, *, confirm_external: bool = False
     ) -> dict[str, Any]:
-        with self._session_lock(session_id):
-            return self._start_run_locked(session_id, kind, confirm_external=confirm_external)
+        started = time.monotonic()
+        try:
+            with self._session_lock(session_id):
+                run = self._start_run_locked(session_id, kind, confirm_external=confirm_external)
+        except BridgeError as err:
+            self._observe_connect(session_id, kind, started, error=err)
+            raise
+        self._observe_connect(session_id, kind, started, run=run)
+        return run
+
+    def _observe_connect(
+        self,
+        session_id: str,
+        kind: str,
+        started: float,
+        *,
+        run: Mapping[str, Any] | None = None,
+        error: BridgeError | None = None,
+    ) -> None:
+        """Diagnostics only; never changes the start result."""
+        try:
+            session = self.store.get_session(session_id) or {}
+            fields: dict[str, Any] = {}
+            if error is not None:
+                fields = error_fields(error)
+                step = _CONNECT_STEPS.get(str(fields.get("reason")))
+                if step is None:
+                    step = {"PREFLIGHT_FAILED": "preflight", "EXECUTOR_ERROR": "spawn"}.get(
+                        error.code, "request"
+                    )
+                fields["step"] = step
+            self.obs.record(
+                "connect.start",
+                session=session_id,
+                run=(run or {}).get("run_id"),
+                outcome="refused" if error is not None else "spawned",
+                duration_ms=(time.monotonic() - started) * 1000,
+                harness=session.get("harness"),
+                kind=kind,
+                transport=(run or {}).get("transport")
+                or ("structured" if session.get("view_mode") == "conversation" else "pty"),
+                linked=bool(self.store.native_link(session_id)) if session else None,
+                **fields,
+            )
+        except Exception:
+            self.obs.invalid += 1
+
+    def _observe_ready(self, live: LiveRun) -> None:
+        try:
+            if not self.obs.first_ready(live.run_id):
+                return
+            run = self.store.get_run(live.run_id) or {}
+            self.obs.record(
+                "connect.ready",
+                session=live.session_id,
+                run=live.run_id,
+                duration_ms=self.obs.run_elapsed(live.run_id),
+                harness=live.harness,
+                kind=run.get("kind"),
+                transport=live.transport,
+            )
+        except Exception:
+            self.obs.invalid += 1
 
     def _start_run_locked(
         self, session_id: str, kind: str, *, confirm_external: bool = False
@@ -658,6 +817,7 @@ class Workbench:
                 details={"reason": "directory_missing", "capability_unsupported": False},
             )
         run_id = "run_" + uuid.uuid4().hex[:12]
+        self.obs.note_run(run_id)
         run_dir = self.root / "runs" / run_id
         run_dir.mkdir(parents=True, mode=0o700)
         native_id = session["native_session_id"]
@@ -898,7 +1058,9 @@ class Workbench:
         current = session["native_session_id"]
         if native != current and self.store.native_link(live.session_id):
             self._structured_fatal(
-                live, "Native resume returned a different session ID; association retained"
+                live,
+                "Native resume returned a different session ID; association retained",
+                "native_identity_changed",
             )
             return
         if native != current:
@@ -916,6 +1078,7 @@ class Workbench:
     def _structured_ready(self, live: LiveRun) -> None:
         if live.phase == "starting":
             live.phase = "waiting"
+        self._observe_ready(live)
         self._changed()
 
     def _structured_turn(self, live: LiveRun, started: bool) -> None:
@@ -925,6 +1088,9 @@ class Workbench:
         else:
             live.phase = "waiting"
             live.attention = None
+            self.obs.record(
+                "turn.end", session=live.session_id, run=live.run_id, harness=live.harness
+            )
             if live.conv is not None and live.turn_model:
                 ends = [i for i in live.conv.items() if i["type"] == "turn_end"]
                 if ends and not ends[-1].get("model"):
@@ -936,7 +1102,17 @@ class Workbench:
                 threading.Thread(target=self._apply_pending, args=(live,), daemon=True).start()
         self._changed()
 
-    def _structured_fatal(self, live: LiveRun, message: str) -> None:
+    def _structured_fatal(
+        self, live: LiveRun, message: str, cause: str = "native_protocol"
+    ) -> None:
+        self.obs.record(
+            "connect.fatal",
+            session=live.session_id,
+            run=live.run_id,
+            harness=live.harness,
+            cause=cause,
+            ready=self.obs.was_ready(live.run_id),
+        )
         if live.conv is not None:
             live.conv.upsert({"id": "n:fatal", "type": "notice", "level": "error", "text": message})
         self.store.note_failure(live.run_id, message)
@@ -955,8 +1131,51 @@ class Workbench:
         except OSError:
             pass
 
+    def _store_delivery(
+        self,
+        session_id: str,
+        run_id: str,
+        record: dict[str, Any],
+        *,
+        evidence: str,
+        ended_only: bool = False,
+    ) -> dict[str, Any]:
+        """Persist a receipt exactly as before; observe a real state change afterwards."""
+        before = self._delivery_state(session_id, record.get("client_id"))
+        event = self.store.record_delivery(session_id, run_id, record, ended_only=ended_only)
+        try:
+            after = event["payload"]["delivery"]["state"]
+            if after != before:
+                self.obs.record(
+                    "delivery.state",
+                    level="warning" if after == "unknown" else "info",
+                    session=session_id,
+                    run=run_id,
+                    msg=record.get("client_id"),
+                    reason=event["payload"]["delivery"].get("reason"),
+                    harness=self._harness_of(session_id),
+                    from_state=before,
+                    to_state=after,
+                    evidence=evidence,
+                    latency_ms=self.obs.message_latency(session_id, str(record.get("client_id"))),
+                )
+        except Exception:
+            self.obs.invalid += 1
+        return event
+
+    def _delivery_state(self, session_id: str, client_id: Any) -> str | None:
+        if not self.obs.sinks or not isinstance(client_id, str):
+            return None
+        try:
+            record = self.store.message_deliveries(session_id).get(client_id)
+            return record["delivery"]["state"] if record else None
+        except Exception:
+            return None
+
     def _record_delivery(self, live: LiveRun, record: dict[str, Any]) -> dict[str, Any]:
-        event = self.store.record_delivery(live.session_id, live.run_id, record)
+        event = self._store_delivery(
+            live.session_id, live.run_id, record, evidence="native_protocol"
+        )
         self._publish("activity", event)
         return dict(event["payload"])
 
@@ -977,8 +1196,12 @@ class Workbench:
                         else "连接已结束，是否送达无法确认；请核对原生历史，不要重复发送。",
                     },
                 )
-                event = self.store.record_delivery(
-                    session_id, record["run_id"], record, ended_only=True
+                event = self._store_delivery(
+                    session_id,
+                    record["run_id"],
+                    record,
+                    ended_only=True,
+                    evidence="connection_ended",
                 )
                 records[cid] = {**event["payload"], "run_id": record["run_id"]}
         return records
@@ -1009,7 +1232,12 @@ class Workbench:
                             "message": "原生历史已确认这条消息。",
                         },
                     }
-                    self.store.record_delivery(session_id, record["run_id"], record)
+                    self._store_delivery(
+                        session_id,
+                        record["run_id"],
+                        record,
+                        evidence="native_history_client_id",
+                    )
                     records[cid] = record
                 # Preserve one item with the API client identity, not a duplicate native echo.
                 del merged[key]
@@ -1565,6 +1793,50 @@ class Workbench:
         confirm_external: bool = False,
         attachments: list[str] | None = None,
     ) -> dict[str, Any]:
+        client_id = client_id or uuid.uuid4().hex[:16]
+        self.obs.note_message(session_id, client_id)
+        started = time.monotonic()
+        observed: dict[str, Any] = {
+            "session": session_id,
+            "msg": client_id,
+            "harness": self._harness_of(session_id),
+            "attachments": len(attachments or []),
+        }
+        try:
+            result = self._send_message(
+                session_id,
+                text,
+                client_id=client_id,
+                confirm_external=confirm_external,
+                attachments=attachments,
+            )
+        except BridgeError as err:
+            self.obs.record(
+                "message.submit",
+                outcome="refused",
+                duration_ms=(time.monotonic() - started) * 1000,
+                **observed,
+                **error_fields(err),
+            )
+            raise
+        self.obs.record(
+            "message.submit",
+            outcome="reused" if result.get("reused") else "accepted",
+            duration_ms=(time.monotonic() - started) * 1000,
+            linked=bool(self.store.native_link(session_id)),
+            **observed,
+        )
+        return result
+
+    def _send_message(
+        self,
+        session_id: str,
+        text: str,
+        *,
+        client_id: str | None = None,
+        confirm_external: bool = False,
+        attachments: list[str] | None = None,
+    ) -> dict[str, Any]:
         files = self._attachments(session_id, list(attachments or []))
         if not text.strip() and not files:
             raise BridgeError("INVALID_INPUT", "消息不能为空")
@@ -1914,6 +2186,33 @@ class Workbench:
     def open_in_desktop(
         self, session_id: str, *, release: bool = False, confirm_unknown: bool = False
     ) -> dict[str, Any]:
+        harness = self._harness_of(session_id)
+        try:
+            result = self._open_in_desktop(
+                session_id, release=release, confirm_unknown=confirm_unknown
+            )
+        except BridgeError as err:
+            self.obs.record(
+                "desktop.open",
+                session=session_id,
+                outcome="refused",
+                harness=harness,
+                released=False,
+                **error_fields(err),
+            )
+            raise
+        self.obs.record(
+            "desktop.open",
+            session=session_id,
+            outcome=result.get("status"),
+            harness=harness,
+            released=release,
+        )
+        return result
+
+    def _open_in_desktop(
+        self, session_id: str, *, release: bool = False, confirm_unknown: bool = False
+    ) -> dict[str, Any]:
         with self._session_lock(session_id):
             session = self._session(session_id)
             harness = session["harness"]
@@ -1972,6 +2271,12 @@ class Workbench:
     def desktop_return(self, session_id: str) -> dict[str, Any]:
         with self._session_lock(session_id):
             session = self._session(session_id)
+            self.obs.record(
+                "desktop.return",
+                session=session_id,
+                harness=session["harness"],
+                had_hold=bool(session.get("external_json")),
+            )
             if session.get("external_json"):
                 self.store.set_external(session_id, None)
                 self.store.add_event(
@@ -2227,6 +2532,13 @@ class Workbench:
     def close(self, timeout: float = 10.0) -> None:
         with self._lock:
             lives = list(self._live.values())
+        self.obs.record(
+            "app.stop",
+            uptime_ms=(time.monotonic() - self.obs.started) * 1000,
+            live_runs=len(lives),
+            dropped=self.obs.dropped(),
+            write_errors=self.obs.write_errors(),
+        )
         threads = []
         for live in lives:
             live.stop_requested = True
@@ -2239,12 +2551,17 @@ class Workbench:
         self._closing.set()
         self._notifier.join(2)
         self.store.close()
+        self.obs.close()
+        if self._root_lock is not None:
+            self._root_lock.release()
 
     # --- PTY callbacks --------------------------------------------------------------------------
 
     def _on_output(self, live: LiveRun, data: bytes) -> None:
         if live.phase == "starting":
             live.phase = "running"
+            if live.transport == "pty":
+                self._observe_ready(live)
             self._changed()
         offset = live.buffer.append(data)
         self._publish(
@@ -2277,7 +2594,11 @@ class Workbench:
                     self.store.set_native(sid, native, "confirmed")
             elif native != current:
                 if self.store.native_link(sid):
-                    self._structured_fatal(live, "Native identity changed; association retained")
+                    self._structured_fatal(
+                        live,
+                        "Native identity changed; association retained",
+                        "native_identity_changed",
+                    )
                     return
                 self.store.set_native(sid, native, "observed")
                 self.store.add_event(
@@ -2392,6 +2713,7 @@ class Workbench:
                 },
             )
             self._detect_cli_desktop_handoff(live, raw_tail)
+        self._observe_exit(live, info)
         with self._lock:
             if self._live.get(live.session_id) is live:
                 del self._live[live.session_id]
@@ -2400,6 +2722,36 @@ class Workbench:
         }
         self._publish("ended", {"session_id": live.session_id, "run_id": live.run_id})
         self._changed()
+
+    def _observe_exit(self, live: LiveRun, info: ExitInfo) -> None:
+        try:
+            status = (
+                (self.store.get_run(live.run_id) or {}).get("status")
+                if info.confirmed
+                else "unconfirmed"
+            )
+            if info.exit_signal is not None:
+                exit_class = "signal"
+            elif info.exit_code is None:
+                exit_class = "unknown"
+            else:
+                exit_class = "zero" if info.exit_code == 0 else "nonzero"
+            self.obs.record(
+                "run.end",
+                level="warning" if status in ("failed", "unconfirmed") else "info",
+                session=live.session_id,
+                run=live.run_id,
+                duration_ms=self.obs.run_elapsed(live.run_id),
+                harness=live.harness,
+                transport=live.transport,
+                status=status,
+                exit_class=exit_class,
+                ready=self.obs.was_ready(live.run_id),
+                released_for=live.release_reason,
+                stop_requested=live.stop_requested,
+            )
+        except Exception:
+            self.obs.invalid += 1
 
     def _detect_cli_desktop_handoff(self, live: LiveRun, raw_tail: bytes) -> None:
         """``/desktop`` inside the Claude TUI moves the session to Claude Desktop and exits."""

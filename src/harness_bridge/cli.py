@@ -232,6 +232,36 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scenario", choices=["success", "bug-then-repair"], required=True)
     p.add_argument("--workdir", default=None, help="directory for the demo (default: temp dir)")
     p.add_argument("--cleanup", action="store_true", help="delete the demo directory afterwards")
+
+    sub.add_parser(
+        "env",
+        parents=[common],
+        help="runtime environment (dev/test/prod), isolation verdict, version and code SHA",
+    )
+    p = sub.add_parser("diag", parents=[common], help="local diagnostics and product events")
+    diag_sub = p.add_subparsers(dest="diag_command", required=True)
+    for operation in ("summary", "export"):
+        p = diag_sub.add_parser(operation, parents=[common])
+        p.add_argument("--since", default=None, help="ISO time lower bound (UTC, ...Z)")
+        p.add_argument("--until", default=None, help="ISO time upper bound (UTC, ...Z)")
+        p.add_argument(
+            "--env",
+            action="append",
+            choices=["prod", "dev", "test", "all"],
+            default=None,
+            help="records of these environments (default: the current HBRIDGE_ENV profile)",
+        )
+        if operation == "summary":
+            p.add_argument("--format", choices=["json", "csv"], default="json")
+        else:
+            p.add_argument("--out", default=None, help="new .zip path (default: state dir)")
+    p = diag_sub.add_parser("trace", parents=[common], help="records of one operation/alias")
+    for flag in ("--op", "--session", "--run", "--msg"):
+        p.add_argument(flag, default=None)
+    p = diag_sub.add_parser("config", parents=[common], help="show or change local settings")
+    p.add_argument("--diagnostics", choices=["on", "off"], default=None)
+    p.add_argument("--product-events", choices=["on", "off"], default=None)
+    diag_sub.add_parser("events", parents=[common], help="the event dictionary")
     return parser
 
 
@@ -251,6 +281,8 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
     from harness_bridge.coordination import AdvisorClaim, parse_contract
     from harness_bridge.service import Bridge, StopFlag
 
+    if args.command in ("env", "diag"):
+        return _observability(args)
     state_dir = Path(getattr(args, "state_dir", None) or default_state_dir())
     cmd = args.command
 
@@ -413,6 +445,66 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
         raise BridgeError("USAGE_ERROR", f"unknown command {cmd!r}")
     finally:
         bridge.close()
+
+
+def _observability(args: argparse.Namespace) -> dict[str, Any]:
+    """Read-only except ``diag config`` (settings) and ``diag export`` (one new local zip)."""
+    from harness_bridge import runtime_env
+    from harness_bridge.observability import report, schema
+    from harness_bridge.observability.recorder import load_settings, save_settings
+
+    explicit = getattr(args, "state_dir", None)
+    state_dir = Path(explicit).expanduser() if explicit else None
+    if args.command == "env":
+        return runtime_env.describe(state_dir)
+    target = state_dir or default_state_dir()
+    try:
+        profile = runtime_env.resolve(target, dict(os.environ))
+    except BridgeError:
+        if args.diag_command not in ("events",):
+            raise
+        profile = None
+    command = args.diag_command
+    if command == "events":
+        return {"schema_version": schema.SCHEMA_VERSION, "events": schema.describe_events()}
+    if command == "config":
+        changes = {
+            key: value == "on"
+            for key, value in (
+                ("diagnostics", args.diagnostics),
+                ("product_events", args.product_events),
+            )
+            if value is not None
+        }
+        if changes:
+            save_settings(target, **changes)
+        return {"settings": load_settings(target, dict(os.environ)), "changed": sorted(changes)}
+    if command == "trace":
+        try:
+            return report.trace(
+                target, op=args.op, session=args.session, run=args.run, msg=args.msg
+            )
+        except ValueError as exc:
+            raise BridgeError("USAGE_ERROR", str(exc)) from None
+    assert profile is not None
+    selected = args.env or [profile.name]
+    envs = None if "all" in selected else set(selected)
+    if command == "summary":
+        summary = report.summarize(
+            target, envs=envs, since=args.since, until=args.until, env=dict(os.environ)
+        )
+        return {"content": report.to_csv(summary)} if args.format == "csv" else summary
+    try:
+        return report.export_bundle(
+            target,
+            Path(args.out) if args.out else None,
+            envs=envs,
+            profile=profile.describe(),
+            since=args.since,
+            until=args.until,
+        )
+    except FileExistsError as exc:
+        raise BridgeError("USAGE_ERROR", str(exc)) from None
 
 
 def _render_human(result: dict[str, Any]) -> str:
