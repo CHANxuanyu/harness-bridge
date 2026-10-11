@@ -750,6 +750,7 @@ async function loadConversation(sid, { refresh = false } = {}) {
     c.live = data.live;
     c.runId = data.run_id;
     c.info = data.info || {};
+    if (data.context) putContext(sid, data.context);
     c.loaded = true;
     c.stale = false;
     c.olderError = null;
@@ -785,6 +786,7 @@ async function refreshConversation(sid, { quiet = false } = {}) {
     c.live = data.live;
     c.runId = data.run_id;
     if (data.info) c.info = data.info;
+    if (data.context) putContext(sid, data.context);
     // An automatic refresh (selecting the session) only speaks up when something changed.
     c.refreshNote = result.reset ? '已重新读取最近的部分（原生历史被改写，或读取位置已过期）'
       : (result.added.length || result.changed.length) ? `新增 ${result.added.length} 条，更新 ${result.changed.length} 条` : quiet ? null : '没有新内容';
@@ -836,6 +838,8 @@ async function loadOlder(sid) {
 }
 
 function onConv(msg) {
+  // Native context usage / compaction state (also for a conversation not loaded yet).
+  if (msg.op === 'context') { putContext(msg.session_id, msg.context); return; }
   const c = S.convs.get(msg.session_id);
   if (!c || !c.loaded) return;
   if (msg.op === 'reset' || (c.runId && c.runId !== msg.run_id)) { c.runId = msg.run_id; loadConversation(msg.session_id); return; }
@@ -1228,25 +1232,35 @@ function updateConvChrome(s, c) {
   const pendingPerm = [...c.items.values()].some((x) => x.type === 'permission' && x.status === 'pending');
   root._ta.disabled = !!blocked;
   root._box.classList.toggle('disabled', !!blocked);
+  // Shortcuts live in the placeholder, not in a line of their own (both harnesses keep their
+  // footer for state; the hints show only while the box is empty).
+  const keys = '/ 命令 · @ 文件 · ⇧↩ 换行';
   root._ta.placeholder = blocked || (linkHold(s) ? `确认外部已结束后，发送消息会用原生恢复继续这个 ${label} 会话` : s.external ? `这个会话已在 ${s.external.app} 中打开` : !s.active
-    ? (s.can_resume ? `发送消息，用原生恢复继续这个 ${label} 会话` : `发送第一条消息，启动 ${label}`)
-    : `给 ${label} 发消息`);
+    ? (s.can_resume ? `发送消息，用原生恢复继续这个 ${label} 会话 · ${keys}` : `发送第一条消息，启动 ${label} · ${keys}`)
+    : `给 ${label} 发消息 · ${keys}`);
   const atts = attachments(s.session_id);
   const uploading = atts.some((a) => a.uploading);
   const ready = atts.filter((a) => a.id && !a.error);
+  const compacting = contextView(contextOf(s.session_id)).busy;
   root._send.replaceChildren(icon(running ? 'square' : 'send', running ? 'i-fill' : ''));
   root._send.classList.toggle('stop', running);
   root._send.title = running ? '停止这一轮（Esc）' : uploading ? '附件还在上传…' : '发送（↩）';
   root._send.setAttribute('aria-label', running ? '停止这一轮' : '发送');
   const waiting = deliveryBlock(s);
-  root._send.disabled = running ? false : (!!blocked || !!waiting || uploading || (!root._ta.value.trim() && !ready.length));
+  root._send.disabled = running ? false : (!!blocked || !!waiting || compacting || uploading || (!root._ta.value.trim() && !ready.length));
   if (!running && waiting) root._send.title = waiting;
-  root._hint.textContent = running ? 'Esc 停止这一轮' : '↩ 发送 · ⇧↩ 换行 · @ 引用文件';
+  else if (!running && compacting) root._send.title = `${label} 正在压缩上下文，完成后再发送（输入框可以继续编辑）`;
+  // Usage/compaction availability follows the connection: re-read it when that changes.
+  const ctxSig = `${s.active}|${s.attached}|${!!s.turn}|${s.phase}|${pendingPerm}`;
+  if (!S.ctxSig) S.ctxSig = new Map();
+  if (S.ctxSig.get(s.session_id) !== ctxSig) { S.ctxSig.set(s.session_id, ctxSig); scheduleContextFetch(s.session_id); }
   renderControls(s);
   const st = root._status;
   st.className = 'conv-status';
   st.replaceChildren();
   const pick = settingsStatus(s);
+  // Only what needs attention gets this line; connection state is in the toolbar, pending settings
+  // next to their control.
   if (S.switching.has(s.session_id)) st.append(stGlyph({ tone: 'idle', glyph: 'spin' }), '正在切换视图：结束原连接，再用原生恢复接续…');
   else if (pendingPerm) { st.classList.add('warn'); st.append(stGlyph({ tone: 'warn', glyph: 'alert' }), `${label} 在等你确认权限或回答问题`); }
   else if (waiting && !running) { st.classList.add('warn'); st.append(stGlyph({ tone: 'warn', glyph: 'alert' }), h('span', { class: 'grow' }, waiting)); }
@@ -1254,17 +1268,14 @@ function updateConvChrome(s, c) {
     st.classList.add('bad');
     st.append(icon('warning'), h('span', { class: 'grow selectable' }, pick.text),
       h('button', { class: 'btn-plain', type: 'button', onclick: () => { S.dismissed.add(pick.dismiss); updateConvChrome(findSession(s.session_id), convFor(s.session_id)); } }, '知道了'));
-  } else if (s.active && s.phase === 'starting') st.append(stGlyph({ tone: 'ok', glyph: 'spin' }), `正在连接 ${label}…`);
+  } else if (compacting) st.append(stGlyph({ tone: 'idle', glyph: 'spin' }), `${label} 正在压缩上下文`, h('span', { class: 'hint' }, ' · 完成前不能发送，输入框可以继续编辑'));
+  else if (s.active && s.phase === 'starting') st.append(stGlyph({ tone: 'ok', glyph: 'spin' }), `正在连接 ${label}…`);
   else if (running) {
     const started = s.turn.started_at ? Date.parse(s.turn.started_at) : Date.now();
     const secs = Math.max(0, Math.round((Date.now() - started) / 1000));
-    st.append(stGlyph({ tone: 'ok', glyph: 'spin' }), `${label} 正在工作…`, h('span', { class: 'hint' }, ` ${secs} 秒`));
-    if (pick) st.append(h('span', { class: 'hint' }, ` · ${pick.text}`));
-  } else if (pick) st.append(stGlyph({ tone: 'idle', glyph: 'ring' }), h('span', { class: 'hint' }, pick.text));
-  else if (s.active && s.attached) st.append(stGlyph({ tone: 'ok', glyph: 'dot' }), h('span', { class: 'hint' }, `已连接 ${label}`));
-  else if (!s.active && s.run) {
-    st.append(h('span', { class: 'hint' }, s.can_resume ? '未连接。发送消息时会用原生恢复接续同一个会话。' : '未连接。'));
+    st.append(stGlyph({ tone: 'ok', glyph: 'spin' }), `${label} 正在工作`, h('span', { class: 'hint' }, ` · ${secs} 秒 · Esc 停止`));
   }
+  st.hidden = !st.childNodes.length;
 }
 setInterval(() => { const s = selectedSession(); if (s && s.turn && s.view_mode === 'conversation') updateConvChrome(s, convFor(s.session_id)); }, 1000);
 
@@ -1278,6 +1289,23 @@ async function sendFromComposer(sid, confirmExternal = false) {
   if ((!text.trim() && !ids.length) || composerBlock(s) || atts.some((a) => a.uploading) || S.pending.has(`send:${sid}`)) return;
   const waiting = deliveryBlock(s);
   if (waiting) { toast(waiting, 'error'); return; } // the draft stays in the box
+  // "/…" as each harness treats it (context.js): an action, a validated Claude Code command, or a
+  // refusal with the reason. A refused or failed command leaves the draft in the box.
+  const route = slashRoute(s.harness, text, catalogOf(s).commands);
+  if (route.kind === 'refuse') { toast(route.reason, 'error'); return; }
+  if (route.kind === 'compact') { startCompact(sid, root._send, { fromComposer: true }); return; }
+  if (route.kind === 'action') {
+    root._ta.value = '';
+    S.drafts.delete(sid);
+    autosize(root._ta);
+    hidePop();
+    updateConvChrome(s, convFor(sid));
+    runSlashAction(s, route.name);
+    return;
+  }
+  const command = route.kind === 'command' ? route : null;
+  if (command && ids.length) { toast('命令不会附带附件：先移除附件，或把内容作为普通消息发送（开头加一个空格）。', 'error'); return; }
+  if (command && !s.active) { toast(`命令只在已连接的会话里执行：先发送一条普通消息连接 ${HARNESS[s.harness].label}（会用原生恢复接续同一个会话）。`, 'error'); return; }
   const askExternal = (ext) => confirmPopover(root._send, externalPrompt(findSession(sid) || s, ext, () => sendFromComposer(sid, true)));
   if (s.external && !confirmExternal) { askExternal(s.external); return; }
   const clientId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -1295,7 +1323,11 @@ async function sendFromComposer(sid, confirmExternal = false) {
     renderAttachRow(sid);
   };
   try {
-    const res = await api('POST', `/api/sessions/${sid}/send`, { text, client_id: clientId, confirm_external: confirmExternal, attachments: ids });
+    // A Claude Code command goes through the App's command action (validated against the
+    // session's own catalog, same stream and receipts as a message); everything else is a message.
+    const res = command
+      ? await api('POST', `/api/sessions/${sid}/command`, { name: command.name, arguments: command.args, client_id: clientId, run_id: convFor(sid).runId || (contextOf(sid) || {}).run_id || '' })
+      : await api('POST', `/api/sessions/${sid}/send`, { text, client_id: clientId, confirm_external: confirmExternal, attachments: ids });
     // Accepted locally; tracked by client_id until a receipt or the CLI settles it. 200 is not
     // native delivery: queued / sending stay open.
     track();
@@ -1871,13 +1903,14 @@ function renderToolbar() {
     return;
   }
   const st = statusOf(s);
+  // The session's harness is fixed when it is created: it is part of the session's identity, shown
+  // with its title (the input box has no harness switch).
   bar.append(h('div', { class: 'tb-title' },
     h('div', { class: 'tb-title-line' },
+      h('span', { class: `harness-chip ${s.harness}`, title: `这个会话固定使用 ${HARNESS[s.harness].label}` }, HARNESS[s.harness].label),
       h('span', { class: 'tb-name', title: '点击重命名', onclick: () => beginRename(s) }, s.title),
-      h('button', { class: 'icon-btn small', type: 'button', title: '会话操作', 'aria-label': '会话操作', onclick: (e) => sessionMenu(s, e.currentTarget) }, icon('caret'))),
-    h('div', { class: 'tb-sub' },
-      h('span', { class: `harness ${s.harness}` }, HARNESS[s.harness].label),
-      ` · ${p ? p.name : ''}${p && p.branch ? ` · ${p.branch}` : ''}`)));
+      h('button', { class: 'icon-btn small', type: 'button', title: '会话操作', 'aria-label': '会话操作', 'aria-haspopup': 'menu', 'aria-expanded': 'false', onclick: (e) => sessionMenu(s, e.currentTarget) }, icon('caret'))),
+    h('div', { class: 'tb-sub' }, `${p ? p.name : ''}${p && p.branch ? ` · ${p.branch}` : ''}`)));
   const tone = st.tone === 'warn' ? 'warn' : st.tone === 'bad' ? 'bad' : '';
   const right = h('div', { class: 'tb-group' }, h('span', { class: `status-label ${tone}`, title: st.label }, stGlyph(st), h('span', { class: 'tb-label' }, st.label)), h('span', { class: 'tb-sep' }), viewToggle(s), h('span', { class: 'tb-sep' }));
   const open = S.prefs.inspector_open;
@@ -2407,8 +2440,10 @@ function shellQuote(s) { return /^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/
 
 const layers = [];
 function layerOpen() { return layers.length > 0; }
-function pushLayer(el, onClose) {
-  const entry = { el, onClose, prevFocus: document.activeElement };
+// returnFocus: the control that opened the layer (a clicked button does not keep focus in WebKit,
+// so the opener is passed explicitly); otherwise whatever had focus before.
+function pushLayer(el, onClose, { returnFocus = null } = {}) {
+  const entry = { el, onClose, prevFocus: returnFocus || document.activeElement };
   layers.push(entry);
   $('#layer').append(el);
   return () => closeLayer(entry);
@@ -2460,10 +2495,13 @@ function menu(anchor, items) {
   el.addEventListener('keydown', (e) => {
     const btns = [...el.querySelectorAll('.menu-item:not(:disabled)')];
     const i = btns.indexOf(document.activeElement);
-    if (e.key === 'ArrowDown') { e.preventDefault(); (btns[i + 1] || btns[0]).focus(); }
-    if (e.key === 'ArrowUp') { e.preventDefault(); (btns[i - 1] || btns[btns.length - 1]).focus(); }
+    const next = e.key === 'ArrowDown' ? btns[i + 1] || btns[0] : e.key === 'ArrowUp' ? btns[i - 1] || btns[btns.length - 1]
+      : e.key === 'Home' ? btns[0] : e.key === 'End' ? btns[btns.length - 1] : null;
+    if (next) { e.preventDefault(); next.focus(); }
   });
-  close = pushLayer(el);
+  const opener = anchor instanceof Element ? anchor : null;
+  if (opener) opener.setAttribute('aria-expanded', 'true');
+  close = pushLayer(el, () => { if (opener) opener.setAttribute('aria-expanded', 'false'); }, { returnFocus: opener });
   place(el, anchor);
   const first = el.querySelector('.menu-item:not(:disabled)');
   if (first) first.focus();
@@ -2822,7 +2860,7 @@ function runDevHash() {
     else if (action === 'menu' && s) sessionMenu(s, $('#toolbar .tb-title .icon-btn'));
     else if (action === 'view' && s) switchView(s, s.view_mode === 'conversation' ? 'terminal' : 'conversation', $('#toolbar .view-seg button[aria-checked="false"]'));
     else if (action === 'desktop' && s) openInDesktop(s, $('#toolbar .tb-title .icon-btn'));
-    else if (['model', 'effort', 'mode'].includes(action) && s) { S.devOpen = action; render(); }
+    else if (['model', 'effort', 'mode', 'context', 'commands'].includes(action) && s) { S.devOpen = action; render(); }
     else if (action === 'attach' && s && convEl && convEl._attachBtn) attachMenu(s, convEl._attachBtn);
     else if (action === 'existing') openAddExisting({ harness: arg || undefined, pick: arg2 ? Number(arg2) : undefined });
     else if (action === 'unsent' && s && convEl && convEl._ta) {

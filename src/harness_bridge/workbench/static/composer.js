@@ -8,8 +8,18 @@
    marker while a choice is only selected, being applied, or was refused. Loaded before app.js
    and uses its helpers (h, icon, api, S, …) only when called. */
 
-const EFFORT_LABEL = { none: '关闭', minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高', ultra: '极高' };
-const FIELD_NAME = { model: '模型', effort: '思考强度', mode: '权限模式' };
+// Effort levels keep the harness's own names (low … xhigh, max; some Codex models also list ultra).
+// Only the levels the harness lists for the model are offered. A level's description is the
+// harness's own (Codex model/list) or, for Claude Code, its documented guidance for that level
+// (code.claude.com/docs/en/model-config). Claude's Ultracode is a separate switch, never a level.
+const CLAUDE_EFFORT_HINT = {
+  low: '快速往返，适合逐步审阅',
+  medium: '日常工作，范围清楚',
+  high: '需要验证、边界情况多',
+  xhigh: '更深入的推理，消耗更多 token',
+  max: '最难的问题；可能想得过多',
+};
+const FIELD_NAME = { model: '模型', effort: '思考强度', mode: '权限模式', claude_ultracode: 'Ultracode' };
 const FIELD_STATE = {
   selected: '已选择，尚未生效',
   applying: '正在应用…',
@@ -54,7 +64,7 @@ function refreshCatalog(s) {
 
 function settingsOf(s) {
   const st = s.settings || {};
-  return { chosen: st.chosen || {}, fields: st.fields || {}, actual: st.actual || {}, notices: st.notices || [], turn_model: st.turn_model };
+  return { chosen: st.chosen || {}, fields: st.fields || {}, actual: st.actual || {}, notices: st.notices || [], turn_model: st.turn_model, native: st.native || {} };
 }
 
 function findModel(cat, id) {
@@ -74,7 +84,22 @@ function effortNow(s) {
   // Only an explicit choice or what the harness reported; never a guess from the catalog.
   const st = settingsOf(s);
   const level = st.chosen.effort || st.actual.effort || null;
-  return { level, label: level ? (EFFORT_LABEL[level] || level) : '默认' };
+  return { level, label: level || '默认' };
+}
+
+function effortHint(s, entry, level) {
+  const own = entry && (entry.effort_descriptions || {})[level];
+  return own || (s.harness === 'claude-code' ? CLAUDE_EFFORT_HINT[level] || '' : '');
+}
+
+// Claude Code's Ultracode: available only after Claude Code itself reported it (get_settings).
+function ultracodeNow(s) {
+  if (s.harness !== 'claude-code') return null;
+  const st = settingsOf(s);
+  const available = st.actual.claude_ultracode_available === true;
+  const on = st.actual.claude_ultracode === true;
+  const chosen = st.chosen.claude_ultracode;
+  return { available, on, chosen: chosen === undefined ? null : chosen, live: !!st.actual.live };
 }
 
 function modeNow(s) {
@@ -88,19 +113,27 @@ function modeNow(s) {
   return { id, entry, label: label || (s.harness === 'codex' ? 'Codex 默认权限' : '需要时询问') };
 }
 
-function fieldMark(rec) {
-  if (!rec || !rec.state || rec.state === 'confirmed' || rec.state === 'default') return null;
-  if (rec.state === 'applying') return stGlyph({ tone: 'idle', glyph: 'spin' });
-  if (rec.state === 'failed') return h('span', { class: 'fmark bad', 'aria-hidden': 'true' }, '!');
-  return h('span', { class: 'fmark ring', 'aria-hidden': 'true' });
+// The harness's own value for the current permission mode, as it reported it.
+function nativeModeText(s) {
+  const n = settingsOf(s).native;
+  if (s.harness === 'codex') return [n.approvalPolicy, n.sandbox && (n.sandbox.type || n.sandbox)].filter(Boolean).join(' · ');
+  return n.permissionMode || '';
 }
 
 function valueLabel(s, name, value) {
   if (value === null || value === undefined) return '默认';
   if (name === 'model') { const m = findModel(catalogOf(s), value); return m ? m.label : value; }
-  if (name === 'effort') return EFFORT_LABEL[value] || value;
+  if (name === 'effort') return value;
+  if (name === 'claude_ultracode') return value ? '开' : '关';
   const m = (catalogOf(s).modes || []).find((x) => x.id === value);
   return m ? m.label : value;
+}
+
+function currentLabel(s, name) {
+  if (name === 'model') return modelNow(s).label;
+  if (name === 'effort') return effortNow(s).label;
+  if (name === 'claude_ultracode') { const u = ultracodeNow(s); return u && u.on ? '开' : '关'; }
+  return modeNow(s).label;
 }
 
 function fieldStateText(s, name) {
@@ -112,10 +145,10 @@ function fieldStateText(s, name) {
   return FIELD_STATE[rec.state] || rec.state;
 }
 
-function fieldTitle(s, name, valueLabel) {
+function fieldTitle(s, name, label) {
   const st = settingsOf(s);
   const rec = st.fields[name];
-  const lines = [`${FIELD_NAME[name]}：${valueLabel}`];
+  const lines = [`${FIELD_NAME[name]}：${label}`];
   if (rec && rec.state) {
     lines.push(fieldStateText(s, name));
     if (rec.note) lines.push(rec.note);
@@ -124,6 +157,23 @@ function fieldTitle(s, name, valueLabel) {
   const src = (st.actual.sources || {})[name];
   if (src) lines.push(`${st.actual.live ? '当前值' : '上次连接时的值'}来自 ${SOURCE_TEXT[src] || src}`);
   return lines.filter(Boolean).join('\n');
+}
+
+// When a selected (not yet applied) choice takes effect, in the harness's own terms.
+function pendingWhen(s) {
+  if (s.harness === 'codex') return '下一条生效';
+  return s.active ? (s.turn ? '本轮后生效' : '正在应用') : '连接时生效';
+}
+
+// The short note next to a control: pending, applying or refused. Never a full-width banner.
+function controlNote(s, names) {
+  const st = settingsOf(s);
+  const recs = names.map((n) => [n, st.fields[n]]).filter(([, r]) => r && r.state);
+  if (recs.some(([, r]) => r.state === 'failed')) return { tone: 'bad', text: '未生效', title: recs.filter(([, r]) => r.state === 'failed').map(([n]) => fieldTitle(s, n, currentLabel(s, n))).join('\n\n') };
+  if (recs.some(([, r]) => r.state === 'applying')) return { tone: 'idle', text: '应用中…', title: '正在请 CLI 应用并读回' };
+  const pending = recs.filter(([, r]) => r.state === 'selected');
+  if (pending.length) return { tone: 'pending', text: pendingWhen(s), title: pending.map(([n, r]) => `${FIELD_NAME[n]}：已选择「${valueLabel(s, n, r.value !== undefined ? r.value : st.chosen[n])}」，${pendingWhen(s)}`).join('\n') };
+  return null;
 }
 
 function chooseSetting(s, changes) {
@@ -135,84 +185,170 @@ function chooseSetting(s, changes) {
   });
 }
 
-// ---------------------------------------------------------------- pickers
+// ---------------------------------------------------------------- menus
+// One menu for every picker in the input bar: role=menu with radio/checkbox items, ↑↓/Home/End,
+// Enter or Space to choose, Esc to close; the opener carries aria-haspopup/aria-expanded and gets
+// focus back on close. `keep` items re-render the menu in place instead of closing it.
 
-function picker(anchor, { title, items, footer }) {
-  const el = h('div', { class: 'menu picker', role: 'menu', 'aria-label': title });
+function menuPanel(anchor, { title, cls = '' }) {
+  const el = h('div', { class: `menu picker ${cls}`.trim(), role: 'menu', 'aria-label': title });
+  const opener = anchor instanceof Element ? anchor : null;
   let close = () => {};
-  if (title) el.append(h('div', { class: 'menu-head' }, title));
-  for (const it of items) {
-    if (it === '-') { el.append(h('div', { class: 'menu-sep' })); continue; }
-    if (it.head) { el.append(h('div', { class: 'menu-head' }, it.head)); continue; }
-    el.append(h('button', {
-      class: `menu-item pick ${it.checked ? 'checked' : ''}`, role: 'menuitemradio', 'aria-checked': String(!!it.checked),
-      type: 'button', disabled: it.disabled, title: it.reason || it.desc || null,
-      onclick: () => { close(); it.action(); },
-    }, h('span', { class: 'pick-check' }, it.checked ? icon('check') : null),
-    h('span', { class: 'grow' }, h('span', { class: 'pick-label' }, it.label), it.desc || it.reason ? h('span', { class: 'pick-desc' }, it.reason || it.desc) : null),
-    it.note ? h('span', { class: 'note' }, it.note) : null));
-  }
-  if (footer) el.append(h('div', { class: 'menu-sep' }), footer);
+  let paint = null;
+  const items = () => [...el.querySelectorAll('.menu-item:not(:disabled)')];
+  const set = (list, footer) => {
+    const keep = document.activeElement && el.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+    const nodes = [];
+    let chips = null; // consecutive `chip` items share one row (a level row, like Claude Code's Effort row)
+    if (title) nodes.push(h('div', { class: 'menu-head', 'aria-hidden': 'true' }, title));
+    list.forEach((it, i) => {
+      if (!it) return;
+      if (!it.chip) chips = null;
+      if (it === '-') { nodes.push(h('div', { class: 'menu-sep', role: 'separator' })); return; }
+      if (it.head) { nodes.push(h('div', { class: 'menu-head', role: 'presentation' }, it.head)); return; }
+      if (it.text) { nodes.push(h('div', { class: 'menu-text hint' }, it.text)); return; }
+      const role = it.kind === 'check' ? 'menuitemcheckbox' : it.kind === 'action' ? 'menuitem' : 'menuitemradio';
+      const checkable = role !== 'menuitem';
+      if (it.chip) {
+        if (!chips) { chips = h('div', { class: 'menu-chips', role: 'group', 'aria-label': it.group || null }); nodes.push(chips); }
+        chips.append(h('button', {
+          class: `menu-item chip ${it.checked ? 'checked' : ''} ${it.mono ? 'mono' : ''}`.trim(), role, type: 'button',
+          'aria-checked': String(!!it.checked), disabled: it.disabled, dataset: { key: it.key || `i${i}` },
+          title: it.reason || it.desc || null, 'aria-description': it.desc || null,
+          onclick: () => { if (it.keep) { it.action(); if (paint) paint(); } else { close(); it.action(); } },
+        }, it.label));
+        return;
+      }
+      nodes.push(h('button', {
+        class: `menu-item pick ${it.checked ? 'checked' : ''} ${it.kind === 'check' ? 'switch' : ''}`.trim(), role, type: 'button',
+        'aria-checked': checkable ? String(!!it.checked) : null, disabled: it.disabled, dataset: { key: it.key || `i${i}` },
+        title: it.reason || it.title || null,
+        onclick: () => { if (it.keep) { it.action(); if (paint) paint(); } else { close(); it.action(); } },
+      },
+      it.kind === 'check' ? h('span', { class: `pick-switch ${it.checked ? 'on' : ''}`, 'aria-hidden': 'true' })
+        : h('span', { class: 'pick-check', 'aria-hidden': 'true' }, it.checked ? icon('check') : (it.icon ? icon(it.icon) : null)),
+      h('span', { class: 'grow' }, h('span', { class: `pick-label ${it.mono ? 'mono' : ''}`.trim() }, it.label),
+        it.desc || it.reason ? h('span', { class: 'pick-desc' }, it.reason || it.desc) : null),
+      it.note ? h('span', { class: 'note' }, it.note) : null));
+    });
+    if (footer) nodes.push(h('div', { class: 'menu-sep', role: 'separator' }), footer);
+    el.replaceChildren(...nodes);
+    place(el, anchor); // measured with its content: opens upward from the input bar
+    const again = keep && el.querySelector(`.menu-item[data-key="${CSS.escape(keep)}"]:not(:disabled)`);
+    const first = again || el.querySelector('.menu-item.checked:not(:disabled)') || el.querySelector('.menu-item:not(:disabled)');
+    if (first) first.focus();
+  };
   el.addEventListener('keydown', (e) => {
-    const btns = [...el.querySelectorAll('.menu-item:not(:disabled)')];
+    const btns = items();
     const i = btns.indexOf(document.activeElement);
-    if (e.key === 'ArrowDown') { e.preventDefault(); (btns[i + 1] || btns[0]).focus(); }
-    if (e.key === 'ArrowUp') { e.preventDefault(); (btns[i - 1] || btns[btns.length - 1]).focus(); }
+    let next = null;
+    const inRow = document.activeElement && document.activeElement.classList.contains('chip');
+    if (e.key === 'ArrowDown') next = btns[i + 1] || btns[0];
+    else if (e.key === 'ArrowUp') next = btns[i - 1] || btns[btns.length - 1];
+    else if (inRow && e.key === 'ArrowRight') next = btns[i + 1] || null;
+    else if (inRow && e.key === 'ArrowLeft') next = btns[i - 1] || null;
+    else if (e.key === 'Home') next = btns[0];
+    else if (e.key === 'End') next = btns[btns.length - 1];
+    if (next) { e.preventDefault(); next.focus(); }
   });
-  close = pushLayer(el);
+  if (opener) opener.setAttribute('aria-expanded', 'true');
+  close = pushLayer(el, () => { if (opener) opener.setAttribute('aria-expanded', 'false'); }, { returnFocus: opener });
   place(el, anchor);
-  const first = el.querySelector('.menu-item.checked:not(:disabled)') || el.querySelector('.menu-item:not(:disabled)');
-  if (first) first.focus();
+  return { el, set, onPaint: (fn) => { paint = fn; }, close: () => close() };
+}
+
+// Simple pickers (a flat list of choices).
+function picker(anchor, { title, items, footer }) {
+  const m = menuPanel(anchor, { title });
+  m.set(items, footer);
+  return m;
 }
 
 function catalogFooter(s) {
   const cat = catalogOf(s);
   const label = HARNESS[s.harness].label;
   const when = cat.fetched_at ? clock(cat.fetched_at) : '';
+  const number = cat.cli_version ? String(cat.cli_version).match(/\d+\.\d+[\w.-]*/) : null;
+  // A version number reads "from Claude Code 2.1.x"; any other version line (e.g. a test stub's
+  // demo catalog) is shown as it is.
+  const source = number ? `目录来自 ${label} ${number[0]}` : cat.cli_version ? `目录：${cat.cli_version}` : `目录来自 ${label}`;
   const line = cat.status === 'probing' ? `正在向 ${label} 读取目录…`
     : cat.error ? `读取目录失败：${cat.error}`
-    : `目录来自 ${label}${cat.cli_version ? ` ${(String(cat.cli_version).match(/\d+\.\d+[\w.-]*/) || [cat.cli_version])[0]}` : ''}${when ? ` · ${when}` : ''}`;
+    : `${source}${when ? ` · ${when}` : ''}`;
   return h('div', { class: 'picker-foot' },
     h('div', { class: 'hint' }, line),
     h('div', { class: 'hint' }, '列表来自 CLI 自己的目录；能否使用以账号和 CLI 实际确认为准。'),
     h('button', { class: 'btn-plain', type: 'button', onclick: () => refreshCatalog(s) }, icon('refresh'), '重新读取'));
 }
 
-function openModelPicker(s, anchor) {
-  const cat = catalogOf(s);
-  const st = settingsOf(s);
-  const now = modelNow(s);
-  const items = [];
-  if (s.harness === 'codex') items.push({ label: '使用 Codex 配置的默认模型', desc: '不单独指定，由 Codex 自己的配置决定', checked: !st.chosen.model, action: () => chooseSetting(s, { model: null }) });
-  for (const m of cat.models || []) {
-    const current = !!(now.entry && now.entry.id === m.id);
-    // With no explicit choice only the "default" row is ticked; the model it resolves to says so.
-    const checked = st.chosen.model ? st.chosen.model === m.id : (s.harness === 'codex' ? false : current);
-    const extras = [];
-    if (m.efforts && m.efforts.length) extras.push(`思考 ${m.efforts.map((e) => EFFORT_LABEL[e] || e).join('/')}`);
-    if (s.harness === 'codex' && m.images === false) extras.push('不接受图片');
-    items.push({
-      label: m.label, desc: [m.description, extras.join(' · ')].filter(Boolean).join(' — '), checked,
-      note: !st.chosen.model && current && s.harness === 'codex' ? '当前' : null,
-      disabled: m.disabled, reason: m.disabled ? (m.description || '当前不可选') : null,
-      action: () => chooseSetting(s, { model: m.id }),
-    });
-  }
-  if (!items.length) items.push({ label: cat.status === 'probing' ? '正在读取…' : '没有可用的模型目录', disabled: true, action: () => {} });
-  picker(anchor, { title: '模型', items, footer: catalogFooter(s) });
+// Model, its effort levels and (Claude Code) Ultracode in one picker, as both harnesses do:
+// Codex's /model picks "model and reasoning effort"; Claude Code's model button opens a picker
+// with an Effort row and the Ultracode switch. Picking a model keeps the picker open on that
+// model's levels; picking a level or flipping Ultracode closes it.
+function openModelPicker(s, anchor, focus) {
+  const sid = s.session_id;
+  const panel = menuPanel(anchor, { title: `模型与思考强度 · ${HARNESS[s.harness].label}`, cls: 'model-picker' });
+  let picked = null; // a model chosen in this picker, before the state stream reports it
+  const draw = () => {
+    const now = findSession(sid) || s;
+    const cat = catalogOf(now);
+    const st = settingsOf(now);
+    const current = modelNow(now);
+    const entry = picked ? findModel(cat, picked) : current.entry;
+    const items = [{ head: '模型' }];
+    if (now.harness === 'codex') {
+      items.push({ key: 'm:', label: '使用 Codex 配置的默认模型', desc: '不单独指定，由 Codex 自己的配置决定', checked: picked === null && !st.chosen.model, keep: true, action: () => { picked = null; chooseSetting(now, { model: null }); } });
+    }
+    for (const m of cat.models || []) {
+      const checked = picked ? picked === m.id : (st.chosen.model ? st.chosen.model === m.id : (now.harness === 'codex' ? false : !!(current.entry && current.entry.id === m.id)));
+      const isCurrent = !st.chosen.model && !picked && current.entry && current.entry.id === m.id && now.harness === 'codex';
+      const extras = [];
+      if (now.harness === 'codex' && m.images === false) extras.push('不接受图片');
+      items.push({
+        key: `m:${m.id}`, label: m.label, desc: [m.description, ...extras].filter(Boolean).join(' · '), checked,
+        title: m.resolved && m.resolved !== m.id ? `${m.id} → ${m.resolved}` : m.id,
+        note: isCurrent ? '当前' : m.id,
+        disabled: m.disabled, reason: m.disabled ? (m.description || '当前不可选') : null, keep: true,
+        action: () => { picked = m.id; chooseSetting(now, { model: m.id }); },
+      });
+    }
+    if (!(cat.models || []).length) items.push({ key: 'm:none', label: cat.status === 'probing' ? '正在读取…' : '没有可用的模型目录', disabled: true, action: () => {} });
+    items.push('-', { head: entry ? `思考强度 · ${entry.label}` : '思考强度' });
+    if (!entry) items.push({ text: '选择模型后显示它支持的强度' });
+    else if (!entry.efforts.length) items.push({ text: `${entry.label} 的原生目录没有提供可选强度` });
+    else {
+      // The levels this model lists, by their own names, in one row; the selected one's own
+      // description below it.
+      const group = `思考强度 · ${entry.label}`;
+      const def = entry.default_effort ? `模型默认：${entry.default_effort}` : `由 ${HARNESS[now.harness].label} 决定${st.actual.effort ? `（当前读回：${st.actual.effort}）` : '（未报告具体值）'}`;
+      items.push({ key: 'e:', chip: true, group, label: '默认', desc: def, checked: !st.chosen.effort, action: () => chooseSetting(now, { effort: null }) });
+      for (const level of entry.efforts) {
+        items.push({ key: `e:${level}`, chip: true, group, label: level, mono: true, desc: effortHint(now, entry, level), checked: st.chosen.effort === level, action: () => chooseSetting(now, { effort: level }) });
+      }
+      const shown = st.chosen.effort && entry.efforts.includes(st.chosen.effort) ? st.chosen.effort : null;
+      items.push({ text: shown ? `${shown}：${effortHint(now, entry, shown) || '（原生目录没有说明）'}` : def });
+    }
+    const u = ultracodeNow(now);
+    if (u) {
+      items.push('-');
+      const reason = !u.live ? '连接后由 Claude Code 报告是否可用' : !u.available ? 'Claude Code 报告当前不可用（需要工作流已开启，且模型支持 xhigh）' : null;
+      const checked = u.chosen === null ? u.on : u.chosen;
+      items.push({
+        key: 'u', kind: 'check', label: 'Ultracode', checked,
+        desc: reason || 'Claude Code 为较大的任务规划工作流；不改变思考强度',
+        disabled: !!reason, reason,
+        action: () => chooseSetting(now, { claude_ultracode: !checked }),
+      });
+    }
+    panel.set(items, catalogFooter(now));
+    if (focus === 'effort') { const el = panel.el.querySelector('.menu-item.checked[data-key^="e:"]') || panel.el.querySelector('.menu-item[data-key^="e:"]'); if (el) el.focus(); focus = null; }
+  };
+  panel.onPaint(draw);
+  draw();
 }
 
-function openEffortPicker(s, anchor) {
-  const st = settingsOf(s);
-  const { entry } = modelNow(s);
-  if (!entry || !entry.efforts.length) return;
-  const def = entry.default_effort ? `（模型默认：${EFFORT_LABEL[entry.default_effort] || entry.default_effort}）` : '';
-  const items = [{ label: `默认${def}`, desc: `由 ${HARNESS[s.harness].label} 按模型决定`, checked: !st.chosen.effort, action: () => chooseSetting(s, { effort: null }) }];
-  for (const level of entry.efforts) {
-    items.push({ label: EFFORT_LABEL[level] || level, note: level, desc: (entry.effort_descriptions || {})[level] || '', checked: st.chosen.effort === level, action: () => chooseSetting(s, { effort: level }) });
-  }
-  picker(anchor, { title: `思考强度 · ${entry.label}`, items });
-}
+// Kept for the development hook (#dev=effort): the same picker, focused on the levels.
+function openEffortPicker(s, anchor) { openModelPicker(s, anchor, 'effort'); }
 
 function openModePicker(s, anchor) {
   const cat = catalogOf(s);
@@ -227,77 +363,92 @@ function openModePicker(s, anchor) {
       const model = modelNow(s).entry;
       if (model && !model.auto_mode) { available = false; reason = '当前模型不支持自动模式'; }
     }
-    items.push({ label: m.label, desc: m.description, checked: (st.chosen.mode || now.id) === m.id, disabled: !available, reason, action: () => chooseSetting(s, { mode: m.id }) });
+    const native = s.harness === 'codex' ? [m.approval, m.sandbox_mode].filter(Boolean).join(' · ') : m.id;
+    items.push({ key: `p:${m.id}`, label: m.label, desc: [m.description, native].filter(Boolean).join(' — '), checked: (st.chosen.mode || now.id) === m.id, disabled: !available, reason, action: () => chooseSetting(s, { mode: m.id }) });
   }
   const label = HARNESS[s.harness].label;
   const reviewer = REVIEWER[st.actual.reviewer] || st.actual.reviewer;
-  const foot = h('div', { class: 'picker-foot' }, h('div', { class: 'hint' },
-    s.harness === 'codex'
+  const native = nativeModeText(s);
+  const foot = h('div', { class: 'picker-foot' },
+    native ? h('div', { class: 'hint' }, `${label} 读回：${native}`) : null,
+    h('div', { class: 'hint' }, s.harness === 'codex'
       ? '这些是 Codex 的审批方式与沙箱组合；完全访问（不审批、不设沙箱）不在 RepoBridge 中提供。'
       : `这些是 ${label} 自己的权限模式；跳过全部权限检查的模式不在 RepoBridge 中提供。`),
-  s.harness === 'codex' && reviewer ? h('div', { class: 'hint' }, `审批由${reviewer}处理（Codex 自己的 approvals_reviewer 设置，RepoBridge 不改动）。`) : null);
-  picker(anchor, { title: '权限模式', items, footer: foot });
+    s.harness === 'codex' && reviewer ? h('div', { class: 'hint' }, `审批由${reviewer}处理（Codex 自己的 approvals_reviewer 设置，RepoBridge 不改动）。`) : null);
+  picker(anchor, { title: s.harness === 'codex' ? '权限 · Codex' : '权限模式 · Claude Code', items, footer: foot });
 }
 
-// ---------------------------------------------------------------- controls row
+// ---------------------------------------------------------------- input bar controls
+
+// The model button's text: the native model name, its effort level and (Claude) Ultracode, the
+// way each harness labels its own model button.
+function modelButtonText(s) {
+  const m = modelNow(s);
+  const parts = [m.label];
+  if (m.entry && m.entry.efforts && m.entry.efforts.length) parts.push(effortNow(s).label);
+  const u = ultracodeNow(s);
+  if (u && (u.chosen === null ? u.on : u.chosen)) parts.push('Ultracode');
+  return parts.join(' · ');
+}
 
 function renderControls(s) {
   const root = convEl;
   if (!root || !root._left || !root._right) return;
   ensureCatalog(s);
   const cat = catalogOf(s);
-  const st = settingsOf(s);
   const ready = cat.models && cat.models.length;
   const busy = S.pending.has(`settings:${s.session_id}`);
   const loading = cat.status === 'probing' && !ready;
-  const pill = (name, iconName, text, onClick, extra = {}) => h('button', {
-    class: `cpill ${extra.cls || ''}`, type: 'button', disabled: extra.disabled || busy,
-    title: extra.title || fieldTitle(s, name, text), 'aria-label': `${FIELD_NAME[name]}：${text}`,
-    onclick: (e) => onClick(e.currentTarget),
-  }, icon(iconName), h('span', { class: 'pill-text' }, text), fieldMark(st.fields[name]), icon('caret', 'pill-caret'));
-
-  const model = modelNow(s);
-  const effort = effortNow(s);
-  const mode = modeNow(s);
   const unavailable = !ready ? (loading ? `正在向 ${HARNESS[s.harness].label} 读取模型目录…` : (cat.error ? `读取模型目录失败：${cat.error}` : '还没有模型目录')) : null;
-  const modelPill = pill('model', 'spark', ready ? model.label : (loading ? '读取目录…' : '模型'), (a) => (ready ? openModelPicker(s, a) : refreshCatalog(s)),
-    unavailable ? { title: `${unavailable}${cat.error || !loading ? '（点击重新读取）' : ''}`, disabled: loading } : {});
-  const efforts = model.entry ? model.entry.efforts : [];
-  const effortPill = ready && model.entry && !efforts.length
-    ? h('span', { class: 'cpill static', title: `${model.entry.label} 不支持调整思考强度` }, icon('gauge'), h('span', { class: 'pill-text' }, '思考不可调'))
-    : pill('effort', 'gauge', `思考 ${effort.label}`, (a) => openEffortPicker(s, a), ready && model.entry ? {} : { disabled: true, title: unavailable || '选择模型后可调整' });
-  const modePill = pill('mode', 'shield', mode.label, (a) => openModePicker(s, a), ready ? { cls: mode.id && mode.id !== 'default' && mode.id !== 'read-only' && mode.id !== 'workspace' ? 'accent' : '' } : { disabled: true, title: unavailable });
-  // Rebuild only when something shown changed: replacing a pill between mousedown and click
+  const pill = (fields, iconName, text, aria, onClick, extra = {}) => h('button', {
+    class: `cpill ${extra.cls || ''}`.trim(), type: 'button', disabled: extra.disabled || busy,
+    title: extra.title || fields.map((f) => fieldTitle(s, f, currentLabel(s, f))).join('\n\n'),
+    'aria-label': aria, 'aria-haspopup': 'menu', 'aria-expanded': 'false',
+    onclick: (e) => onClick(e.currentTarget),
+  }, icon(iconName), h('span', { class: 'pill-text' }, text), icon('caret', 'pill-caret'));
+  const noteEl = (note) => (note ? h('span', { class: `ctl-note ${note.tone}`, title: note.title }, note.text) : null);
+
+  const modelFields = ['model', 'effort', ...(s.harness === 'claude-code' ? ['claude_ultracode'] : [])];
+  const text = ready ? modelButtonText(s) : (loading ? '读取模型目录…' : '模型');
+  const modelPill = pill(modelFields, 'spark', text, `模型与思考强度：${text}`, (a) => (ready ? openModelPicker(s, a) : refreshCatalog(s)),
+    unavailable ? { cls: 'model', title: `${unavailable}${cat.error || !loading ? '（点击重新读取）' : ''}`, disabled: loading } : { cls: 'model' });
+  const mode = modeNow(s);
+  const modePill = pill(['mode'], 'shield', mode.label, `${s.harness === 'codex' ? '权限' : '权限模式'}：${mode.label}`, (a) => openModePicker(s, a),
+    ready ? { cls: mode.id && mode.id !== 'default' && mode.id !== 'read-only' && mode.id !== 'workspace' ? 'mode accent' : 'mode' } : { cls: 'mode', disabled: true, title: unavailable });
+  const modelNote = noteEl(controlNote(s, modelFields));
+  const modeNote = noteEl(controlNote(s, ['mode']));
+  const ctx = renderContextIndicator(s);
+  // Rebuild only when something shown changed: replacing a control between mousedown and click
   // would swallow the click.
-  const sig = [modelPill, effortPill, modePill].map((el) => `${el.className}|${el.disabled}|${el.title}|${el.textContent}|${el.querySelector('.fmark, .st') ? el.querySelector('.fmark, .st').className : ''}`).join('#');
+  const sig = [modePill, modeNote, ctx, modelNote, modelPill].map((el) => (el ? `${el.className}|${el.disabled}|${el.title}|${el.textContent}|${el.getAttribute('aria-label')}` : '-')).join('#');
   if (root._ctlSig === sig && root._left.firstChild === root._attachBtn && root._right.lastChild === root._send && !S.devOpen) return;
   root._ctlSig = sig;
-  root._left.replaceChildren(root._attachBtn, modePill);
-  root._right.replaceChildren(modelPill, effortPill, root._send);
+  root._left.replaceChildren(...[root._attachBtn, root._cmdBtn, modePill, modeNote].filter(Boolean));
+  root._right.replaceChildren(...[ctx, modelNote, modelPill, root._send].filter(Boolean));
   if (S.devOpen && ready) {
-    // Development snapshots (#dev=model|effort|mode): open once the pills exist.
+    // Development snapshots (#dev=model|effort|mode|context|commands): open once the controls exist.
     const which = S.devOpen;
     S.devOpen = null;
-    const open = { model: openModelPicker, effort: openEffortPicker, mode: openModePicker }[which];
-    queueMicrotask(() => open(s, { model: modelPill, effort: effortPill, mode: modePill }[which]));
+    const open = { model: () => openModelPicker(s, modelPill), effort: () => openEffortPicker(s, modelPill), mode: () => openModePicker(s, modePill), context: () => openContextPanel(s, ctx), commands: () => openCommandMenu(s, root._cmdBtn) }[which];
+    if (open) queueMicrotask(open);
   }
 }
 
+// A refused choice the user must notice (shown above the input box until dismissed), or null.
+// Pending choices are shown next to their control instead.
 function settingsStatus(s) {
-  // A refused or pending choice the user should notice, or null.
   composerState();
   const st = settingsOf(s);
-  for (const name of ['model', 'effort', 'mode']) {
+  for (const name of ['model', 'effort', 'mode', 'claude_ultracode']) {
     const rec = st.fields[name];
     if (rec && rec.state === 'failed' && !S.dismissed.has(`f:${s.session_id}:${name}:${rec.at}`)) {
-      return { tone: 'bad', text: rec.error || `${FIELD_NAME[name]}没有生效`, dismiss: `f:${s.session_id}:${name}:${rec.at}` };
+      const tried = rec.attempted !== undefined ? `「${valueLabel(s, name, rec.attempted)}」` : '';
+      return {
+        tone: 'bad',
+        text: `${FIELD_NAME[name]}${tried}没有生效${rec.error ? `：${rec.error}` : ''}。当前仍是「${currentLabel(s, name)}」。`,
+        dismiss: `f:${s.session_id}:${name}:${rec.at}`,
+      };
     }
-  }
-  const pending = ['model', 'effort', 'mode'].filter((n) => st.fields[n] && st.fields[n].state === 'selected');
-  if (pending.length) {
-    const names = pending.map((n) => FIELD_NAME[n]).join('、');
-    const when = s.harness === 'codex' ? '会随下一条消息一起发给 Codex' : (s.active ? (s.turn ? '会在这一轮结束后应用' : '正在应用') : '会在连接时应用');
-    return { tone: 'idle', text: `已选择新的${names}，${when}` };
   }
   return null;
 }
@@ -393,7 +544,6 @@ function attachMenu(s, anchor) {
   menu(anchor, [
     { icon: 'image', label: '添加图片或文件…', note: '也可粘贴或拖入', action: () => pickFiles(sid) },
     { icon: 'search', label: '引用项目文件', note: '@', action: () => insertAtCaret(sid, '@') },
-    s.harness === 'claude-code' && (catalogOf(s).commands || []).length ? { icon: 'terminal', label: '使用命令', note: '/', action: () => insertAtCaret(sid, '/', true) } : null,
   ]);
 }
 
@@ -421,7 +571,7 @@ function updateMention(sid) {
   const ta = root._ta;
   const before = ta.value.slice(0, ta.selectionStart);
   const file = /(^|\s)@("?)([^\s"@]*)$/.exec(before);
-  const cmd = s && s.harness === 'claude-code' ? /^\/([\w:.-]*)$/.exec(before) : null;
+  const cmd = s ? /^\/([\w:.-]*)$/.exec(before) : null;
   if (file) {
     const start = before.length - file[3].length - file[2].length - 1;
     clearTimeout(mentionTimer);
@@ -441,9 +591,8 @@ function updateMention(sid) {
     return;
   }
   if (cmd) {
-    const q = cmd[1].toLowerCase();
-    const list = (catalogOf(s).commands || []).filter((c) => c.name.toLowerCase().includes(q)).slice(0, 8);
-    showPop(sid, list.map((c) => ({ label: `/${c.name}`, desc: c.description, note: c.hint, value: `/${c.name} ` })), 0, `${HARNESS[s.harness].label} 命令`, '没有匹配的命令');
+    const list = slashEntries(s, cmd[1]).slice(0, 10);
+    showPop(sid, list, 0, `${HARNESS[s.harness].label} 命令`, s.harness === 'codex' ? '对话视图只接入了 /model、/permissions、/compact、/status、/mention' : '没有匹配的命令');
     return;
   }
   hidePop();
@@ -457,7 +606,8 @@ function showPop(sid, entries, start, title, empty) {
   const paint = () => {
     const st = root._popState;
     root._pop.replaceChildren(h('div', { class: 'menu-head' }, title), ...(st.entries.length ? st.entries.map((e, i) => h('button', {
-      class: `menu-item ${i === st.active ? 'active' : ''}`, type: 'button', tabindex: '-1',
+      class: `menu-item ${i === st.active ? 'active' : ''} ${e.disabled ? 'disabled' : ''}`.trim(), type: 'button', tabindex: '-1',
+      role: 'option', 'aria-selected': String(i === st.active), 'aria-disabled': e.disabled ? 'true' : null,
       onmousedown: (ev) => { ev.preventDefault(); pickPop(sid, i); },
     }, h('span', { class: 'grow' }, h('span', { class: 'pick-label mono' }, e.label), e.desc ? h('span', { class: 'pick-desc' }, e.desc) : null), e.note ? h('span', { class: 'note' }, e.note) : null))
       : [h('div', { class: 'hint', style: 'padding:6px 10px' }, empty)]));
@@ -477,12 +627,17 @@ function pickPop(sid, index) {
   const root = convEl;
   const st = root && root._popState;
   if (!st || !st.entries[index]) return;
+  const entry = st.entries[index];
+  if (entry.disabled) return;
   const ta = root._ta;
   const end = ta.selectionStart;
-  ta.setRangeText(st.entries[index].value, st.start, end, 'end');
+  // A command that is an action here (compact, model, …): the typed "/…" is removed, the rest of
+  // the draft stays, and the action runs; nothing is sent.
+  ta.setRangeText(entry.action ? '' : entry.value, st.start, end, 'end');
   hidePop();
   ta.dispatchEvent(new Event('input'));
   ta.focus();
+  if (entry.action) runSlashAction(findSession(sid), entry.action);
 }
 
 function popKey(e, sid) {
@@ -682,18 +837,19 @@ function buildComposer(s) {
   const ta = h('textarea', { rows: '1', 'aria-label': `给 ${label} 发消息` });
   ta.value = S.drafts.get(sid) || '';
   const send = h('button', { class: 'send-btn', type: 'button' });
-  const hint = h('span', { class: 'hint composer-hint' });
   const status = h('div', { class: 'conv-status', 'aria-live': 'polite' });
   const pop = h('div', { class: 'menu mention-pop', hidden: true, role: 'listbox' });
   const attRow = h('div', { class: 'att-row', hidden: true });
-  const attachBtn = h('button', { class: 'icon-btn', type: 'button', title: '添加附件、引用文件', 'aria-label': '添加附件、引用文件', onclick: (e) => attachMenu(findSession(sid), e.currentTarget) }, icon('clip'));
+  const attachBtn = h('button', { class: 'icon-btn', type: 'button', title: '添加附件、引用文件', 'aria-label': '添加附件、引用文件', 'aria-haspopup': 'menu', 'aria-expanded': 'false', onclick: (e) => attachMenu(findSession(sid), e.currentTarget) }, icon('clip'));
+  // The harness's own commands and context actions, the way both harnesses open them with "/".
+  const cmdBtn = h('button', { class: 'icon-btn', type: 'button', title: `${label} 命令与上下文（也可输入 /）`, 'aria-label': `${label} 命令与上下文`, 'aria-haspopup': 'menu', 'aria-expanded': 'false', onclick: (e) => openCommandMenu(findSession(sid), e.currentTarget) }, icon('slash'));
   const left = h('div', { class: 'cb-left' });
   const right = h('div', { class: 'cb-right' });
-  const box = h('div', { class: 'composer' }, pop, attRow, ta, h('div', { class: 'composer-bar' }, left, hint, right));
+  const box = h('div', { class: 'composer' }, pop, attRow, ta, h('div', { class: 'composer-bar' }, left, right));
   const unsent = h('div', { class: 'unsent-list', hidden: true, role: 'region', 'aria-label': '没有发出的消息' });
   const wrap = h('div', { class: 'composer-wrap' }, status, unsent, box);
   const root = convRoot();
-  Object.assign(root, { _ta: ta, _send: send, _hint: hint, _status: status, _box: box, _pop: pop, _attRow: attRow, _attachBtn: attachBtn, _left: left, _right: right, _unsent: unsent, _popState: null });
+  Object.assign(root, { _ta: ta, _send: send, _status: status, _box: box, _pop: pop, _attRow: attRow, _attachBtn: attachBtn, _cmdBtn: cmdBtn, _left: left, _right: right, _unsent: unsent, _popState: null });
   ta.addEventListener('input', () => { S.drafts.set(sid, ta.value); autosize(ta); updateMention(sid); updateConvChrome(findSession(sid), convFor(sid)); });
   ta.addEventListener('click', () => updateMention(sid));
   ta.addEventListener('blur', () => setTimeout(hidePop, 120));
