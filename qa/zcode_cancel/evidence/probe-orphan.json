@@ -1,0 +1,38 @@
+{
+ "case": "orphan",
+ "probe_pid": 321,
+ "grandchild_first": {
+  "comm": "python3",
+  "state": "S",
+  "ppid": 1,
+  "starttime": 20020
+ },
+ "series": [
+  {
+   "t_ms": 0,
+   "stat": {
+    "comm": "python3",
+    "state": "S",
+    "ppid": 1,
+    "starttime": 20020
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 205,
+   "stat": {
+    "comm": "python3",
+    "state": "Z",
+    "ppid": 1,
+    "starttime": 20020
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 1674,
+   "stat": null,
+   "kill0": "ProcessLookupError"
+  }
+ ],
+ "final_parent": null
+}

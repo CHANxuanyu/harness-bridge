@@ -1,0 +1,35 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________________ test_cancel_stops_both_transport_and_peer ___________________
+
+fx = <tests.conftest.Fixture object at 0x7fa992a5ec10>
+peer = PosixPath('<scratch>/obs/run3/tmp/test_cancel_stops_both_transpo0/zc-stand-in')
+
+    def test_cancel_stops_both_transport_and_peer(fx: Fixture, peer: Path) -> None:
+        log = fx.base / "rpc.jsonl"
+        b = bridge(fx, HBRIDGE_ZC_MODE="sleep", HBRIDGE_ZC_LOG=str(log))
+        tid = b.create(zc_spec(fx, wall_timeout_seconds=30, kill_grace_seconds=0.2), "k")["task_id"]
+        job = b.run(tid, executor_binary=str(peer), background=True, idempotency_key="dispatch")
+        try:
+            wait_for(b.store, tid, lambda t: t.state == "RUNNING")
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                if log.exists() and '"session/send"' in log.read_text():
+                    break
+                time.sleep(0.05)
+            else:
+                pytest.fail("protocol peer did not receive the synthetic turn")
+            pid = json.loads(log.read_text().splitlines()[-1])["pid"]
+            attempt = b.store.list_attempts(tid)[0]
+            assert attempt.pid != pid and attempt.pgid == os.getpgid(pid)
+            assert b.cancel(tid, wait_seconds=10)["state"] == "CANCELLED"
+            assert finished(b, job["job_id"])["executor_exit_confirmed"]
+            assert not group_alive(attempt.pgid)
+>           with pytest.raises(ProcessLookupError):
+E           Failed: DID NOT RAISE ProcessLookupError
+
+tests/integration/test_zcode_stub_flow.py:236: Failed
+=========================== short test summary info ============================
+FAILED tests/integration/test_zcode_stub_flow.py::test_cancel_stops_both_transport_and_peer
+1 failed in 6.00s
+pytest_exit=1

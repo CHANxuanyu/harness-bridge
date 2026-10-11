@@ -1,0 +1,190 @@
+{
+ "case": "orphan",
+ "probe_pid": 339,
+ "grandchild_first": {
+  "comm": "python3",
+  "state": "S",
+  "ppid": 1,
+  "starttime": 21980
+ },
+ "series": [
+  {
+   "t_ms": 0,
+   "stat": {
+    "comm": "python3",
+    "state": "S",
+    "ppid": 1,
+    "starttime": 21980
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 210,
+   "stat": {
+    "comm": "python3",
+    "state": "Z",
+    "ppid": 1,
+    "starttime": 21980
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 2122,
+   "stat": null,
+   "kill0": "ProcessLookupError"
+  }
+ ],
+ "final_parent": null
+}
+{
+ "case": "orphan",
+ "probe_pid": 342,
+ "grandchild_first": {
+  "comm": "python3",
+  "state": "R",
+  "ppid": 1,
+  "starttime": 22286
+ },
+ "series": [
+  {
+   "t_ms": 0,
+   "stat": {
+    "comm": "python3",
+    "state": "S",
+    "ppid": 1,
+    "starttime": 22286
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 204,
+   "stat": {
+    "comm": "python3",
+    "state": "Z",
+    "ppid": 1,
+    "starttime": 22286
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 2058,
+   "stat": null,
+   "kill0": "ProcessLookupError"
+  }
+ ],
+ "final_parent": null
+}
+{
+ "case": "orphan",
+ "probe_pid": 345,
+ "grandchild_first": {
+  "comm": "python3",
+  "state": "S",
+  "ppid": 1,
+  "starttime": 22592
+ },
+ "series": [
+  {
+   "t_ms": 0,
+   "stat": {
+    "comm": "python3",
+    "state": "S",
+    "ppid": 1,
+    "starttime": 22592
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 206,
+   "stat": {
+    "comm": "python3",
+    "state": "Z",
+    "ppid": 1,
+    "starttime": 22592
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 2000,
+   "stat": null,
+   "kill0": "ProcessLookupError"
+  }
+ ],
+ "final_parent": null
+}
+{
+ "case": "orphan",
+ "probe_pid": 348,
+ "grandchild_first": {
+  "comm": "python3",
+  "state": "S",
+  "ppid": 1,
+  "starttime": 22900
+ },
+ "series": [
+  {
+   "t_ms": 0,
+   "stat": {
+    "comm": "python3",
+    "state": "S",
+    "ppid": 1,
+    "starttime": 22900
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 205,
+   "stat": {
+    "comm": "python3",
+    "state": "Z",
+    "ppid": 1,
+    "starttime": 22900
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 1923,
+   "stat": null,
+   "kill0": "ProcessLookupError"
+  }
+ ],
+ "final_parent": null
+}
+{
+ "case": "orphan",
+ "probe_pid": 351,
+ "grandchild_first": {
+  "comm": "python3",
+  "state": "S",
+  "ppid": 1,
+  "starttime": 23204
+ },
+ "series": [
+  {
+   "t_ms": 0,
+   "stat": {
+    "comm": "python3",
+    "state": "S",
+    "ppid": 1,
+    "starttime": 23204
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 205,
+   "stat": {
+    "comm": "python3",
+    "state": "Z",
+    "ppid": 1,
+    "starttime": 23204
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 1876,
+   "stat": null,
+   "kill0": "ProcessLookupError"
+  }
+ ],
+ "final_parent": null
+}

@@ -1,0 +1,43 @@
+{
+ "case": "subreaper",
+ "probe_pid": 324,
+ "grandchild_first": {
+  "comm": "python3",
+  "state": "S",
+  "ppid": 324,
+  "starttime": 20326
+ },
+ "series": [
+  {
+   "t_ms": 0,
+   "stat": {
+    "comm": "python3",
+    "state": "S",
+    "ppid": 324,
+    "starttime": 20326
+   },
+   "kill0": "no-exception"
+  },
+  {
+   "t_ms": 205,
+   "stat": {
+    "comm": "python3",
+    "state": "Z",
+    "ppid": 324,
+    "starttime": 20326
+   },
+   "kill0": "no-exception"
+  }
+ ],
+ "final_parent": {
+  "pid": 324,
+  "comm": "python3",
+  "state": "R",
+  "ppid": 320,
+  "starttime": 20323
+ },
+ "after_wait": {
+  "stat": null,
+  "kill0": "ProcessLookupError"
+ }
+}

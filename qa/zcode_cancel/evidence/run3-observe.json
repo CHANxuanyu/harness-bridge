@@ -1,0 +1,569 @@
+{
+ "invoking_markers_present": {
+  "CLAUDE_CODE_REMOTE": true,
+  "CLAUDE_CODE_REMOTE_SESSION_ID": true,
+  "CODEX_CLOUD": false,
+  "CLAUDECODE": true
+ },
+ "import_path": "<scratch>/zc/src/harness_bridge/__init__.py",
+ "markers_inside_test_after_fixtures": {
+  "CLAUDE_CODE_REMOTE": false,
+  "CLAUDE_CODE_REMOTE_SESSION_ID": false,
+  "CODEX_CLOUD": false,
+  "CLAUDECODE": false
+ },
+ "pid1": {
+  "pid": 1,
+  "comm": "process_api",
+  "state": "S",
+  "ppid": 0
+ },
+ "phases": {
+  "setup": "passed",
+  "call": "failed",
+  "teardown": "passed"
+ },
+ "failure_type": "Failed",
+ "pytest_pid": 468,
+ "tracked_first_seen": {
+  "474": {
+   "pid": 474,
+   "comm": "git",
+   "state": "R",
+   "ppid": 468,
+   "pgid": 468,
+   "sid": 438,
+   "starttime": 29959,
+   "first_seen_ms": 11.3
+  },
+  "478": {
+   "pid": 478,
+   "comm": "python",
+   "state": "R",
+   "ppid": 468,
+   "pgid": 468,
+   "sid": 438,
+   "starttime": 29960,
+   "first_seen_ms": 22.1
+  },
+  "479": {
+   "pid": 479,
+   "comm": "git",
+   "state": "R",
+   "ppid": 468,
+   "pgid": 468,
+   "sid": 438,
+   "starttime": 29960,
+   "first_seen_ms": 32.7
+  },
+  "481": {
+   "pid": 481,
+   "comm": "git",
+   "state": "R",
+   "ppid": 479,
+   "pgid": 468,
+   "sid": 438,
+   "starttime": 29961,
+   "first_seen_ms": 32.8
+  },
+  "483": {
+   "pid": 483,
+   "comm": "python",
+   "state": "R",
+   "ppid": 468,
+   "pgid": 483,
+   "sid": 483,
+   "starttime": 29962,
+   "first_seen_ms": 53.5
+  },
+  "485": {
+   "pid": 485,
+   "comm": "python",
+   "state": "R",
+   "ppid": 483,
+   "pgid": 485,
+   "sid": 485,
+   "starttime": 29981,
+   "first_seen_ms": 231.9
+  },
+  "486": {
+   "pid": 486,
+   "comm": "python",
+   "state": "R",
+   "ppid": 485,
+   "pgid": 485,
+   "sid": 485,
+   "starttime": 29999,
+   "first_seen_ms": 421.7
+  }
+ },
+ "peer_pids_from_log": [
+  486
+ ],
+ "reaper_identities": {
+  "1": {
+   "pid": 1,
+   "comm": "process_api",
+   "state": "S",
+   "ppid": 0
+  }
+ },
+ "transitions": [
+  {
+   "t_ms": 11.5,
+   "pid": 474,
+   "now": {
+    "state": "R",
+    "ppid": 468,
+    "pgid": 468
+   }
+  },
+  {
+   "t_ms": 22.3,
+   "pid": 474,
+   "now": "gone"
+  },
+  {
+   "t_ms": 22.4,
+   "pid": 478,
+   "now": {
+    "state": "R",
+    "ppid": 468,
+    "pgid": 468
+   }
+  },
+  {
+   "t_ms": 32.8,
+   "pid": 478,
+   "now": "gone"
+  },
+  {
+   "t_ms": 32.9,
+   "pid": 479,
+   "now": {
+    "state": "S",
+    "ppid": 468,
+    "pgid": 468
+   }
+  },
+  {
+   "t_ms": 32.9,
+   "pid": 481,
+   "now": {
+    "state": "R",
+    "ppid": 479,
+    "pgid": 468
+   }
+  },
+  {
+   "t_ms": 43.2,
+   "pid": 479,
+   "now": "gone"
+  },
+  {
+   "t_ms": 43.2,
+   "pid": 481,
+   "now": "gone"
+  },
+  {
+   "t_ms": 53.7,
+   "pid": 483,
+   "now": {
+    "state": "R",
+    "ppid": 468,
+    "pgid": 483
+   }
+  },
+  {
+   "t_ms": 232.4,
+   "pid": 485,
+   "now": {
+    "state": "R",
+    "ppid": 483,
+    "pgid": 485
+   }
+  },
+  {
+   "t_ms": 242.9,
+   "pid": 483,
+   "now": {
+    "state": "S",
+    "ppid": 468,
+    "pgid": 483
+   }
+  },
+  {
+   "t_ms": 337.3,
+   "pid": 483,
+   "now": {
+    "state": "R",
+    "ppid": 468,
+    "pgid": 483
+   }
+  },
+  {
+   "t_ms": 347.7,
+   "pid": 483,
+   "now": {
+    "state": "S",
+    "ppid": 468,
+    "pgid": 483
+   }
+  },
+  {
+   "t_ms": 422.0,
+   "pid": 485,
+   "now": {
+    "state": "S",
+    "ppid": 483,
+    "pgid": 485
+   }
+  },
+  {
+   "t_ms": 422.0,
+   "pid": 486,
+   "now": {
+    "state": "R",
+    "ppid": 485,
+    "pgid": 485
+   }
+  },
+  {
+   "t_ms": 454.2,
+   "pid": 486,
+   "now": {
+    "state": "S",
+    "ppid": 485,
+    "pgid": 485
+   }
+  },
+  {
+   "t_ms": 550.9,
+   "pid": 483,
+   "now": {
+    "state": "R",
+    "ppid": 468,
+    "pgid": 483
+   }
+  },
+  {
+   "t_ms": 561.5,
+   "pid": 483,
+   "now": {
+    "state": "S",
+    "ppid": 468,
+    "pgid": 483
+   }
+  },
+  {
+   "t_ms": 764.5,
+   "pid": 485,
+   "now": "gone"
+  },
+  {
+   "t_ms": 764.5,
+   "pid": 486,
+   "now": {
+    "state": "Z",
+    "ppid": 1,
+    "pgid": 485
+   }
+  },
+  {
+   "t_ms": 870.6,
+   "pid": 483,
+   "now": {
+    "state": "R",
+    "ppid": 468,
+    "pgid": 483
+   }
+  },
+  {
+   "t_ms": 902.9,
+   "pid": 483,
+   "now": "gone"
+  },
+  {
+   "t_ms": 2467.4,
+   "pid": 486,
+   "now": "gone"
+  }
+ ],
+ "snapshots": {
+  "before_cancel": {
+   "t_ms": 498.4,
+   "processes": {
+    "474": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "478": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "479": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "481": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "483": {
+     "current": {
+      "pid": 483,
+      "comm": "python",
+      "state": "S",
+      "ppid": 468,
+      "pgid": 483,
+      "sid": 483,
+      "starttime": 29962
+     },
+     "same_start_identity": true,
+     "kill0": "no-exception"
+    },
+    "485": {
+     "current": {
+      "pid": 485,
+      "comm": "python",
+      "state": "S",
+      "ppid": 483,
+      "pgid": 485,
+      "sid": 485,
+      "starttime": 29981
+     },
+     "same_start_identity": true,
+     "kill0": "no-exception"
+    },
+    "486": {
+     "current": {
+      "pid": 486,
+      "comm": "python",
+      "state": "S",
+      "ppid": 485,
+      "pgid": 485,
+      "sid": 485,
+      "starttime": 29999
+     },
+     "same_start_identity": true,
+     "kill0": "no-exception"
+    }
+   },
+   "killpg0": {
+    "468": "no-exception",
+    "483": "no-exception",
+    "485": "no-exception"
+   }
+  },
+  "after_cancel_returned": {
+   "t_ms": 901.8,
+   "processes": {
+    "474": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "478": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "479": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "481": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "483": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "485": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "486": {
+     "current": {
+      "pid": 486,
+      "comm": "python",
+      "state": "Z",
+      "ppid": 1,
+      "pgid": 485,
+      "sid": 485,
+      "starttime": 29999
+     },
+     "same_start_identity": true,
+     "kill0": "no-exception"
+    }
+   },
+   "killpg0": {
+    "468": "no-exception",
+    "483": "ProcessLookupError",
+    "485": "no-exception"
+   }
+  },
+  "at_failed_assertion": {
+   "t_ms": 930.1,
+   "processes": {
+    "474": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "478": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "479": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "481": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "483": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "485": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "486": {
+     "current": {
+      "pid": 486,
+      "comm": "python",
+      "state": "Z",
+      "ppid": 1,
+      "pgid": 485,
+      "sid": 485,
+      "starttime": 29999
+     },
+     "same_start_identity": true,
+     "kill0": "no-exception"
+    }
+   },
+   "killpg0": {
+    "468": "no-exception",
+    "483": "ProcessLookupError",
+    "485": "no-exception"
+   }
+  },
+  "after_fixture_teardown": {
+   "t_ms": 930.9,
+   "processes": {
+    "474": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "478": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "479": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "481": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "483": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "485": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "486": {
+     "current": {
+      "pid": 486,
+      "comm": "python",
+      "state": "Z",
+      "ppid": 1,
+      "pgid": 485,
+      "sid": 485,
+      "starttime": 29999
+     },
+     "same_start_identity": true,
+     "kill0": "no-exception"
+    }
+   },
+   "killpg0": {
+    "468": "no-exception",
+    "483": "ProcessLookupError",
+    "485": "no-exception"
+   }
+  },
+  "teardown_plus_5s": {
+   "t_ms": 5943.2,
+   "processes": {
+    "474": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "478": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "479": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "481": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "483": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "485": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    },
+    "486": {
+     "current": null,
+     "same_start_identity": null,
+     "kill0": "ProcessLookupError"
+    }
+   },
+   "killpg0": {
+    "468": "no-exception",
+    "483": "ProcessLookupError",
+    "485": "ProcessLookupError"
+   }
+  }
+ },
+ "samples": 585,
+ "pytest_exitstatus": 1
+}
