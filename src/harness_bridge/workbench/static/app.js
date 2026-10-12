@@ -303,7 +303,13 @@ function connect() {
     S.connected = true;
     S.wasDisconnected = false;
     renderNotice();
-    if (missed) checkInflight({ force: true }); // events may have been missed while away
+    if (missed) {
+      checkInflight({ force: true }); // events may have been missed while away
+      // Context too: start again from the App's current snapshot (older ones are ignored by order).
+      if (S.ctxSig) S.ctxSig.clear();
+      const s = selectedSession();
+      if (s && s.view_mode === 'conversation') scheduleContextFetch(s.session_id, 0);
+    }
   });
   es.addEventListener('error', () => { S.connected = false; S.wasDisconnected = true; renderNotice(); });
   es.addEventListener('state', (e) => onState(JSON.parse(e.data)));
@@ -1259,9 +1265,14 @@ function updateConvChrome(s, c) {
   st.className = 'conv-status';
   st.replaceChildren();
   const pick = settingsStatus(s);
+  const refused = S.composerNotes && S.composerNotes.get(s.session_id);
   // Only what needs attention gets this line; connection state is in the toolbar, pending settings
   // next to their control.
-  if (S.switching.has(s.session_id)) st.append(stGlyph({ tone: 'idle', glyph: 'spin' }), '正在切换视图：结束原连接，再用原生恢复接续…');
+  if (refused) {
+    st.classList.add('bad');
+    st.append(icon('warning'), h('span', { class: 'grow selectable', role: 'alert' }, refused.text),
+      h('button', { class: 'btn-plain', type: 'button', onclick: () => { S.composerNotes.delete(s.session_id); updateConvChrome(findSession(s.session_id), convFor(s.session_id)); } }, '知道了'));
+  } else if (S.switching.has(s.session_id)) st.append(stGlyph({ tone: 'idle', glyph: 'spin' }), '正在切换视图：结束原连接，再用原生恢复接续…');
   else if (pendingPerm) { st.classList.add('warn'); st.append(stGlyph({ tone: 'warn', glyph: 'alert' }), `${label} 在等你确认权限或回答问题`); }
   else if (waiting && !running) { st.classList.add('warn'); st.append(stGlyph({ tone: 'warn', glyph: 'alert' }), h('span', { class: 'grow' }, waiting)); }
   else if (pick && pick.tone === 'bad') {
@@ -1292,7 +1303,7 @@ async function sendFromComposer(sid, confirmExternal = false) {
   // "/…" as each harness treats it (context.js): an action, a validated Claude Code command, or a
   // refusal with the reason. A refused or failed command leaves the draft in the box.
   const route = slashRoute(s.harness, text, catalogOf(s).commands);
-  if (route.kind === 'refuse') { toast(route.reason, 'error'); return; }
+  if (route.kind === 'refuse') { composerNotice(sid, route.reason); return; }
   if (route.kind === 'compact') { startCompact(sid, root._send, { fromComposer: true }); return; }
   if (route.kind === 'action') {
     root._ta.value = '';
@@ -1304,8 +1315,9 @@ async function sendFromComposer(sid, confirmExternal = false) {
     return;
   }
   const command = route.kind === 'command' ? route : null;
-  if (command && ids.length) { toast('命令不会附带附件：先移除附件，或把内容作为普通消息发送（开头加一个空格）。', 'error'); return; }
-  if (command && !s.active) { toast(`命令只在已连接的会话里执行：先发送一条普通消息连接 ${HARNESS[s.harness].label}（会用原生恢复接续同一个会话）。`, 'error'); return; }
+  if (command && ids.length) { composerNotice(sid, '命令不会附带附件：先移除附件再执行命令。草稿和附件都还在。'); return; }
+  if (command && !s.active) { composerNotice(sid, `命令只在已连接的会话里执行：先发送一条普通消息连接 ${HARNESS[s.harness].label}（会用原生恢复接续同一个会话）。`); return; }
+  if (S.composerNotes) S.composerNotes.delete(sid);
   const askExternal = (ext) => confirmPopover(root._send, externalPrompt(findSession(sid) || s, ext, () => sendFromComposer(sid, true)));
   if (s.external && !confirmExternal) { askExternal(s.external); return; }
   const clientId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -1388,6 +1400,8 @@ function switchView(s, mode, anchor) {
   const sid = s.session_id;
   const label = HARNESS[s.harness].label;
   const target = mode === 'conversation' ? '对话' : '终端';
+  // The toolbar is drawn again while switching: a follow-up prompt points at the current button.
+  const toggleNow = () => (anchor && anchor.isConnected ? anchor : $('#toolbar .view-seg button[aria-checked="false"]') || anchor);
   const run = async (confirmUnknown) => {
     S.switching.add(sid);
     render();
@@ -1399,7 +1413,19 @@ function switchView(s, mode, anchor) {
       if (e.details && e.details.idle === 'unknown') {
         S.switching.delete(sid);
         render();
-        confirmPopover(anchor, { title: '无法确认是否空闲', text: `${e.message}。仍要切换吗？`, confirm: '仍然切换', danger: true, onConfirm: () => run(true) });
+        confirmPopover(toggleNow(), { title: '无法确认是否空闲', text: `${e.message}。仍要切换吗？`, confirm: '仍然切换', danger: true, onConfirm: () => run(true) });
+        return;
+      }
+      if (e.details && e.details.reason === 'ultracode_terminal_not_integrated') {
+        // The terminal cannot carry this switch yet; turning it off is the user's choice.
+        S.switching.delete(sid);
+        render();
+        confirmPopover(toggleNow(), {
+          title: '终端视图还不能控制 Ultracode',
+          text: `${e.message}。关闭后再切换：会在空闲时用同一个原生会话接续，不发送消息。`,
+          confirm: '关闭 Ultracode',
+          onConfirm: () => chooseSetting(findSession(sid) || s, { claude_ultracode: false }),
+        });
         return;
       }
       fail(e);
@@ -1788,7 +1814,75 @@ function visibleTree() {
   }).filter((g) => !q || g.sessions.length || g.project.name.toLowerCase().includes(q));
 }
 
+// ---------------------------------------------------------------- runtime identity
+// A test or development App says so on every page (/api/state.runtime: profile, native environment
+// and the exact build); the details are one click away for QA. Production shows no badge (its
+// build is listed in Settings). An isolated test profile is not real-model or native acceptance.
+
+const PROFILE_LABEL = { test: '测试环境', dev: '开发环境' };
+const NATIVE_ENV_LABEL = { isolated: '隔离（测试根目录内的配置与替身）', shared: '本机共用配置', custom: '自定义配置目录' };
+
+function runtimeInfo() { return (S.state && S.state.runtime) || null; }
+
+function buildLine(rt) {
+  const b = (rt && rt.build) || {};
+  const dirty = b.code_dirty === true ? ' · 有未提交改动' : b.code_dirty === false ? '' : ' · 改动未知';
+  return `RepoBridge ${b.version || '?'} · ${b.code_sha || 'unknown'}${dirty} · ${rt ? rt.profile : '?'}`;
+}
+
+function runtimeRows(rt) {
+  const b = rt.build || {};
+  return [
+    ['配置', rt.profile],
+    ['原生环境', NATIVE_ENV_LABEL[rt.native_environment] || rt.native_environment || '未知'],
+    ['版本', b.version || '未知'],
+    ['代码', b.code_sha || '未知'],
+    ['工作区', b.code_dirty === true ? '有未提交改动' : b.code_dirty === false ? '干净' : '未知'],
+  ];
+}
+
+function runtimeBadge() {
+  const rt = runtimeInfo();
+  if (!rt || !PROFILE_LABEL[rt.profile]) return null;
+  return h('button', {
+    class: `runtime-badge ${rt.profile}`, type: 'button', title: `${PROFILE_LABEL[rt.profile]}：${buildLine(rt)}`,
+    'aria-label': `${PROFILE_LABEL[rt.profile]}，查看构建与模型目录来源`, 'aria-haspopup': 'dialog', 'aria-expanded': 'false',
+    onclick: (e) => openRuntimePanel(e.currentTarget),
+  }, icon('info'), h('span', {}, PROFILE_LABEL[rt.profile]));
+}
+
+function openRuntimePanel(anchor) {
+  const rt = runtimeInfo();
+  if (!rt) return;
+  const title = PROFILE_LABEL[rt.profile] || '运行环境';
+  // One entry per distinct provenance (both harnesses usually share the same test fixture).
+  const groups = new Map();
+  for (const [harness, c] of Object.entries((S.state && S.state.catalogs) || {})) {
+    if (!c || !c.provenance) continue;
+    const key = JSON.stringify(c.provenance);
+    if (!groups.has(key)) groups.set(key, { provenance: c.provenance, names: [] });
+    groups.get(key).names.push(HARNESS[harness] ? HARNESS[harness].label : harness);
+  }
+  const catalogs = [...groups.values()];
+  const el = h('div', { class: 'popover runtime-panel', role: 'dialog', 'aria-label': title },
+    h('div', { class: 'runtime-head' }, h('span', { class: `runtime-badge ${rt.profile} static` }, title), h('span', { class: 'hint' }, '这个窗口连接的 RepoBridge')),
+    h('dl', { class: 'runtime-rows' }, runtimeRows(rt).flatMap(([k, v]) => [h('dt', {}, k), h('dd', { class: k === '代码' ? 'selectable mono' : 'selectable' }, v)])),
+    catalogs.length ? h('div', { class: 'ctx-sub' }, '模型目录来源') : null,
+    ...catalogs.map((g) => h('div', { class: 'runtime-prov selectable' },
+      h('div', {}, `${g.names.join('、')}：${provenanceText(g.provenance)}`),
+      g.provenance.scope ? h('div', { class: 'hint' }, g.provenance.scope) : null,
+      ...(g.provenance.sources || []).map((src) => h('div', { class: 'hint mono' }, src)))),
+    h('div', { class: 'hint' }, rt.profile === 'test' ? '隔离的测试配置：替身 CLI 与测试数据，不代表真实模型、真实账号或原生窗口验收。' : '开发配置：可能使用自定义的配置目录。'),
+    h('div', { class: 'actions' }, h('button', { class: 'btn btn-small', type: 'button', onclick: () => copyText(buildLine(rt), '已复制构建标识') }, icon('copy'), '复制构建标识')));
+  if (anchor) anchor.setAttribute('aria-expanded', 'true');
+  pushLayer(el, () => { if (anchor) anchor.setAttribute('aria-expanded', 'false'); }, { returnFocus: anchor });
+  place(el, anchor);
+  el.querySelector('button').focus();
+}
+
 function renderSidebar() {
+  const slot = $('#runtime-slot');
+  if (slot) slot.replaceChildren(...[runtimeBadge()].filter(Boolean));
   const tree = $('#tree');
   const focusKey = document.activeElement && tree.contains(document.activeElement)
     ? (document.activeElement.closest('[data-key]') || {}).dataset?.key : null;
@@ -1890,6 +1984,8 @@ function renderToolbar() {
   if (S.renaming) return;
   bar.replaceChildren();
   bar.append(h('button', { class: 'icon-btn', type: 'button', title: '显示/隐藏侧边栏（⌃⌘S）', 'aria-label': '显示或隐藏侧边栏', onclick: toggleSidebar }, icon('sidebar')));
+  // The test identity stays visible when the sidebar (where it normally sits) is hidden.
+  if ($('#app').classList.contains('sidebar-hidden')) { const badge = runtimeBadge(); if (badge) bar.append(badge); }
   const s = selectedSession();
   const p = selectedProject();
   if (!s) {
@@ -2783,6 +2879,9 @@ function openSettings() {
             h('button', { class: 'btn btn-small', type: 'button', onclick: (e) => guarded('refresh-cli', async () => { await api('POST', '/api/harnesses/refresh', {}); setTimeout(draw, 300); }, e.currentTarget) }, '重新检测'),
             h('span', { class: 'hint' }, '只运行 --version，不启动会话。')))),
       h('div', { class: 'settings-row' }, h('span', {}, '键盘快捷键'), h('button', { class: 'btn btn-small', type: 'button', onclick: () => { close(); openShortcuts(); } }, icon('keyboard'), '查看')),
+      ...(runtimeInfo() ? [h('div', { class: 'settings-row', style: 'align-items:flex-start' }, h('span', {}, '运行环境'),
+        h('div', { style: 'flex:1;max-width:340px' }, h('div', { class: 'selectable mono', style: 'font-size:12px;word-break:break-all' }, buildLine(runtimeInfo())),
+          h('button', { class: 'btn btn-small', type: 'button', style: 'margin-top:6px', onclick: () => copyText(buildLine(runtimeInfo()), '已复制构建标识') }, icon('copy'), '复制')))] : []),
       h('p', { class: 'hint', style: 'margin:12px 0 0' }, 'RepoBridge 不读取或保存任何登录令牌。启动会话时不会传递可能把订阅切换为 API 计费的环境变量。'));
   };
   draw();

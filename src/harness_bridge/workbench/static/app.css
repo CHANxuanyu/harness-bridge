@@ -721,6 +721,25 @@ pre.tail {
 .ctx-comp.failed { color: var(--bad); }
 .ctx-comp.unknown { color: var(--warn); }
 .ctx-reason { font-size: 12px; color: var(--warn); line-height: 1.4; }
+.ctx-ind.read-failed .ctx-word { color: var(--warn); }
+/* Test / development identity (from /api/state.runtime), persistent in the sidebar footer. */
+.runtime-slot { display: flex; min-width: 0; margin-left: auto; }
+.runtime-badge {
+  display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn); font: 600 11px var(--font); white-space: nowrap; flex: none; cursor: pointer;
+}
+.runtime-badge .i { width: 12px; height: 12px; }
+.runtime-badge.dev { border-color: var(--line-strong); background: var(--hover); color: var(--text-2); }
+.runtime-badge.static { cursor: default; }
+.toolbar > .runtime-badge { margin-right: 4px; }
+.runtime-panel { width: 360px; max-width: calc(100vw - 16px); display: grid; gap: 8px; }
+.runtime-head { display: flex; align-items: center; gap: 8px; }
+.runtime-rows { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; font-size: 12px; }
+.runtime-rows dt { color: var(--text-3); }
+.runtime-rows dd { margin: 0; word-break: break-all; }
+.runtime-prov { display: grid; gap: 2px; font-size: 12px; }
+.runtime-panel .actions { display: flex; justify-content: flex-end; }
 .ctx-panel .hint { font-size: 11.5px; line-height: 1.45; white-space: normal; }
 .ctx-panel .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 2px; }
 .conv-status[hidden] { display: none; }

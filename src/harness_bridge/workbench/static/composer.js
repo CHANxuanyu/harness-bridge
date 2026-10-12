@@ -264,20 +264,29 @@ function picker(anchor, { title, items, footer }) {
   return m;
 }
 
+// A test catalog's provenance (test profile only): kind, ID and version, e.g. a docs-derived demo.
+const PROVENANCE_KIND = { 'docs-derived-demo': '依据官方文档的演示目录' };
+function provenanceText(p) {
+  if (!p) return '';
+  return `${PROVENANCE_KIND[p.kind] || p.kind || '测试目录'} ${p.id || ''}${p.version ? ` · ${p.version}` : ''}`.trim();
+}
+
 function catalogFooter(s) {
   const cat = catalogOf(s);
   const label = HARNESS[s.harness].label;
   const when = cat.fetched_at ? clock(cat.fetched_at) : '';
   const number = cat.cli_version ? String(cat.cli_version).match(/\d+\.\d+[\w.-]*/) : null;
-  // A version number reads "from Claude Code 2.1.x"; any other version line (e.g. a test stub's
-  // demo catalog) is shown as it is.
-  const source = number ? `目录来自 ${label} ${number[0]}` : cat.cli_version ? `目录：${cat.cli_version}` : `目录来自 ${label}`;
+  const prov = cat.provenance || null;
+  // A demo catalog says so (and what it is based on); a real one names the CLI version it came from.
+  const source = prov ? `目录：${provenanceText(prov)}（测试数据）`
+    : number ? `目录来自 ${label} ${number[0]}` : cat.cli_version ? `目录：${cat.cli_version}` : `目录来自 ${label}`;
   const line = cat.status === 'probing' ? `正在向 ${label} 读取目录…`
     : cat.error ? `读取目录失败：${cat.error}`
     : `${source}${when ? ` · ${when}` : ''}`;
   return h('div', { class: 'picker-foot' },
     h('div', { class: 'hint' }, line),
-    h('div', { class: 'hint' }, '列表来自 CLI 自己的目录；能否使用以账号和 CLI 实际确认为准。'),
+    prov && prov.scope ? h('div', { class: 'hint' }, prov.scope) : null,
+    h('div', { class: 'hint' }, prov ? '这些条目只用于测试，不是当前账号的模型列表。' : '列表来自 CLI 自己的目录；能否使用以账号和 CLI 实际确认为准。'),
     h('button', { class: 'btn-plain', type: 'button', onclick: () => refreshCatalog(s) }, icon('refresh'), '重新读取'));
 }
 
@@ -432,6 +441,15 @@ function renderControls(s) {
     const open = { model: () => openModelPicker(s, modelPill), effort: () => openEffortPicker(s, modelPill), mode: () => openModePicker(s, modePill), context: () => openContextPanel(s, ctx), commands: () => openCommandMenu(s, root._cmdBtn) }[which];
     if (open) queueMicrotask(open);
   }
+}
+
+// Why the input box's text was not sent (a refused "/…"): shown above the box, next to the draft
+// it is about, until the draft changes or it is dismissed. A toast would cover the kept draft.
+function composerNotice(sid, text) {
+  if (!S.composerNotes) S.composerNotes = new Map();
+  S.composerNotes.set(sid, { text, at: Date.now() });
+  const s = findSession(sid);
+  if (s) updateConvChrome(s, convFor(sid));
 }
 
 // A refused choice the user must notice (shown above the input box until dismissed), or null.
@@ -850,7 +868,11 @@ function buildComposer(s) {
   const wrap = h('div', { class: 'composer-wrap' }, status, unsent, box);
   const root = convRoot();
   Object.assign(root, { _ta: ta, _send: send, _status: status, _box: box, _pop: pop, _attRow: attRow, _attachBtn: attachBtn, _cmdBtn: cmdBtn, _left: left, _right: right, _unsent: unsent, _popState: null });
-  ta.addEventListener('input', () => { S.drafts.set(sid, ta.value); autosize(ta); updateMention(sid); updateConvChrome(findSession(sid), convFor(sid)); });
+  ta.addEventListener('input', () => {
+    S.drafts.set(sid, ta.value);
+    if (S.composerNotes) S.composerNotes.delete(sid); // a refusal is about the text as it was
+    autosize(ta); updateMention(sid); updateConvChrome(findSession(sid), convFor(sid));
+  });
   ta.addEventListener('click', () => updateMention(sid));
   ta.addEventListener('blur', () => setTimeout(hidePop, 120));
   ta.addEventListener('keydown', (e) => {

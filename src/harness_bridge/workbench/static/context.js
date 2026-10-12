@@ -8,10 +8,19 @@
    offered only when the App says it can admit it (capabilities.*.available). Nothing here polls a
    CLI, retries an action or touches the input box's draft or attachments.
 
-   "/" works as in each harness: Claude Code's own command catalog (validated before dispatch,
-   identity-changing commands refused), and for Codex the commands its own TUI maps to the same
-   actions (/model, /permissions, /compact, /status, /mention); its other TUI commands are not part
-   of the conversation view and are never sent as a prompt.
+   Every source carries the snapshot's session, run and order {run_seq, closed, revision} (contract
+   "PM review contract revision"): within one session the larger (run_seq, closed, revision) wins,
+   a closed run outranks every live snapshot of that run, and usage and compaction are taken
+   together from the winning snapshot. Equal or older snapshots are ignored, whatever arrives last.
+   A failed read is a read status, not a snapshot: the last accepted values stay, marked as failed
+   and stale, and a late failure never marks a newer read or event as failed.
+
+   "/" works as in each harness. POST /send is ordinary text only. Codex receives text as written,
+   so a leading space keeps "/…" literal; its TUI commands that map to actions here (/model,
+   /permissions, /compact, /status, /mention) run those actions, the others are refused. Claude
+   Code reads a leading "/" itself, also after spaces or line breaks: such text is refused (the
+   draft and attachments stay), and only commands from its own catalog go through the command
+   action, identity-changing ones refused.
 
    Loaded after composer.js and before app.js; the helpers at the top hold no DOM state (tested
    in Node). */
@@ -50,7 +59,7 @@ const CTX_ERROR = {
 };
 
 function parseSlash(text) {
-  // Only a message that starts with "/" (a leading space makes it ordinary text).
+  // A command typed as such: "/" first, no leading space.
   const m = /^\/([A-Za-z][\w:.-]*)(?:\s+([\s\S]*))?$/.exec(String(text || '').replace(/\s+$/, ''));
   return m ? { name: m[1], args: (m[2] || '').trim() } : null;
 }
@@ -58,25 +67,59 @@ function parseSlash(text) {
 // What sending this text does in this harness: 'text' (an ordinary message), 'compact', 'action'
 // (a RepoBridge control that the harness itself offers as that command), 'command' (a validated
 // Claude Code command) or 'refuse' (with the reason; the draft stays).
+// Claude Code treats text whose first non-blank character is "/" as a command; the App refuses
+// to send it as text (reason native_text_ambiguous) and so does this page, before any request.
+const CLAUDE_SLASH_TEXT = 'Claude Code 会把以 / 开头的文字（前面有空格或换行也一样）当作命令处理，所以它不能作为普通文字发送。请改写开头，或从命令菜单选择命令。草稿和附件都还在。';
+
 function slashRoute(harness, text, commands) {
   const parsed = parseSlash(text);
-  if (!parsed) return { kind: 'text' };
-  const { name, args } = parsed;
-  const escape = '（如果这是普通文字，在开头加一个空格再发送。）';
   if (harness === 'codex') {
+    if (!parsed) return { kind: 'text' };
+    const { name, args } = parsed;
+    // Codex receives the text as written: a leading space really does make it ordinary text.
+    const escape = '（如果这是普通文字，在开头加一个空格再发送，Codex 会按原文接收。）';
     if (name === 'compact') return args ? { kind: 'refuse', reason: `/compact 不接受额外内容，只请 Codex 压缩当前对话。${escape}` } : { kind: 'compact' };
     if (CODEX_ACTIONS[name]) return args ? { kind: 'refuse', reason: `/${name} 在对话视图中不接受参数。${escape}` } : { kind: 'action', name };
     return { kind: 'refuse', reason: `/${name} 属于 Codex 终端界面，对话视图没有接入，不会作为提示词发给 Codex。需要时切换到终端视图。${escape}` };
   }
+  if (!parsed) return /^\s*\//.test(String(text || '')) ? { kind: 'refuse', reason: CLAUDE_SLASH_TEXT, code: 'native_text_ambiguous' } : { kind: 'text' };
+  const { name, args } = parsed;
   if (IDENTITY_COMMANDS.includes(name)) {
     return { kind: 'refuse', reason: `/${name} 会改变会话身份（清空、新建、恢复或分叉），同一会话中没有接入。需要时切换到终端视图。` };
   }
   const list = commands || [];
   if (!list.some((c) => c.name === name)) {
-    return { kind: 'refuse', reason: list.length ? `Claude Code 的命令目录里没有 /${name}，不会作为普通提示词发送。${escape}` : `还没有取得 Claude Code 的命令目录，连接后再使用 /${name}。${escape}` };
+    return { kind: 'refuse', reason: list.length ? `Claude Code 的命令目录里没有 /${name}。以 / 开头的文字会被 Claude Code 当作命令，不能作为普通文字发送；请改写开头。` : `还没有取得 Claude Code 的命令目录，连接后再使用 /${name}。` };
   }
   if (name === 'compact') return args ? { kind: 'refuse', reason: '专用压缩操作暂不接受额外指令，请只输入 /compact。' } : { kind: 'compact' };
   return { kind: 'command', name, args };
+}
+
+// Order of a context snapshot: [run_seq, closed, revision], or null when it has none (an older App).
+function ctxOrderKey(snap) {
+  const o = snap && snap.order;
+  if (!o || !Number.isInteger(o.run_seq) || !Number.isInteger(o.revision) || typeof o.closed !== 'boolean') return null;
+  return [o.run_seq, o.closed ? 1 : 0, o.revision];
+}
+
+// Whether `snap` replaces the accepted `prev` of session `sid`: 'accept', 'equal', 'older',
+// 'other-session', 'conflict' (same run_seq, different run), 'unordered' (no order while the held
+// one has one: never by arrival) or 'compat' (neither has an order: an older App, by arrival).
+function contextVerdict(prev, snap, sid) {
+  if (!snap || typeof snap !== 'object') return 'invalid';
+  if (snap.session_id != null && snap.session_id !== sid) return 'other-session';
+  const next = ctxOrderKey(snap);
+  const held = prev ? ctxOrderKey(prev) : null;
+  if (!next) return held ? 'unordered' : 'compat';
+  if (!held) return 'accept';
+  if (next[0] === held[0] && snap.run_id && prev.run_id && snap.run_id !== prev.run_id) return 'conflict';
+  for (let i = 0; i < 3; i += 1) if (next[i] !== held[i]) return next[i] > held[i] ? 'accept' : 'older';
+  return 'equal';
+}
+
+function orderSig(ctx) {
+  const k = ctxOrderKey(ctx);
+  return k ? k.join(':') : '';
 }
 
 function fmtTokens(n) {
@@ -96,11 +139,12 @@ function contextView(ctx) {
   const used = Number.isInteger(usage.used_tokens) && usage.used_tokens >= 0 ? usage.used_tokens : null;
   const cap = Number.isInteger(usage.capacity_tokens) && usage.capacity_tokens > 0 ? usage.capacity_tokens : null;
   const pct = used !== null && cap !== null ? Math.round((used / cap) * 100) : null;
-  const stale = !!usage.stale && used !== null;
+  const readFailed = !!(ctx && ctx.readError);
+  const stale = (!!usage.stale || readFailed) && used !== null;
   let tone = '';
   if (busy) tone = 'compacting';
   else if (status === 'failed') tone = 'bad';
-  else if (status === 'unknown') tone = 'warn';
+  else if (status === 'unknown' || readFailed) tone = 'warn';
   else if (pct !== null && pct >= 90 && !stale) tone = 'warn';
   let text;
   if (busy) text = '压缩中';
@@ -108,8 +152,9 @@ function contextView(ctx) {
   else if (used !== null) text = `${stale ? '≈' : ''}${fmtTokens(used)}`;
   else if (status === 'failed') text = '压缩失败';
   else if (status === 'unknown') text = '压缩结果未知';
+  else if (readFailed) text = '读取失败';
   else text = '—';
-  return { used, cap, pct, stale, known: used !== null, busy, status, tone, text, usage, comp };
+  return { used, cap, pct, stale, readFailed, known: used !== null, busy, status, tone, text, usage, comp };
 }
 
 // ---------------------------------------------------------------- context state (page)
@@ -122,25 +167,70 @@ function ctxStore() {
 
 function contextOf(sid) { return ctxStore().get(sid) || null; }
 
-// Merge a snapshot or a usage/compaction update and redraw what shows it.
-function putContext(sid, part) {
-  if (!part) return;
-  const store = ctxStore();
-  const prev = store.get(sid) || {};
-  const next = { ...prev, ...part };
-  if (part.capabilities) next.capabilities = part.capabilities;
-  store.set(sid, next);
+function repaintContext(sid) {
   const s = findSession(sid);
   if (s && S.sel && S.sel.id === sid && s.view_mode === 'conversation') updateConvChrome(s, convFor(sid));
   if (S.ctxPanel && S.ctxPanel.sid === sid) S.ctxPanel.paint();
 }
 
+// Take a context snapshot (GET, an action's result, conversation.context or an SSE event) if it is
+// newer than the one held; returns whether it was taken. An action's request_receipt is not state.
+function putContext(sid, snap) {
+  const store = ctxStore();
+  const prev = store.get(sid) || null;
+  const verdict = contextVerdict(prev, snap, sid);
+  if (verdict === 'equal' && snap.capabilities) {
+    // The same state read again: only its capabilities (computed at read time) are newer.
+    store.set(sid, { ...prev, capabilities: snap.capabilities, live: 'live' in snap ? !!snap.live : prev.live });
+    repaintContext(sid);
+    return false;
+  }
+  if (verdict !== 'accept' && verdict !== 'compat') return false;
+  const closed = !!(snap.order && snap.order.closed);
+  const sameRun = !!prev && prev.run_id === snap.run_id;
+  store.set(sid, {
+    session_id: sid,
+    run_id: snap.run_id ?? null,
+    order: snap.order || null,
+    usage: snap.usage || null,
+    compaction: snap.compaction || null,
+    harness: snap.harness ?? (prev && prev.harness),
+    native_session_id: snap.native_session_id ?? (prev && prev.native_session_id),
+    live: closed ? false : 'live' in snap ? !!snap.live : sameRun && !!prev.live,
+    // An event carries no capabilities; the held ones stay a hint until the next read.
+    capabilities: snap.capabilities || (prev && prev.capabilities) || null,
+    compat: verdict === 'compat',
+    missing: false,
+    readError: null,
+  });
+  // A new or closed run changes what can be done: read the capabilities again.
+  if (!snap.capabilities && (!sameRun || closed)) scheduleContextFetch(sid);
+  repaintContext(sid);
+  return true;
+}
+
+// A read failure is a status of the held values, not a snapshot. Each read is bound to the
+// session's latest read generation and to the snapshot held when it started.
 async function fetchContext(sid) {
+  ctxStore();
+  if (!S.ctxReads) S.ctxReads = new Map();
+  const gen = (S.ctxReads.get(sid) || 0) + 1;
+  S.ctxReads.set(sid, gen);
+  const before = orderSig(contextOf(sid));
   try {
-    putContext(sid, { ...(await api('GET', `/api/sessions/${sid}/context`)), missing: false, error: null });
+    const snap = await api('GET', `/api/sessions/${sid}/context`);
+    putContext(sid, snap);
+    const now = contextOf(sid);
+    if (now && now.readError && S.ctxReads.get(sid) === gen) { now.readError = null; repaintContext(sid); }
   } catch (e) {
-    // An App without the context interface answers 404; anything else is a read failure.
-    putContext(sid, e.code === 'NOT_FOUND' ? { missing: true } : { error: e.message || String(e) });
+    const now = contextOf(sid);
+    if (S.ctxReads.get(sid) !== gen || orderSig(now) !== before) return now; // something newer came
+    if (e.code === 'NOT_FOUND' && !(now && now.order)) {
+      ctxStore().set(sid, { ...(now || {}), missing: true }); // an App without the context interface
+    } else {
+      ctxStore().set(sid, { ...(now || {}), readError: { message: e.message || String(e), at: Date.now() } });
+    }
+    repaintContext(sid);
   }
   return contextOf(sid);
 }
@@ -181,20 +271,25 @@ async function startCompact(sid, anchor, { fromComposer = false } = {}) {
   if (!s) return;
   const ctx = await fetchContext(sid);
   const cap = ((ctx && ctx.capabilities) || {}).compact;
-  if (!cap || !cap.implemented) { toast(compactBlockedReason(s, ctx || { missing: true }), 'error'); return; }
-  if (!cap.available) { toast(compactBlockedReason(s, ctx), 'error'); return; }
+  // From the input box the reason sits above the kept "/compact"; elsewhere it is a toast.
+  const refuse = (m) => (fromComposer ? composerNotice(sid, m) : toast(m, 'error'));
+  if (ctx && ctx.readError) { refuse(`读取上下文失败，现在无法确认能否压缩：${ctx.readError.message}`); return; }
+  if (!cap || !cap.implemented) { refuse(compactBlockedReason(s, ctx || { missing: true })); return; }
+  if (!cap.available) { refuse(compactBlockedReason(s, ctx)); return; }
   const label = HARNESS[s.harness].label;
   // A new action ID per click, with the run the window shows; never reused automatically.
   const body = { request_id: newActionId(), run_id: ctx.run_id };
   await guarded(`compact:${sid}`, async () => {
+    let res;
     try {
-      putContext(sid, await api('POST', `/api/sessions/${sid}/compact`, body));
+      res = await api('POST', `/api/sessions/${sid}/compact`, body);
     } catch (e) {
-      if (e.details && e.details.context) putContext(sid, { ...e.details.context });
+      if (e.details && e.details.context) putContext(sid, e.details.context);
       throw e;
     }
+    putContext(sid, res); // the current state; a reused request's own receipt is not shown as it
     if (fromComposer) clearComposerIf(sid, '/compact');
-    toast(`已请 ${label} 压缩上下文。是否完成以 ${label} 的报告为准。`);
+    toast(res && res.reused ? '这个压缩请求已经提交过；显示的是当前状态。' : `已请 ${label} 压缩上下文。是否完成以 ${label} 的报告为准。`);
   }, anchor instanceof Element ? anchor : null);
 }
 
@@ -249,7 +344,6 @@ function usageLines(s, ctx) {
   const label = HARNESS[s.harness].label;
   const lines = [];
   if (ctx && ctx.missing) return ['当前 RepoBridge 后端没有提供上下文接口。'];
-  if (ctx && ctx.error && !ctx.usage) return [`读取上下文失败：${ctx.error}`];
   if (!v.known) lines.push(`暂无用量数据：${CTX_REASON[u.reason] || u.reason || '还没有收到原生用量'}`);
   else {
     lines.push(`约 ${v.used.toLocaleString()}${v.cap ? ` / ${v.cap.toLocaleString()}` : ''} tokens${v.pct !== null ? `（${v.pct}%）` : ''}`);
@@ -258,8 +352,17 @@ function usageLines(s, ctx) {
     lines.push(u.basis === 'native_last_context_estimate' ? '依据：最近一次请求的上下文估计（不是累计用量）' : `依据：${label} 的上下文估计`);
   }
   if (u.source) lines.push(`来源：${u.source}${u.observed_at ? ` · ${clock(u.observed_at)} 收到` : ''}`);
-  if (v.stale) lines.push(`旧数据：${CTX_REASON[u.reason] || u.reason || '可能已变化'}`);
+  if (v.stale && u.stale) lines.push(`旧数据：${CTX_REASON[u.reason] || u.reason || '可能已变化'}`);
+  if (ctx && ctx.compat) lines.push('后端没有提供顺序信息（较旧版本）：按到达顺序显示。');
   return lines;
+}
+
+// A failed read, shown with the values it leaves in place.
+function readFailureLine(ctx) {
+  const r = ctx && ctx.readError;
+  if (!r) return null;
+  const kept = ctx.order || ctx.usage ? '显示的是最近一次成功读取的数据，可能已过时。' : '还没有成功读取过。';
+  return `读取上下文失败（${clock(r.at)}）：${r.message}。${kept}`;
 }
 
 function compactLine(s, ctx) {
@@ -276,14 +379,15 @@ function renderContextIndicator(s) {
   const ctx = contextOf(s.session_id);
   const v = contextView(ctx);
   const label = HARNESS[s.harness].label;
-  const outcome = v.status === 'failed' ? '，上次压缩失败' : v.status === 'unknown' ? '，上次压缩结果未知' : '';
+  const outcome = (v.status === 'failed' ? '，上次压缩失败' : v.status === 'unknown' ? '，上次压缩结果未知' : '')
+    + (v.readFailed ? '，读取失败' : '');
   const aria = ctx && ctx.missing ? '上下文：后端未提供'
     : v.busy ? `上下文：${COMPACT_TEXT[v.status]}`
     : v.known ? `上下文：已用约 ${v.pct !== null ? `${v.text.replace('≈', '')}` : fmtTokens(v.used)}${v.stale ? '（旧数据）' : ''}${outcome}`
     : `上下文：暂无用量数据${outcome}`;
-  const title = [`上下文 · ${label}`, ...usageLines(s, ctx), (compactLine(s, ctx) || {}).text].filter(Boolean).join('\n');
+  const title = [`上下文 · ${label}`, ...usageLines(s, ctx), (compactLine(s, ctx) || {}).text, readFailureLine(ctx)].filter(Boolean).join('\n');
   return h('button', {
-    class: `ctx-ind ${v.tone} ${v.known ? '' : 'unknown'} ${v.stale ? 'stale' : ''} ${v.text === '—' ? 'empty' : ''}`.replace(/\s+/g, ' ').trim(), type: 'button',
+    class: `ctx-ind ${v.tone} ${v.known ? '' : 'unknown'} ${v.stale ? 'stale' : ''} ${v.readFailed ? 'read-failed' : ''} ${v.text === '—' ? 'empty' : ''}`.replace(/\s+/g, ' ').trim(), type: 'button',
     title, 'aria-label': aria, 'aria-haspopup': 'dialog', 'aria-expanded': 'false',
     onclick: (e) => openContextPanel(findSession(s.session_id) || s, e.currentTarget),
   }, ringSvg(v.pct, v.busy), h('span', { class: 'ctx-word' }, '上下文'), h('span', { class: 'ctx-text' }, v.text));
@@ -305,7 +409,7 @@ function openContextPanel(s, anchor) {
     // While it runs the compaction line above already says so.
     const reason = compact.implemented && !compact.available && !v.busy ? compactBlockedReason(now, ctx) : null;
     const compactBtn = compact.implemented
-      ? h('button', { class: 'btn btn-small', type: 'button', disabled: !compact.available || v.busy, onclick: (e) => startCompact(sid, e.currentTarget) }, v.busy ? '正在压缩…' : '立即压缩')
+      ? h('button', { class: 'btn btn-small', type: 'button', disabled: !compact.available || v.busy || v.readFailed, onclick: (e) => startCompact(sid, e.currentTarget) }, v.busy ? '正在压缩…' : '立即压缩')
       : null;
     const refreshBtn = refresh.implemented
       ? h('button', { class: 'btn btn-small', type: 'button', disabled: !refresh.available, title: refresh.available ? null : `${label} 空闲且已连接时才能读取`, onclick: (e) => refreshContextUsage(sid, e.currentTarget) }, '刷新用量')
@@ -323,7 +427,11 @@ function openContextPanel(s, anchor) {
         ? h('div', { class: 'hint' }, `立即压缩会在同一会话中执行 ${compact.native_method || ''}，可能使用模型；不会发送输入框里的内容。自动压缩由 ${label} 自己决定。`)
         : h('div', { class: 'hint' }, ctx && ctx.missing ? '当前后端没有提供压缩操作。' : '正在读取上下文能力…'),
       reason ? h('div', { class: 'ctx-reason' }, reason) : null,
-      compactBtn || refreshBtn ? h('div', { class: 'actions' }, refreshBtn, compactBtn) : null,
+      readFailureLine(ctx) ? h('div', { class: 'ctx-reason', role: 'alert' }, readFailureLine(ctx)) : null,
+      compactBtn || refreshBtn || v.readFailed ? h('div', { class: 'actions' },
+        // Reading again is a read, not a retried action.
+        v.readFailed ? h('button', { class: 'btn btn-small', type: 'button', onclick: () => fetchContext(sid) }, '重新读取') : null,
+        refreshBtn, compactBtn) : null,
     ].filter(Boolean)); // replaceChildren would print a null as text
   };
   if (S.ctxPanel) S.ctxPanel.close();
@@ -354,7 +462,8 @@ function openCommandMenu(s, anchor) {
     const compact = caps.compact || {};
     const refresh = caps.context_refresh || {};
     const v = contextView(ctx);
-    const compactReason = !compact.implemented ? (ctx && ctx.missing ? '当前后端没有提供压缩操作' : '正在读取上下文能力…') : !compact.available ? compactBlockedReason(now, ctx) : null;
+    const compactReason = v.readFailed ? '读取上下文失败，现在无法确认能否压缩'
+      : !compact.implemented ? (ctx && ctx.missing ? '当前后端没有提供压缩操作' : '正在读取上下文能力…') : !compact.available ? compactBlockedReason(now, ctx) : null;
     const items = [
       { head: '上下文' },
       { key: 'ctx', kind: 'action', icon: 'gauge', label: '查看上下文用量与压缩…', note: now.harness === 'codex' ? '/status' : null, action: () => openContextPanel(now, renderedIndicator() || anchor) },
