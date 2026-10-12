@@ -23,6 +23,7 @@
     <nav id="tree" class="tree"></nav>
     <div class="sidebar-bottom">
       <button id="add-project" class="btn-plain" type="button"><svg class="i"><use href="#i-folder-plus"/></svg><span>添加项目…</span></button>
+      <span id="runtime-slot" class="runtime-slot"></span>
       <button id="open-settings" class="icon-btn" type="button" title="设置（⌘,）" aria-label="设置"><svg class="i"><use href="#i-gear"/></svg></button>
     </div>
   </aside>
@@ -86,6 +87,7 @@
     <symbol id="i-clip" viewBox="0 0 16 16"><path d="M12.25 7.6 8 11.85a3 3 0 0 1-4.25-4.25l4.6-4.6a2 2 0 0 1 2.83 2.83L6.6 10.4a1 1 0 0 1-1.42-1.42L9.3 4.85"/></symbol>
     <symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 2.25 3.25 4v3.6c0 2.95 2.05 5.1 4.75 6.15 2.7-1.05 4.75-3.2 4.75-6.15V4z"/></symbol>
     <symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 2.5c.45 2.55 1.45 3.55 4 4-2.55.45-3.55 1.45-4 4-.45-2.55-1.45-3.55-4-4 2.55-.45 3.55-1.45 4-4zM12.5 10.5c.2 1 .55 1.35 1.5 1.5-.95.15-1.3.5-1.5 1.5-.2-1-.55-1.35-1.5-1.5.95-.15 1.3-.5 1.5-1.5z"/></symbol>
+    <symbol id="i-slash" viewBox="0 0 16 16"><rect x="2" y="2.25" width="12" height="11.5" rx="2.5"/><path d="M9.75 4.75 6.25 11.25"/></symbol>
     <symbol id="i-gauge" viewBox="0 0 16 16"><path d="M2.75 11.25a5.25 5.25 0 1 1 10.5 0"/><path d="M8 11.25 10.6 7.6"/></symbol>
     <symbol id="i-image" viewBox="0 0 16 16"><rect x="2.25" y="3" width="11.5" height="10" rx="1.5"/><circle cx="6" cy="6.5" r="1.1"/><path d="m2.75 11.5 3.5-3.25 2.5 2.25 2-1.75 2.5 2.25"/></symbol>
     <symbol id="i-file" viewBox="0 0 16 16"><path d="M4.25 2.25h4.6l2.9 2.9v8.1c0 .3-.2.5-.5.5h-7c-.3 0-.5-.2-.5-.5V2.75c0-.3.2-.5.5-.5z"/><path d="M8.75 2.25v3h3"/></symbol>
@@ -100,6 +102,7 @@
 <script src="/static/vendor/xterm/addon-fit.js"></script>
 <script src="/static/markdown.js"></script>
 <script src="/static/composer.js"></script>
+<script src="/static/context.js"></script>
 <script src="/static/existing.js"></script>
 <script src="/static/app.js"></script>
 </body>

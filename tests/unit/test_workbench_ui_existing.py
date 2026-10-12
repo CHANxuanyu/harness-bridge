@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 STATIC = Path(__file__).resolve().parents[2] / "src" / "harness_bridge" / "workbench" / "static"
-SCRIPTS = ["markdown.js", "composer.js", "existing.js", "app.js"]
+SCRIPTS = ["markdown.js", "composer.js", "context.js", "existing.js", "app.js"]
 
 
 def _node(test: str) -> Any:

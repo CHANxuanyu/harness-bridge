@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import webbrowser
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -194,6 +195,19 @@ def _pick_files(window: Any) -> list[str]:
     return [str(p) for p in result] if result else []
 
 
+TEST_TITLE = "测试环境 · 替身 CLI"
+
+
+def window_title(profile: str | None) -> Callable[[str | None], str]:
+    """The native window title for a page title; a test instance says so in every title."""
+
+    def title(text: str | None) -> str:
+        base = text or "RepoBridge"
+        return f"{base} — {TEST_TITLE}" if profile == "test" else base
+
+    return title
+
+
 def _run_window(url: str, base_url: str, workbench: Any, dev_dir: Path | None) -> None:
     from harness_bridge.workbench import native_mac
 
@@ -201,11 +215,12 @@ def _run_window(url: str, base_url: str, workbench: Any, dev_dir: Path | None) -
     import webview
 
     appearance = workbench.prefs.get()["appearance"]
+    title = window_title(getattr(getattr(workbench, "profile", None), "name", None))
     # No js_api: pywebview builds its JS bridge with `new Function`, which the page's CSP
     # (script-src 'self', no eval) forbids. Native calls go through the authenticated loopback
     # API instead and reach the window from Python.
     window = webview.create_window(
-        "RepoBridge",
+        title(None),
         url,
         width=1360,
         height=860,
@@ -218,7 +233,7 @@ def _run_window(url: str, base_url: str, workbench: Any, dev_dir: Path | None) -
     if window is None:
         raise RuntimeError("pywebview did not create a window")
     workbench.native = {
-        "title": lambda title: window.set_title(title or "RepoBridge"),
+        "title": lambda text: window.set_title(title(text)),
         "appearance": lambda mode: native_mac.set_appearance(window, mode),
         "pick_folder": lambda: _pick_folder(window),
         "pick_files": lambda: _pick_files(window),

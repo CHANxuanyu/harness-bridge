@@ -286,9 +286,9 @@ kbd {
   border-radius: 4px; background: var(--bg-raised); min-width: 220px; max-width: 100%;
 }
 .tb-sub { font-size: 11.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tb-sub .harness { font-weight: 500; }
-.tb-sub .harness.claude-code { color: var(--claude); }
-.tb-sub .harness.codex { color: var(--codex); }
+.harness-chip { flex: none; font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 7px; border-radius: 9px; margin-right: 6px; }
+.harness-chip.codex { color: var(--codex); background: color-mix(in srgb, var(--codex) 13%, transparent); }
+.harness-chip.claude-code { color: var(--claude); background: color-mix(in srgb, var(--claude) 13%, transparent); }
 .tb-group { display: flex; align-items: center; gap: 4px; flex: none; }
 .tb-sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; flex: none; }
 .diff-chip {
@@ -647,7 +647,11 @@ pre.tail {
      The box is a size container so the bar adapts to its own width (sidebar or inspector open). */
   grid-template-columns: minmax(0, 1fr); container-type: inline-size; container-name: composer;
 }
-@container composer (max-width: 600px) { .composer-hint { display: none; } }
+/* A narrow input box gives up words first (the context label, long names), then wraps. */
+@container composer (max-width: 620px) {
+  .ctx-ind:not(.empty) .ctx-word, .ctx-ind.empty .ctx-text { display: none; }
+  .cpill.model { max-width: 200px; } .cpill.mode { max-width: 140px; }
+}
 @container composer (max-width: 470px) {
   .composer-bar { flex-wrap: wrap; row-gap: 2px; }
   .cpill { max-width: 170px; }
@@ -664,9 +668,9 @@ pre.tail {
 .composer { position: relative; }
 .composer.dropping { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .composer-bar { display: flex; align-items: center; gap: 6px; min-height: 30px; margin-left: -6px; }
-.composer-bar .hint { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; padding-right: 4px; }
 .cb-left, .cb-right { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.cb-right { margin-left: auto; } /* stays right-aligned when the hint is hidden or the bar wraps */
+.cb-left { flex-shrink: 0; } /* attachments, commands and permissions keep their words; a long model name gives way */
+.cb-right { margin-left: auto; } /* stays right-aligned when the bar wraps */
 .cb-left .icon-btn { width: 28px; height: 28px; color: var(--text-2); }
 .cpill {
   display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border-radius: 8px; border: 0;
@@ -680,9 +684,65 @@ pre.tail {
 .cpill .pill-caret { width: 10px; height: 10px; opacity: 0.7; }
 .cpill .pill-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .cpill .st { width: 12px; height: 12px; }
-.fmark { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; border-radius: 50%; font: 700 9px/1 var(--font); }
-.fmark.ring { border: 1.5px solid var(--text-3); width: 9px; height: 9px; }
-.fmark.bad { background: var(--bad); color: var(--bg); }
+.cpill.model { max-width: 300px; }
+/* Pending / applying / refused, next to the control it belongs to. */
+.ctl-note { flex: none; font-size: 11px; line-height: 18px; padding: 0 6px; border-radius: 9px; white-space: nowrap; cursor: default; }
+.ctl-note.pending { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.ctl-note.idle { color: var(--text-3); }
+.ctl-note.bad { color: var(--bad); background: var(--bad-soft); }
+/* Context usage: ring + estimate, opens the context panel. */
+.ctx-ind {
+  display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--text-2); font: 12px var(--font); white-space: nowrap; flex: none;
+}
+.ctx-ind:hover { background: var(--hover); color: var(--text); }
+.ctx-ind .ctx-word { color: var(--text-3); }
+.ctx-ind .ctx-text { font-variant-numeric: tabular-nums; }
+.ctx-ind.unknown .ctx-text, .ctx-ind.stale .ctx-text { color: var(--text-3); }
+.ctx-ind.warn, .ctx-ind.warn .ctx-text { color: var(--warn); }
+.ctx-ind.bad, .ctx-ind.bad .ctx-text { color: var(--bad); }
+.ctx-ind.compacting { color: var(--accent); }
+.ctx-ring { width: 14px; height: 14px; flex: none; display: block; transform-origin: 50% 50%; }
+.ctx-ring circle { fill: none; stroke-width: 2; }
+.ctx-ring .track { stroke: var(--line-strong); }
+.ctx-ring .bar { stroke: currentColor; stroke-linecap: round; }
+.ctx-ind.unknown .ctx-ring .track { stroke-dasharray: 2 2.4; }
+.ctx-ring.spin { animation: spin 1.1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ctx-ring.spin { animation: none; } }
+.ctx-panel { width: 330px; display: grid; gap: 6px; }
+.ctx-head { display: flex; align-items: center; gap: 10px; }
+.ctx-head .ctx-ring { width: 30px; height: 30px; color: var(--accent); }
+.ctx-big { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ctx-lines { display: grid; gap: 2px; font-size: 12px; color: var(--text-2); line-height: 1.45; }
+.ctx-sep { height: 1px; background: var(--line); margin: 2px 0; }
+.ctx-sub { font-size: 11px; font-weight: 600; color: var(--text-3); }
+.ctx-comp { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.ctx-comp.completed { color: var(--ok); }
+.ctx-comp.failed { color: var(--bad); }
+.ctx-comp.unknown { color: var(--warn); }
+.ctx-reason { font-size: 12px; color: var(--warn); line-height: 1.4; }
+.ctx-ind.read-failed .ctx-word { color: var(--warn); }
+/* Test / development identity (from /api/state.runtime), persistent in the sidebar footer. */
+.runtime-slot { display: flex; min-width: 0; margin-left: auto; }
+.runtime-badge {
+  display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn); font: 600 11px var(--font); white-space: nowrap; flex: none; cursor: pointer;
+}
+.runtime-badge .i { width: 12px; height: 12px; }
+.runtime-badge.dev { border-color: var(--line-strong); background: var(--hover); color: var(--text-2); }
+.runtime-badge.static { cursor: default; }
+.toolbar > .runtime-badge { margin-right: 4px; }
+.runtime-panel { width: 360px; max-width: calc(100vw - 16px); display: grid; gap: 8px; }
+.runtime-head { display: flex; align-items: center; gap: 8px; }
+.runtime-rows { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; font-size: 12px; }
+.runtime-rows dt { color: var(--text-3); }
+.runtime-rows dd { margin: 0; word-break: break-all; }
+.runtime-prov { display: grid; gap: 2px; font-size: 12px; }
+.runtime-panel .actions { display: flex; justify-content: flex-end; }
+.ctx-panel .hint { font-size: 11.5px; line-height: 1.45; white-space: normal; }
+.ctx-panel .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 2px; }
+.conv-status[hidden] { display: none; }
 .picker { min-width: 280px; max-width: 380px; max-height: min(460px, 70vh); overflow-y: auto; }
 .menu-item.pick { align-items: flex-start; padding-top: 6px; padding-bottom: 6px; height: auto; min-height: 30px; }
 .pick-check { width: 16px; flex: none; display: inline-flex; justify-content: center; padding-top: 1px; color: var(--accent); }
@@ -693,6 +753,25 @@ pre.tail {
 .picker-foot { padding: 4px 10px 6px; display: grid; gap: 3px; justify-items: start; }
 .picker-foot .hint { font-size: 11px; white-space: normal; line-height: 1.4; }
 .picker-foot .btn-plain { font-size: 12px; }
+.model-picker { width: 400px; max-width: calc(100vw - 16px); max-height: min(560px, 78vh); }
+.model-picker .menu-item.pick .note { font: 11px var(--mono); max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+.menu-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 8px 4px 30px; }
+.menu-item.chip {
+  width: auto; display: inline-flex; align-items: center; justify-content: center; gap: 0;
+  height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--line-strong); background: transparent;
+  font-size: 12px; color: var(--text-2); flex: none;
+}
+.menu-item.chip.mono { font-family: var(--mono); }
+.menu-item.chip.checked { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); font-weight: 600; }
+.menu-item.chip:hover:not(:disabled), .menu-item.chip:focus-visible { background: var(--selected-strong); color: var(--text); }
+.menu-text { padding: 2px 10px 6px 30px; }
+.cmd-menu { max-width: 400px; }
+.menu-text { padding: 4px 10px 6px 30px; font-size: 11.5px; line-height: 1.4; white-space: normal; }
+.menu-item.pick.checked .pick-label { font-weight: 600; }
+.pick-switch { width: 24px; height: 14px; border-radius: 7px; background: var(--line-strong); position: relative; flex: none; margin: 2px 6px 0 0; }
+.pick-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg-raised); transition: left var(--dur); }
+.pick-switch.on { background: var(--accent); }
+.pick-switch.on::after { left: 12px; }
 .att-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .att-chip {
   display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 4px 0 6px; border-radius: 8px; max-width: 260px;
@@ -711,6 +790,7 @@ pre.tail {
 .mention-pop { position: absolute; max-width: none; left: 8px; right: 8px; bottom: calc(100% + 6px); max-height: 280px; overflow-y: auto; z-index: 5; }
 .mention-pop .menu-item { height: auto; min-height: 30px; padding-top: 4px; padding-bottom: 4px; }
 .mention-pop .menu-item.active { background: var(--selected-strong); }
+.mention-pop .menu-item.disabled { opacity: 0.55; cursor: default; }
 .mention-pop .pick-desc { font: 11px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .turn-model { text-align: right; font: 11px var(--mono); color: var(--text-3); margin-top: -14px; }
 .conv-status.bad { color: var(--bad); }
@@ -722,7 +802,7 @@ pre.tail {
 .form-row .form-label { color: var(--text); font-weight: 500; }
 .form-row .req { color: var(--bad); }
 .form-row .input { max-width: 420px; }
-@media (max-width: 760px) { .composer-hint { display: none; } .cpill { max-width: 150px; } }
+@media (max-width: 760px) { .cpill { max-width: 170px; } }
 .send-btn {
   width: 30px; height: 30px; border-radius: 50%; border: 0; display: inline-flex; align-items: center; justify-content: center;
   background: var(--primary-bg); color: var(--primary-fg); flex: none;
